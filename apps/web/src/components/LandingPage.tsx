@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getApiBaseUrl } from '../api/config'
 
 interface LandingPageProps {
   onLoginSuccess: (token: string, user: { name: string; role: string; email: string }) => void
@@ -16,7 +17,8 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const apiBase = getApiBaseUrl()
+      const res = await fetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })

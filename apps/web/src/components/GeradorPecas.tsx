@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import { getApiBaseUrl } from '../api/config'
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
 
@@ -14,7 +15,7 @@ const tiposPorArea: Record<string, string[]> = {
   'Consumerista': ['Petição Inicial CDC', 'Ação de Danos Morais', 'Ação de Obrigação de Fazer'],
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const getApiUrl = () => getApiBaseUrl();
 
 export default function GeradorPecas() {
   const [step, setStep] = useState<Step>('tipo')
@@ -36,7 +37,8 @@ export default function GeradorPecas() {
       const run = async () => {
         try {
           const token = localStorage.getItem('smartjuris_token');
-          const response = await fetch(`${API_BASE}/rag/generate`, {
+          const apiBase = getApiBaseUrl();
+          const response = await fetch(`${apiBase}/api/rag/generate`, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',

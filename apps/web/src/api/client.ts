@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './config';
+
 const authFetch = (url: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('smartjuris_token');
   const headers: Record<string, string> = {
@@ -9,8 +11,9 @@ const authFetch = (url: string, options: RequestInit = {}) => {
     headers['Content-Type'] = 'application/json';
   }
 
-  const baseUrl = import.meta.env.VITE_API_URL || '';
-  const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+  const baseUrl = getApiBaseUrl();
+  const normalizedPath = url.startsWith('/') ? url : `/${url}`;
+  const fullUrl = url.startsWith('http') ? url : `${baseUrl}${normalizedPath}`;
 
   return fetch(fullUrl, { ...options, headers }).then(async r => {
     if (r.status === 401) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getDocumentos, addDocumento } from '../db/store'
-import type { Documento } from '../db/types'
+import { api } from '../api/client'
+import type { Documento } from '@lexia/shared'
 
 const colecoes = [
   { id: 'jurisprudencia', nome: 'Jurisprudência',       lastSync: '17/08/2026 06:00', status: 'ok',           desc: 'STF, STJ, TRT-2, TJ-SP — inteiro teor + ementa' },
@@ -17,7 +17,14 @@ export default function Base() {
   const [uploadLabel, setUploadLabel] = useState('')
   const [done, setDone] = useState(false)
 
-  const reload = () => setDocumentos(getDocumentos())
+  const reload = async () => {
+    try {
+      const docs = await api.documentos.list()
+      setDocumentos(docs)
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   useEffect(() => { reload() }, [])
 
@@ -37,22 +44,24 @@ export default function Base() {
       [100, 'Indexado com sucesso!'],
     ]
     let i = 0
-    const run = () => {
+    const run = async () => {
       if (i < steps.length) {
         setUploadProgress(steps[i][0])
         setUploadLabel(steps[i][1])
         i++
         setTimeout(run, 800)
       } else {
-        // Persist simulated docs
-        const agora = new Date().toLocaleString('pt-BR').replace(',', '')
-        const novos: Documento[] = [
-          { id: `doc-${Date.now()}-1`, nome: 'Documento-importado-1.pdf', colecao: 'Jurisprudência', tamanho: '124 KB', indexado: agora, chunks: 31 },
-          { id: `doc-${Date.now()}-2`, nome: 'Documento-importado-2.pdf', colecao: 'Peças do Escritório', tamanho: '56 KB', indexado: agora, chunks: 14 },
-          { id: `doc-${Date.now()}-3`, nome: 'Documento-importado-3.pdf', colecao: 'Legislação Federal', tamanho: '88 KB', indexado: agora, chunks: 22 },
-        ]
-        novos.forEach(addDocumento)
-        reload()
+        // Send actual mock API request
+        try {
+          const formData = new FormData()
+          formData.append('colecao', 'Jurisprudência')
+          // Append a dummy blob to simulate a file
+          formData.append('file', new Blob(['fake-pdf-content']), 'Documento-importado.pdf')
+          await api.documentos.upload(formData)
+          await reload()
+        } catch (e) {
+          console.error(e)
+        }
         setTimeout(() => { setUploading(false); setDone(true) }, 400)
       }
     }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { addPeca } from '../db/store'
+import { api } from '../api/client'
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
 
@@ -14,38 +14,7 @@ const tiposPorArea: Record<string, string[]> = {
   'Consumerista': ['Petição Inicial CDC', 'Ação de Danos Morais', 'Ação de Obrigação de Fazer'],
 }
 
-const pecaGerada = `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO DE SÃO PAULO — SP
-
-Processo nº 0001234-56.2024.5.02.0001
-
-FERNANDA OLIVEIRA, brasileira, solteira, portadora do RG nº 12.345.678-9 SSP/SP e do CPF nº 123.456.789-00, residente e domiciliada na Rua das Flores, nº 123, Bairro Jardim Europa, São Paulo/SP, CEP 01.234-567, por meio de seu advogado que esta subscreve (procuração anexa), vem, respeitosamente, à presença de Vossa Excelência, apresentar
-
-RECLAMAÇÃO TRABALHISTA
-
-em face de EMPRESA XYZ S.A., pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-90, com sede na Av. Paulista, nº 1.000, São Paulo/SP, CEP 01.310-100, pelos fatos e fundamentos de direito a seguir expostos.
-
-I — DOS FATOS
-
-A Reclamante foi admitida pela Reclamada em 15 de março de 2019, na função de Analista Financeira, mediante contrato de trabalho por prazo indeterminado, cumprindo jornada de segunda a sexta-feira, das 08h00 às 18h00, com intervalo intrajornada de uma hora, percebendo, à época da rescisão, salário mensal de R$ 8.500,00 (oito mil e quinhentos reais).
-
-Ocorre que, em flagrante violação aos direitos trabalhistas assegurados pela Consolidação das Leis do Trabalho — CLT e pela Constituição Federal de 1988, a Reclamada passou a exigir da Reclamante a prestação sistemática de horas extraordinárias, sem a correspondente compensação ou pagamento adicional, em ofensa direta ao disposto no art. 7º, XIII e XVI, da Carta Magna.
-
-[...]
-
-II — DO DIREITO
-
-Consoante o entendimento consolidado pelo Tribunal Superior do Trabalho, a supressão de horas extraordinárias habituais gera direito à indenização correspondente, nos exatos termos da Súmula 291 do TST, que assim dispõe:
-
-"A supressão total ou parcial, pelo empregador, de serviço suplementar prestado com habitualidade, durante pelo menos 1 (um) ano, assegura ao empregado o direito à indenização correspondente ao valor de 1 (um) mês das horas suprimidas para cada ano ou fração igual ou superior a seis meses de prestação de serviço acima da jornada normal."
-
-[Documento gerado automaticamente pelo motor RAG — aguardando revisão humana obrigatória]`
-
-const ragChunks = [
-  { fonte: 'Súmula 291 TST', trecho: 'A supressão total ou parcial de serviço suplementar assegura indenização...', relevancia: 0.94 },
-  { fonte: 'CLT Art. 59 §1º', trecho: 'As horas extraordinárias serão remuneradas com acréscimo mínimo de 50%...', relevancia: 0.91 },
-  { fonte: 'CF/88 Art. 7º, XVI', trecho: 'Remuneração do serviço extraordinário superior, no mínimo, em 50% à do normal...', relevancia: 0.89 },
-  { fonte: 'TRT-2 · Ac. 2023-045678', trecho: 'A habitualidade de horas extras deve ser aferida por período mínimo de 12 meses...', relevancia: 0.85 },
-]
+const API_BASE = 'http://localhost:5433/api';
 
 export default function GeradorPecas() {
   const [step, setStep] = useState<Step>('tipo')
@@ -55,43 +24,71 @@ export default function GeradorPecas() {
   const [progressoLabel, setProgressoLabel] = useState('')
   const [copied, setCopied] = useState(false)
 
+  const [dadosCaso, setDadosCaso] = useState('')
+  const [pecaConteudo, setPecaConteudo] = useState('')
+  const [fontesRecuperadas, setFontesRecuperadas] = useState<any[]>([])
+
   const etapas = ['Selecionar Tipo', 'Dados do Caso', 'Geração IA', 'Revisão']
   const etapaIndex = ['tipo', 'dados', 'gerando', 'revisao'].indexOf(step)
 
   useEffect(() => {
     if (step === 'gerando') {
-      const steps = [
-        [20, 'Recuperando jurisprudência relevante (RAG)...'],
-        [45, 'Selecionando precedentes do TST e TRT-2...'],
-        [65, 'Aplicando template: Reclamação Trabalhista...'],
-        [80, 'Gerando minuta com Claude 3.5 Sonnet...'],
-        [92, 'Validando citações contra base indexada...'],
-        [100, 'Concluído. Aguardando revisão humana.'],
-      ]
-      let i = 0
-      const run = () => {
-        if (i < steps.length) {
-          setProgresso(steps[i][0] as number)
-          setProgressoLabel(steps[i][1] as string)
-          i++
-          setTimeout(run, 900)
-        } else {
-          // Persist to localStorage
-          const agora = new Date().toLocaleString('pt-BR').replace(',', '')
-          addPeca({
-            id: `PE-${Date.now()}`,
-            processoId: '',
-            tipo: tipo || 'Petição',
-            area,
-            cliente: 'Novo Cliente',
-            status: 'revisao',
-            prazo: '—',
-            geradoEm: agora,
-            modelo: 'Claude 3.5 Sonnet',
-            fontes: ragChunks.length,
-            conteudo: pecaGerada,
-          })
-          setTimeout(() => setStep('revisao'), 500)
+      const run = async () => {
+        try {
+          const response = await fetch(`${API_BASE}/rag/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo, area, dadosCaso })
+          });
+
+          if (!response.body) throw new Error('No body');
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const dataStr = line.substring(6).trim();
+                if (!dataStr) continue;
+                
+                const data = JSON.parse(dataStr);
+                
+                if (data.progress !== undefined) {
+                  setProgresso(data.progress);
+                  setProgressoLabel(data.label);
+                }
+                if (data.done) {
+                  setPecaConteudo(data.conteudo);
+                  setFontesRecuperadas(data.fontes);
+                  
+                  // Salva a peça no banco
+                  await api.pecas.create({
+                    processoId: '', // Mock for now
+                    tipo: tipo || 'Petição',
+                    area,
+                    cliente: 'Novo Cliente',
+                    status: 'revisao',
+                    prazo: '—',
+                    modelo: 'DeepSeek Chat',
+                    fontes: data.fontes.length,
+                    conteudo: data.conteudo,
+                  });
+                  setTimeout(() => setStep('revisao'), 1000);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Erro na geração', e);
+          setProgressoLabel('Erro na geração!');
         }
       }
       run()
@@ -103,7 +100,7 @@ export default function GeradorPecas() {
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Gerar Peça Processual</div>
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Motor RAG jurídico · BGE-M3 · Claude 3.5 Sonnet</div>
+        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Motor RAG jurídico · BGE-M3 · DeepSeek Chat</div>
       </div>
 
       {/* Stepper */}
@@ -209,7 +206,11 @@ export default function GeradorPecas() {
             ))}
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Informações Adicionais / Contexto do Caso</label>
-              <textarea placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados..." rows={4} style={{
+              <textarea 
+                value={dadosCaso}
+                onChange={e => setDadosCaso(e.target.value)}
+                placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados..." 
+                rows={4} style={{
                 width: '100%', padding: '9px 12px',
                 border: '1px solid var(--color-border)', borderRadius: 6,
                 fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)',
@@ -242,7 +243,7 @@ export default function GeradorPecas() {
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)', marginBottom: 28 }}>{progressoLabel}</div>
 
-            {ragChunks.slice(0, Math.floor(progresso / 25)).map(c => (
+            {fontesRecuperadas.slice(0, Math.floor(progresso / 25)).map(c => (
               <div key={c.fonte} style={{
                 background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
                 borderRadius: 6, padding: '10px 14px', marginBottom: 8,
@@ -274,12 +275,12 @@ export default function GeradorPecas() {
               whiteSpace: 'pre-wrap', color: 'var(--color-foreground)',
               maxHeight: 520, overflow: 'auto',
             }}>
-              {pecaGerada}
+              {pecaConteudo}
             </div>
             <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
               <button onClick={() => setStep('tipo')} style={{ padding: '10px 18px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}>Gerar Nova Versão</button>
               <button
-                onClick={() => { navigator.clipboard.writeText(pecaGerada); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                onClick={() => { navigator.clipboard.writeText(pecaConteudo); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
                 style={{ padding: '10px 18px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}
               >{copied ? '✓ Copiado' : 'Copiar Texto'}</button>
               <button style={{ background: 'var(--color-success)', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
@@ -294,7 +295,7 @@ export default function GeradorPecas() {
               <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--color-border)', fontSize: 12, fontWeight: 600 }}>
                 Fontes Recuperadas (RAG)
               </div>
-              {ragChunks.map(c => (
+              {fontesRecuperadas.map(c => (
                 <div key={c.fonte} style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)' }}>{c.fonte}</div>
@@ -305,9 +306,9 @@ export default function GeradorPecas() {
               ))}
               <div style={{ padding: '12px 16px', background: 'var(--color-surface-2)' }}>
                 <div style={{ fontSize: 10, color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Modelo: Claude 3.5 Sonnet<br/>
+                  Modelo: DeepSeek Chat<br/>
                   Embeddings: BGE-M3<br/>
-                  Chunks recuperados: 4 de 2.847<br/>
+                  Chunks recuperados: {fontesRecuperadas.length}<br/>
                   Latência: 3.2s
                 </div>
               </div>

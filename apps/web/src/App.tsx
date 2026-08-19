@@ -52,7 +52,7 @@ export default function App() {
             </div>
             {sidebarOpen && (
               <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontFamily: 'var(--font-display)', color: '#fff', fontSize: 16, letterSpacing: '-0.02em', lineHeight: 1 }}>LexIA</div>
+                <div style={{ fontFamily: 'var(--font-display)', color: '#fff', fontSize: 16, letterSpacing: '-0.02em', lineHeight: 1 }}>SmartJuris</div>
                 <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>Sistema Jurídico</div>
               </div>
             )}

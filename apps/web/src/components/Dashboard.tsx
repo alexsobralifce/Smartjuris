@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getProcessos, getPecas } from '../db/store'
-import type { Processo, Peca } from '../db/types'
+import { api } from '../api/client'
+import type { Processo, Peca } from '@lexia/shared'
 
 const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
   revisao:    { label: 'Aguardando Revisão', color: 'var(--color-warning)', bg: 'var(--color-warning-light)' },
@@ -14,8 +14,19 @@ export default function Dashboard() {
   const [pecas, setPecas] = useState<Peca[]>([])
 
   useEffect(() => {
-    setProcessos(getProcessos())
-    setPecas(getPecas())
+    async function loadData() {
+      try {
+        const [procData, pecasData] = await Promise.all([
+          api.processos.list(),
+          api.pecas.list()
+        ])
+        setProcessos(procData)
+        setPecas(pecasData)
+      } catch (error) {
+        console.error(error)
+      }
+    }
+    loadData()
   }, [])
 
   const ativos = processos.filter(p => p.status === 'ativo').length
@@ -119,7 +130,7 @@ export default function Dashboard() {
             {[
               { label: 'Documentos indexados', value: '12.847' },
               { label: 'Último sync jurisprudência', value: 'Hoje 06:00' },
-              { label: 'Modelo ativo', value: 'Claude 3.5 Sonnet' },
+              { label: 'Modelo ativo', value: 'DeepSeek Chat' },
               { label: 'Embeddings', value: 'BGE-M3 · PT-BR' },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>

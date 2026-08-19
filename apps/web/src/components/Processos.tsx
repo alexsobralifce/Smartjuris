@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getProcessos, addProcesso, deleteProcesso } from '../db/store'
-import type { Processo, StatusProcesso } from '../db/types'
+import { api } from '../api/client'
+import type { Processo, StatusProcesso } from '@lexia/shared'
 
 const statusConfig: Record<StatusProcesso, { label: string; color: string; bg: string }> = {
   ativo:     { label: 'Ativo',     color: 'var(--color-success)', bg: 'var(--color-success-light)' },
@@ -23,7 +23,14 @@ export default function Processos() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
 
-  const reload = () => setProcessos(getProcessos())
+  const reload = async () => {
+    try {
+      const data = await api.processos.list()
+      setProcessos(data)
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   useEffect(() => { reload() }, [])
 
@@ -36,19 +43,26 @@ export default function Processos() {
     return matchArea && matchSearch
   })
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.tipo || !form.cliente) return
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.2024.8.26.0000`
-    addProcesso({ id, ...form })
-    reload()
-    setShowForm(false)
-    setForm(emptyForm)
+    try {
+      await api.processos.create(form)
+      await reload()
+      setShowForm(false)
+      setForm(emptyForm)
+    } catch (e) {
+      console.error(e)
+    }
   }
 
-  const handleDelete = (id: string) => {
-    deleteProcesso(id)
-    if (selected?.id === id) setSelected(null)
-    reload()
+  const handleDelete = async (id: string) => {
+    try {
+      await api.processos.delete(id)
+      if (selected?.id === id) setSelected(null)
+      await reload()
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   return (

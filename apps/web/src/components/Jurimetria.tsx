@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { api } from '../api/client'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 const taxaSucesso = [
@@ -42,6 +43,15 @@ function ChanceBar({ value }: { value: number }) {
 
 export default function Jurimetria() {
   const [activeTab, setActiveTab] = useState<'overview' | 'previsao'>('overview')
+  const [stats, setStats] = useState<any>(null)
+
+  useEffect(() => {
+    api.jurimetria.stats().then(setStats).catch(console.error)
+  }, [])
+
+  if (!stats) return <div style={{ padding: 40, color: 'var(--color-muted)' }}>Carregando dados de jurimetria...</div>
+
+  const { taxaExito, distribuicaoArea, previsoes } = stats
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 1100 }}>
@@ -102,17 +112,17 @@ export default function Jurimetria() {
               <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 16 }}>Distribuição por Área</div>
               <ResponsiveContainer width="100%" height={140}>
                 <PieChart>
-                  <Pie data={distribuicao} cx="50%" cy="50%" outerRadius={60} dataKey="value" strokeWidth={0}>
-                    {distribuicao.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  <Pie data={distribuicaoArea} cx="50%" cy="50%" outerRadius={60} dataKey="value" strokeWidth={0}>
+                    {distribuicaoArea.map((entry: any, i: number) => <Cell key={i} fill={entry.color || distribuicao[i%distribuicao.length].color} />)}
                   </Pie>
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                {distribuicao.map(d => (
+                {distribuicaoArea.map((d: any, i: number) => (
                   <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 2, background: d.color }}/>
+                      <div style={{ width: 8, height: 8, borderRadius: 2, background: d.color || distribuicao[i%distribuicao.length].color }}/>
                       <span style={{ fontSize: 12 }}>{d.name}</span>
                     </div>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{d.value} proc.</span>

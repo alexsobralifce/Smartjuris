@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getPecas, updatePeca } from '../db/store'
-import type { Peca } from '../db/types'
+import { api } from '../api/client'
+import type { Peca } from '@lexia/shared'
 
 const pecaTexto = `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO...
 
@@ -19,20 +19,28 @@ export default function Validacao() {
   const [selected, setSelected] = useState<Peca | null>(null)
   const [comment, setComment] = useState('')
 
-  const reload = () => {
-    const todas = getPecas()
-    const fila = todas.filter(p => p.status === 'revisao' || p.status === 'aprovado')
-    setPecas(fila)
-    setSelected(prev => prev ? fila.find(p => p.id === prev.id) ?? fila[0] ?? null : fila[0] ?? null)
+  const reload = async () => {
+    try {
+      const todas = await api.pecas.list()
+      const fila = todas.filter((p: Peca) => p.status === 'revisao' || p.status === 'aprovado')
+      setPecas(fila)
+      setSelected(prev => prev ? fila.find((p: Peca) => p.id === prev.id) ?? fila[0] ?? null : fila[0] ?? null)
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   useEffect(() => { reload() }, [])
 
-  const handle = (action: 'aprovado' | 'reprovado') => {
+  const handle = async (action: 'aprovado' | 'reprovado') => {
     if (!selected) return
-    updatePeca(selected.id, { status: action })
-    reload()
-    setComment('')
+    try {
+      await api.pecas.update(selected.id, { status: action })
+      await reload()
+      setComment('')
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   const pendentes = pecas.filter(p => p.status === 'revisao').length

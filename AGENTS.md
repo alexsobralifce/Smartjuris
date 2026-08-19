@@ -1,4 +1,4 @@
-# LexIA — Sistema Jurídico com IA
+# SmartJuris — Sistema Jurídico com IA
 
 React + Vite + Tailwind CSS v4 rodando no Figma Make.
 
@@ -13,7 +13,7 @@ O servidor Vite já está rodando em `$PORT` (padrão 8443). Não é necessário
 
 ## Visão Geral do Produto
 
-**LexIA** é um MVP de sistema jurídico com IA para escritórios de advocacia. Combina gestão processual, geração de peças via RAG + LLM, fila de revisão humana obrigatória, jurimetria e gerenciamento da base de conhecimento vetorial.
+**SmartJuris** é um MVP de sistema jurídico com IA para escritórios de advocacia. Combina gestão processual, geração de peças via RAG + LLM, fila de revisão humana obrigatória, jurimetria e gerenciamento da base de conhecimento vetorial.
 
 ### Módulos
 
@@ -102,7 +102,7 @@ resetDB(): void     // Restaura dados do seed
 exportDB(): string  // Exporta JSON completo
 ```
 
-A chave no localStorage é `lexia_db`. O seed (`src/db/seed.ts`) é carregado e persistido apenas quando a chave não existe.
+A chave no localStorage é `smartjuris_db`. O seed (`src/db/seed.ts`) é carregado e persistido apenas quando a chave não existe.
 
 ---
 

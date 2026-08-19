@@ -42,6 +42,25 @@ export default function Crm() {
     { id: 'fechado', title: '4. Contrato Assinado', color: 'var(--color-success)' },
   ]
 
+  // Verificação de Conflito de Interesses (Conflict Check)
+  const [conflictAlert, setConflictAlert] = useState<string | null>(null)
+
+  const checkConflict = (name: string) => {
+    setNovoNome(name)
+    if (!name.trim()) {
+      setConflictAlert(null)
+      return
+    }
+    // Lista de adversos em processos ativos para simulação de conflito
+    const adversosExistentes = ['Empresa XYZ S.A.', 'Companhia Aérea VooFácil', 'Sindicato dos Trabalhadores', 'Banco do Brasil S.A.']
+    const hasConflict = adversosExistentes.some(a => a.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(a.toLowerCase()))
+    if (hasConflict) {
+      setConflictAlert(`⚠️ CONFLITO DE INTERESSES: O nome "${name}" consta como Parte Adversa (Réu) em processo ativo do escritório. Requer parecer ético antes de prosseguir.`)
+    } else {
+      setConflictAlert(null)
+    }
+  }
+
   const handleAddLead = (e: React.FormEvent) => {
     e.preventDefault()
     if (!novoNome.trim()) {
@@ -51,6 +70,9 @@ export default function Crm() {
     if (!novoContato.trim()) {
       addToast('error', 'Informe um meio de contato (telefone ou e-mail).')
       return
+    }
+    if (conflictAlert) {
+      addToast('warning', 'Atenção: Prospect com potencial conflito de interesses cadastrado.')
     }
     const item: Lead = {
       id: Date.now().toString(),
@@ -158,9 +180,18 @@ export default function Crm() {
             <h3 style={{ margin: '0 0 16px', fontSize: 18, fontFamily: 'var(--font-display)' }}>Nova Oportunidade (CRM)</h3>
             <form onSubmit={handleAddLead} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>NOME DO PROSPECT / CLIENTE</label>
-                <input required type="text" placeholder="Ex: Grupo Empresarial Delta" value={novoNome} onChange={e => setNovoNome(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)' }}>NOME DO PROSPECT / CLIENTE *</label>
+                  <span style={{ fontSize: 10, color: 'var(--color-accent)', fontWeight: 600 }}>🔍 Conflict Check Ativo</span>
+                </div>
+                <input required type="text" placeholder="Ex: Banco do Brasil S.A. ou Grupo Delta" value={novoNome} onChange={e => checkConflict(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: conflictAlert ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
               </div>
+
+              {conflictAlert && (
+                <div style={{ background: 'var(--color-danger-light)', color: 'var(--color-danger)', border: '1px solid var(--color-danger)', borderRadius: 6, padding: '10px 12px', fontSize: 11, lineHeight: 1.4 }}>
+                  {conflictAlert}
+                </div>
+              )}
 
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>ÁREA DE ATUAÇÃO</label>

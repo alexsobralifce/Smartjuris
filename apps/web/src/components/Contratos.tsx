@@ -22,6 +22,7 @@ export default function Contratos() {
             status: 'Risco Alto',
             cor: 'var(--color-danger)',
             bg: 'var(--color-danger-light)',
+            evidencia: '📍 Localização no Documento: Pág. 3, Parágrafo 2º, Linhas 14-16',
             problema: 'Eleição de foro em comarca distante (Manaus/AM) desproporcional ao valor do contrato.',
             sugestao: 'Redigir: "Fica eleito o foro da Comarca da Capital do Estado de São Paulo..."'
           },
@@ -30,6 +31,7 @@ export default function Contratos() {
             status: 'Atenção',
             cor: 'var(--color-warning)',
             bg: 'var(--color-warning-light)',
+            evidencia: '📍 Localização no Documento: Pág. 4, Parágrafo 1º, Linhas 08-11',
             problema: 'Percentual de multa contratual (40%) acima do teto jurisprudencial de 10% a 20%.',
             sugestao: 'Reduzir a multa rescisória para 10% sobre o saldo devedor conforme art. 412 do Código Civil.'
           },
@@ -38,6 +40,7 @@ export default function Contratos() {
             status: 'Conforme',
             cor: 'var(--color-success)',
             bg: 'var(--color-success-light)',
+            evidencia: '📍 Localização no Documento: Pág. 1, Parágrafo 4º, Linhas 02-05',
             problema: 'Reajuste anual pelo IPCA devidamente especificado.',
             sugestao: 'Manter a redação original.'
           }
@@ -157,6 +160,12 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
                         {c.status}
                       </span>
                     </div>
+
+                    {c.evidencia && (
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', background: '#eef0f7', padding: '4px 8px', borderRadius: 4, marginBottom: 8 }}>
+                        {c.evidencia}
+                      </div>
+                    )}
 
                     <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 8, lineHeight: 1.4 }}>
                       <strong>Problema identificado:</strong> {c.problema}

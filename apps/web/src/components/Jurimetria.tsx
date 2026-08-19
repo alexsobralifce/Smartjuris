@@ -35,8 +35,13 @@ function ChanceBar({ value }: { value: number }) {
 }
 
 export default function Jurimetria() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'previsao' | 'simulador'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'previsao' | 'simulador' | 'acordaos'>('overview')
   const [stats, setStats] = useState<any>(null)
+
+  // Estado do Resumidor de Acórdãos Extensos
+  const [acordaoTexto, setAcordaoTexto] = useState('')
+  const [resumindoAcordao, setResumindoAcordao] = useState(false)
+  const [acordaoResumoResult, setAcordaoResumoResult] = useState<any | null>(null)
 
   // Estado do Simulador Preditivo
   const [simArea, setSimArea] = useState('Trabalhista')
@@ -53,6 +58,28 @@ export default function Jurimetria() {
   useEffect(() => {
     api.jurimetria.stats().then(setStats).catch(console.error)
   }, [])
+
+  const handleResumirAcordao = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!acordaoTexto.trim()) return
+    setResumindoAcordao(true)
+    setAcordaoResumoResult(null)
+
+    setTimeout(() => {
+      setAcordaoResumoResult({
+        tribunal: 'STJ — Superior Tribunal de Justiça (3ª Turma)',
+        relator: 'Min. Relator(a) Designado(a)',
+        resultado: 'PROVIMENTO PARCIAL AO RECURSO ESPECIAL',
+        ratioDecidendi: '📌 RATIO DECIDENDI (Fundamento Determinante): A falta de notificação prévia do devedor antes da inclusão do nome nos cadastros de inadimplentes configura dano moral in re ipsa, independente de comprovação de prejuízo patrimonial direto (Súmula 385 STJ mitigada).',
+        pontosChave: [
+          'Tese Firme: Dever de notificação antecipada mantido conforme CDC, art. 43, § 2º.',
+          'Danos Morais Fixados: R$ 12.000,00 com juros de mora a contar do evento danoso (Súmula 54 STJ).',
+          'Honorários Sucumbenciais: Redimensionados para 15% sobre o valor da condenação.'
+        ]
+      })
+      setResumindoAcordao(false)
+    }, 1100)
+  }
 
   // Atualiza simulação dinamicamente
   const handleSimulate = (area: string, tipo: string, tribunal: string) => {
@@ -102,14 +129,14 @@ export default function Jurimetria() {
           <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Inteligência e previsão sobre processos · Jan–Ago 2026</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {(['overview', 'previsao', 'simulador'] as const).map(t => (
+          {(['overview', 'previsao', 'simulador', 'acordaos'] as const).map(t => (
             <button key={t} onClick={() => setActiveTab(t)} style={{
               padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 500,
               border: '1px solid var(--color-border)', cursor: 'pointer',
               background: activeTab === t ? 'var(--color-primary)' : 'var(--color-surface)',
               color: activeTab === t ? '#fff' : 'var(--color-muted)',
             }}>
-              {t === 'overview' ? 'Visão Geral' : t === 'previsao' ? 'Previsão de Êxito' : '⚡ Calculadora Preditiva'}
+              {t === 'overview' ? 'Visão Geral' : t === 'previsao' ? 'Previsão de Êxito' : t === 'simulador' ? '⚡ Calculadora Preditiva' : '📜 Resumidor de Acórdãos IA'}
             </button>
           ))}
         </div>
@@ -359,6 +386,83 @@ export default function Jurimetria() {
                 Gerar Peça no RAG →
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Aba de Resumidor Executivo de Acórdãos Extensos com Ratio Decidendi */}
+      {activeTab === 'acordaos' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+          <form onSubmit={handleResumirAcordao} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
+                Cole a Decisão / Acórdão Extenso (Inteiro Teor)
+              </label>
+              <button
+                type="button"
+                onClick={() => setAcordaoTexto(`RECURSO ESPECIAL Nº 1.984.321 - SP (2022/0123456-7)
+RELATOR : MINISTRO RELATOR
+RECORRENTE : MARIANA DUARTE
+RECORRIDO : COMPANHIA AÉREA VOOFÁCIL
+EMENTA: RECURSO ESPECIAL. DIREITO DO CONSUMIDOR. TRANSPORTE AÉREO. CANCELAMENTO DE VOO INTERNACIONAL. FALHA NA PRESTAÇÃO DO SERVIÇO. DANO MORAL IN RE IPSA. DESNECESSIDADE DE PROVA DO PREJUÍZO DIRECTO. SÚMULA 385 STJ. MITIGAÇÃO. QUANTUM INDENIZATÓRIO RAZOÁVEL. RECURSO PARCIALMENTE PROVIDO.`)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              >
+                📄 Exemplo de Acórdão STJ
+              </button>
+            </div>
+
+            <textarea
+              value={acordaoTexto}
+              onChange={e => setAcordaoTexto(e.target.value)}
+              placeholder="Cole aqui o texto completo da ementa ou acórdão do STF, STJ, TST ou TJ..."
+              rows={12}
+              style={{ width: '100%', padding: '12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-sans)', outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
+            />
+
+            <button
+              disabled={resumindoAcordao || !acordaoTexto.trim()}
+              type="submit"
+              style={{
+                background: acordaoTexto.trim() ? 'var(--color-primary)' : 'var(--color-border)',
+                color: '#fff', border: 'none', padding: '12px', borderRadius: 6,
+                fontSize: 13, fontWeight: 600, cursor: acordaoTexto.trim() ? 'pointer' : 'not-allowed'
+              }}
+            >
+              {resumindoAcordao ? '🧠 Extraindo Ratio Decidendi via IA...' : '⚡ Resumir Acórdão & Destacar Ratio Decidendi →'}
+            </button>
+          </form>
+
+          {/* Resultado do Resumo Executivo */}
+          <div>
+            {!acordaoResumoResult ? (
+              <div style={{ background: 'var(--color-surface)', border: '1px dashed var(--color-border)', borderRadius: 8, padding: 48, textAlign: 'center', color: 'var(--color-muted)' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📜</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-foreground)', marginBottom: 4 }}>Nenhum acórdão analisado ainda</div>
+                <div style={{ fontSize: 12, maxWidth: 320, margin: '0 auto' }}>Cole o texto de uma decisão e clique no botão para extrair o fundamento determinante e os pontos decisórios.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)' }}>{acordaoResumoResult.tribunal}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-primary)', marginTop: 4 }}>{acordaoResumoResult.resultado}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 2 }}>{acordaoResumoResult.relator}</div>
+                </div>
+
+                <div style={{ background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)', borderRadius: 8, padding: 18, fontSize: 12, color: 'var(--color-foreground)', lineHeight: 1.5 }}>
+                  {acordaoResumoResult.ratioDecidendi}
+                </div>
+
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-muted)' }}>PONTOS CHAVE DA DECISÃO:</div>
+                  {acordaoResumoResult.pontosChave.map((p: string, idx: number) => (
+                    <div key={idx} style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ color: 'var(--color-primary)' }}>•</span>
+                      <span>{p}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -10,62 +10,98 @@ export default function Documentacao() {
   const wizardSteps = [
     {
       step: 1,
-      title: '1. Cadastro de Clientes & Consulta de CEP (ViaCEP)',
-      subtitle: 'Evite digitação repetitiva de dados de qualificação',
-      icon: '👥',
-      badge: 'Passo Inicial',
-      desc: 'O primeiro passo no SmartJuris é cadastrar seus clientes (Pessoa Física ou Pessoa Jurídica) no módulo "Clientes".Ao digitar o CEP (ex: 01001-000), o sistema consulta a API oficial ViaCEP e preenche automaticamente a Rua, Bairro, Cidade e UF.',
+      title: '1. CRM, Captação & Conflict Check',
+      subtitle: 'Gestão de Leads e mitigação de conflito de interesses na origem',
+      icon: '🎯',
+      badge: 'Fase Inicial',
+      desc: 'Toda nova oportunidade entra pelo módulo "CRM". O sistema utiliza um funil Kanban em 4 fases: Novos Leads, Diagnóstico, Proposta Enviada e Contrato Assinado. Ao cadastrar o Nome do Prospect, o sistema realiza um Conflict Check instantâneo.',
       tips: [
-        'A qualificação gerada automaticamente é reutilizada nas petições para evitar erros de qualificação das partes.',
-        'Você pode cadastrar CPF ou CNPJ e associar telefone/e-mail para prontuário completo.'
+        '🔍 Conflict Check Ativo: O sistema cruza o nome digitado com as partes adversas de todos os processos ativos do escritório para evitar patrocínio infiel.',
+        'Os valores de honorários previstos são inseridos no card, garantindo previsibilidade de receita.'
       ]
     },
     {
       step: 2,
-      title: '2. Cadastro de Processos & Matter Dashboard',
-      subtitle: 'Gestão visual de prazos e resumos de intimações por IA',
-      icon: '📂',
-      badge: 'Contencioso',
-      desc: 'No módulo "Processos", cadastre os processos ativos do seu escritório. Ao clicar em qualquer processo da tabela, o Matter Dashboard abre a linha do tempo com intimações, despachos e audiências. A IA lê publicações do Diário Eletrônico (DJEN), gera um resumo executivo da ação necessária e calcula o prazo fatal em dias úteis.',
+      title: '2. Cadastro de Clientes & Consulta de CEP',
+      subtitle: 'Evite digitação repetitiva de dados de qualificação',
+      icon: '👥',
+      badge: 'Passo 2',
+      desc: 'Com o cliente convertido, o próximo passo é cadastrá-lo formalmente (Pessoa Física ou Pessoa Jurídica) no módulo "Clientes". O formulário possui validação rigorosa de campos e máscara automática para CPF/CNPJ.',
       tips: [
-        'Cole a publicação ou intimação inteira no campo do Matter Dashboard para a IA extrair a ordem judicial.',
-        'A linha do tempo mantém o histórico cronológico completo para auditoria do processo.'
+        'Ao digitar um CEP, a integração com a API ViaCEP preenche automaticamente a Rua, Bairro, Cidade e UF.',
+        'A qualificação completa e automática gerada aqui será reaproveitada nos cabeçalhos das petições no Gerador de Peças.'
       ]
     },
     {
       step: 3,
-      title: '3. Geração de Peças com RAG & Playbooks de Teses',
-      subtitle: 'Elabore petições fundamentadas na legislação oficial sem alucinações',
-      icon: '🤖',
-      badge: 'Inteligência Artificial',
-      desc: 'Acesse o "Gerador de Peças" e selecione o tipo de ação (Inicial, Contestação, Recurso). É possível vincular o processo ativo para que os nomes das partes e a vara sejam preenchidos em 1 clique. Aplique os Playbooks de Teses Pré-Configuradas (Ex: Reclamação Trabalhista com Horas Extras ou Ação Consumerista de Voo Atrasado).',
+      title: '3. Processos & Matter Dashboard',
+      subtitle: 'Gestão visual de andamentos e resumos de intimações por IA',
+      icon: '📂',
+      badge: 'Contencioso',
+      desc: 'No módulo "Processos", você centraliza todas as ações ativas. O coração deste módulo é o "Matter Dashboard" (Linha do Tempo Interativa), onde toda a vida do processo fica registrada.',
       tips: [
-        'O motor RAG consulta o banco de leis (CPC, CLT, Código Civil, CDC, Súmulas STF/STJ) para citar leis reais.',
-        'A minuta é transmitida em tempo real via streaming com o modelo DeepSeek.'
+        'Cole publicações do Diário Eletrônico (DJEN) na linha do tempo para a IA extrair a ordem judicial, gerar um resumo em 1 linha e calcular o prazo fatal em dias úteis.',
+        'O autocomplete vincula instantaneamente as partes (Clientes cadastrados) ao processo criado.'
       ]
     },
     {
       step: 4,
-      title: '4. Fila de Validação Humana Auditável & Crivo Ético OAB',
-      subtitle: 'Garantia de segurança ética e supervisão antes do protocolo',
-      icon: '🛡️',
-      badge: 'Governança & Ética',
-      desc: 'Nenhuma peça gerada por IA vai diretamente para o protocolo sem supervisão. Toda minuta entra na "Fila de Validação". O advogado responsável lê, edita o texto inline se desejar, verifica a contagem de fontes pesquisadas e clica em Aprovar.',
+      title: '4. Geração de Peças & Motor RAG',
+      subtitle: 'Petições elaboradas via IA com citação à legislação oficial',
+      icon: '🤖',
+      badge: 'Inteligência Artificial',
+      desc: 'No módulo "Gerador de Peças", selecione o Processo Ativo vinculado. Em vez de escrever do zero, escolha um Playbook de Tese (ex: Indenização Voo Atrasado, Aposentadoria Especial, Assédio Moral). O modelo de IA fundamenta o pedido consultando o banco de dados vetorial de legislação real (RAG).',
       tips: [
-        'O sistema registra a trilha de auditoria: quem gerou, quem aprovou, data/hora e o custo em tokens.',
-        'É possível exportar ou copiar a petição finalizada com 1 clique.'
+        'Toda petição gerada recebe citação das Leis, Decretos e Súmulas indexadas, eliminando o risco da IA "alucinar" leis que não existem.',
+        'O conteúdo é gerado em tempo real por streaming, e a petição segue em formato pré-pronto.'
       ]
     },
     {
       step: 5,
-      title: '5. Financeiro, Timesheet Faturável & Revisão Contratual',
-      subtitle: 'Gestão financeira do escritório e scanner de minutas comerciais',
-      icon: '💰',
-      badge: 'Gestão Operacional',
-      desc: 'Utilize o módulo "Financeiro" para gerenciar honorários fixos e de êxito (ad exitum), além de acionar o Cronômetro de Timesheet faturável (billable hours). No módulo "Revisão Contratual", cole minutas de contratos para o Agente Autônomo classificar riscos (Alto/Atenção) e recomendar redações alternativas.',
+      title: '5. Fila de Validação Humana & Crivo Ético',
+      subtitle: 'Supervisão técnica obrigatória antes do protocolo final',
+      icon: '🛡️',
+      badge: 'Governança OAB',
+      desc: 'Nenhum documento gerado pela IA vai direto para o cliente ou para o tribunal. Todas as minutas caem na "Fila de Validação". Este módulo é sua central de revisão, garantindo a responsabilidade técnica e o cumprimento ético exigido pela OAB.',
       tips: [
-        'No CRM & Funil, acompanhe a atração de clientes desde o lead inicial até a assinatura do contrato.',
-        'Consulte a aba "Base RAG" para realizar pesquisas semânticas diretas na legislação compilada.'
+        'O advogado pode realizar edições de texto online, verificar os metadados (custo de tokens gerados) e as fontes normativas consultadas.',
+        'Apenas minutas "Aprovadas" ficam aptas para download (exportar para arquivo Word/TXT) e protocolo.'
+      ]
+    },
+    {
+      step: 6,
+      title: '6. Scanner e Revisão Contratual',
+      subtitle: 'Due diligence com rastreabilidade de evidências',
+      icon: '📝',
+      badge: 'Legal Ops',
+      desc: 'No módulo "Contratos", cole o texto integral de uma minuta (ex: NDA ou Prestação de Serviços). A IA faz uma varredura para identificar problemas e calcula o Índice de Risco (0-100).',
+      tips: [
+        'O Agente Autônomo classifica cada cláusula como: Conforme, Atenção ou Risco Alto, fornecendo a Sugestão de Redação ideal baseada no playbook do escritório.',
+        '📍 Rastreabilidade de Evidência: Cada análise indica com precisão a Página, Parágrafo e Linha em que a cláusula problemática se encontra no documento.'
+      ]
+    },
+    {
+      step: 7,
+      title: '7. Jurimetria & Resumidor Executivo de Acórdãos',
+      subtitle: 'Data analytics com extração da Ratio Decidendi de julgados',
+      icon: '📊',
+      badge: 'Análise Estratégica',
+      desc: 'Acesse "Jurimetria" para visualizar KPIs do escritório: Taxa de Êxito (Win Rate), Tempo Médio e a Calculadora Preditiva de Acordos. Você também conta com o Resumidor de Acórdãos IA.',
+      tips: [
+        '📜 Cole decisões extensas e ementas na aba de Acórdãos. A IA sumariará em segundos o texto, destacando a "Ratio Decidendi" (O fundamento determinante do julgamento) e o resultado (Provido / Improvido).',
+        'Os resultados ajudam na precificação do risco em litígios futuros na Calculadora Preditiva.'
+      ]
+    },
+    {
+      step: 8,
+      title: '8. Gestão Financeira & Timesheet',
+      subtitle: 'Controle de honorários, fluxo de caixa e horas faturáveis',
+      icon: '💰',
+      badge: 'Gestão do Escritório',
+      desc: 'No módulo "Financeiro", controle os honorários do tipo Fixo, Êxito (Ad Exitum) e Partido Mensal. Registre vencimentos e valores recuperados nas sentenças.',
+      tips: [
+        '⏱️ Timesheet Integrado: Ligue o cronômetro enquanto atua em uma demanda. O sistema salva as horas trabalhadas calculando o valor final pela tarifa do advogado (ex: R$ 350,00/h).',
+        'Formulários possuem máscaras financeiras completas e validação contra campos não preenchidos.'
       ]
     }
   ]
@@ -167,7 +203,7 @@ export default function Documentacao() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-accent)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    WIZARD APRENDIZADO DIDÁTICO ({wizardStep} de 5)
+                    WIZARD APRENDIZADO DIDÁTICO ({wizardStep} de 8)
                   </span>
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '2px 0 0', fontWeight: 400 }}>
                     {currentWizard.title}
@@ -181,7 +217,7 @@ export default function Documentacao() {
 
               {/* Barra de Progresso do Wizard */}
               <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ width: `${(wizardStep / 5) * 100}%`, height: '100%', background: 'var(--color-accent)', transition: 'width 0.3s ease' }} />
+                <div style={{ width: `${(wizardStep / 8) * 100}%`, height: '100%', background: 'var(--color-accent)', transition: 'width 0.3s ease' }} />
               </div>
 
               {/* Card do Passo Atual */}
@@ -222,7 +258,7 @@ export default function Documentacao() {
                 </button>
 
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {[1, 2, 3, 4, 5].map(s => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                     <button
                       key={s}
                       onClick={() => setWizardStep(s)}
@@ -239,13 +275,13 @@ export default function Documentacao() {
                 </div>
 
                 <button
-                  disabled={wizardStep === 5}
-                  onClick={() => setWizardStep(v => Math.min(5, v + 1))}
+                  disabled={wizardStep === 8}
+                  onClick={() => setWizardStep(v => Math.min(8, v + 1))}
                   style={{
                     padding: '9px 20px', borderRadius: 6, border: 'none',
-                    background: wizardStep === 5 ? 'var(--color-border)' : 'var(--color-primary)',
-                    color: '#fff', fontSize: 13, fontWeight: 600, cursor: wizardStep === 5 ? 'not-allowed' : 'pointer',
-                    opacity: wizardStep === 5 ? 0.5 : 1
+                    background: wizardStep === 8 ? 'var(--color-border)' : 'var(--color-primary)',
+                    color: '#fff', fontSize: 13, fontWeight: 600, cursor: wizardStep === 8 ? 'not-allowed' : 'pointer',
+                    opacity: wizardStep === 8 ? 0.5 : 1
                   }}
                 >
                   Próximo Passo →

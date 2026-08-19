@@ -48,12 +48,13 @@ ${dadosCaso}
 Contexto (Precedentes e Leis relevantes):
 ${contexto}
 
-Gere o documento final estruturado e formal. Apenas o conteúdo do documento, sem explicações extras.`;
+Gere o documento final estruturado e formal. Apenas o conteúdo do documento, sem explicações extras.
+CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para destacar títulos, cabeçalhos ou seções. Se precisar destacar algo, use CAIXA ALTA (letras maiúsculas). O texto deve ser inteiramente limpo, sem caracteres de marcação.`;
 
     const stream = await deepseekClient.chat.completions.create({
       model: 'deepseek-chat',
       messages: [
-        { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças.' },
+        { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.3,
@@ -65,9 +66,11 @@ Gere o documento final estruturado e formal. Apenas o conteúdo do documento, se
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content || '';
-      fullText += delta;
+      // Limpa asteriscos do fluxo em tempo real
+      const cleanDelta = delta.replace(/\*/g, '');
+      fullText += cleanDelta;
       // Option to stream tokens to client if UI supports it
-      res.write(`data: ${JSON.stringify({ token: delta })}\n\n`);
+      res.write(`data: ${JSON.stringify({ token: cleanDelta })}\n\n`);
     }
 
     res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);

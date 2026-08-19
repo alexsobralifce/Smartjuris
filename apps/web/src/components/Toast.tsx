@@ -30,7 +30,7 @@ export default function Toast({ toasts, onDismiss }: ToastProps) {
         const bg = toast.type === 'error' ? 'var(--color-danger-light)'
           : toast.type === 'success' ? 'var(--color-success-light)'
           : toast.type === 'warning' ? 'var(--color-warning-light)'
-          : '#eef0f7'
+          : 'var(--color-badge-tint)'
 
         const color = toast.type === 'error' ? 'var(--color-danger)'
           : toast.type === 'success' ? 'var(--color-success)'

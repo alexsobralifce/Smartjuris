@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, getErrorMessage } from '../api/client'
 import type { Processo, StatusProcesso } from '@lexia/shared'
+import Pagination, { usePagination } from './Pagination'
+import Toast, { ToastMessage } from './Toast'
 
 const statusConfig: Record<StatusProcesso, { label: string; color: string; bg: string }> = {
   ativo:     { label: 'Ativo',     color: 'var(--color-success)', bg: 'var(--color-success-light)' },
@@ -33,6 +35,15 @@ export default function Processos() {
 
   // Clientes para Autocomplete
   const [clientesList, setClientesList] = useState<any[]>([])
+
+  // Sistema de Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
 
   const reload = async () => {
     try {
@@ -71,25 +82,37 @@ export default function Processos() {
     return matchArea && matchSearch
   })
 
+  const processosPagination = usePagination(filtered, 10)
+
   const handleAdd = async () => {
     if (!form.tipo || !form.cliente) return
     try {
-      await api.processos.create(form)
+      const res = await api.processos.create(form)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao criar processo.'))
+        return
+      }
       await reload()
       setShowForm(false)
       setForm(emptyForm)
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao criar processo.')
     }
   }
 
   const handleDelete = async (id: string) => {
     try {
-      await api.processos.delete(id)
+      const res = await api.processos.delete(id)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao excluir processo.'))
+        return
+      }
       if (selected?.id === id) setSelected(null)
       await reload()
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao excluir processo.')
     }
   }
 
@@ -98,18 +121,23 @@ export default function Processos() {
     if (!selected || !novaDescricaoAndamento.trim()) return
     setAddingAndamento(true)
     try {
-      await api.andamentos.create({
+      const res = await api.andamentos.create({
         processoId: selected.id,
         tipo: novoTipoAndamento,
         descricao: novaDescricaoAndamento,
         prazoFatal: novoPrazoAndamento || null
       })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao adicionar andamento.'))
+        return
+      }
       setNovaDescricaoAndamento('')
       setNovoPrazoAndamento('')
       const updated = await api.andamentos.listByProcesso(selected.id)
       setAndamentosList(updated)
     } catch (err) {
       console.error(err)
+      addToast('error', 'Erro ao adicionar andamento.')
     } finally {
       setAddingAndamento(false)
     }
@@ -165,12 +193,12 @@ export default function Processos() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(p => {
+              {processosPagination.pageItems.map(p => {
                 const s = statusConfig[p.status]
                 return (
                   <tr key={p.id}
                     onClick={() => setSelected(selected?.id === p.id ? null : p)}
-                    style={{ borderTop: '1px solid var(--color-border)', cursor: 'pointer', background: selected?.id === p.id ? '#eef0f7' : 'transparent', transition: 'background 0.1s' }}
+                    style={{ borderTop: '1px solid var(--color-border)', cursor: 'pointer', background: selected?.id === p.id ? 'var(--color-badge-tint)' : 'transparent', transition: 'background 0.1s' }}
                     onMouseEnter={e => { if (selected?.id !== p.id) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)' }}
                     onMouseLeave={e => { if (selected?.id !== p.id) (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
                   >
@@ -182,7 +210,7 @@ export default function Processos() {
                       <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 1 }}>{p.cliente}</div>
                     </td>
                     <td style={{ padding: '13px 18px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '2px 8px', borderRadius: 4 }}>{p.area}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 8px', borderRadius: 4 }}>{p.area}</span>
                     </td>
                     <td style={{ padding: '13px 18px', fontSize: 12, color: 'var(--color-muted)' }}>{p.advogado}</td>
                     <td style={{ padding: '13px 18px', fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500 }}>{p.valor}</td>
@@ -205,6 +233,7 @@ export default function Processos() {
               )}
             </tbody>
           </table>
+          <Pagination {...processosPagination} onPageChange={processosPagination.setPage} />
         </div>
       </div>
 
@@ -321,7 +350,7 @@ export default function Processos() {
                 { key: 'advogado', label: 'Advogado Responsável', placeholder: 'Dr. Nome' },
               ].map(f => (
                 <div key={f.key} style={{ gridColumn: f.full ? '1 / -1' : undefined }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>{f.label}</label>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>{f.label}</label>
                   <input
                     list={f.key === 'cliente' ? 'clientes-processo-datalist' : undefined}
                     value={(form as Record<string, string>)[f.key] || ''}
@@ -339,7 +368,7 @@ export default function Processos() {
                 </div>
               ))}
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Área</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Área</label>
                 <select value={form.area} onChange={e => setForm(v => ({ ...v, area: e.target.value }))}
                   style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none' }}>
                   {['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista'].map(a => <option key={a}>{a}</option>)}
@@ -353,6 +382,8 @@ export default function Processos() {
           </div>
         </div>
       )}
+
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

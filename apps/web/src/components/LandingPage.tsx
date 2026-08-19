@@ -115,9 +115,9 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         <div>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: '#eef0f7', color: 'var(--color-primary)',
+            background: 'var(--color-badge-tint)', color: 'var(--color-primary)',
             padding: '6px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-            marginBottom: 20, border: '1px solid #d0d5e5'
+            marginBottom: 20, border: '1px solid var(--color-border)'
           }}>
             <span>⚖️</span> Peticionamento, Contratos e Jurimetria sem Alucinações
           </div>

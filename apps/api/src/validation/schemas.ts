@@ -82,3 +82,25 @@ export const colecaoSchema = z.object({
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown) {
   return schema.safeParse(body);
 }
+
+export function formatZodError(err: z.ZodError): string {
+  const issues = (err.issues ?? []).map((i) => {
+    const path = (i.path?.length ? i.path.join('.') : 'campo');
+    // Tradução simples de mensagens comuns do Zod (inglês -> português) quando possível
+    const msg = translateZodMessage(i.message);
+    return `${path}: ${msg}`;
+  });
+  return issues.length ? issues.join('; ') : 'Dados inválidos.';
+}
+
+function translateZodMessage(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes('required')) return 'obrigatório';
+  if (m.includes('invalid_type')) return 'tipo inválido';
+  if (m.includes('too_small') && /string/.test(m)) return 'muito curto';
+  if (m.includes('too_big') && /string/.test(m)) return 'muito longo';
+  if (m.includes('too_small') && /number/.test(m)) return 'valor mínimo não atingido';
+  if (m.includes('invalid_string') && /uuid/.test(m)) return 'identificador inválido';
+  if (m.includes('invalid_string')) return 'formato inválido';
+  return msg; // mantém a mensagem original quando não reconhece
+}

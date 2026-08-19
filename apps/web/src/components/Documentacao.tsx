@@ -259,7 +259,7 @@ export default function Documentacao() {
                   </h2>
                 </div>
 
-                <span style={{ fontSize: 11, fontWeight: 600, background: '#eef0f7', color: 'var(--color-primary)', padding: '4px 10px', borderRadius: 20 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--color-badge-tint)', color: 'var(--color-primary)', padding: '4px 10px', borderRadius: 20 }}>
                   {currentWizard.badge}
                 </span>
               </div>

@@ -5,7 +5,7 @@ import type { Processo, Peca } from '@lexia/shared'
 const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
   revisao:    { label: 'Aguardando Revisão', color: 'var(--color-warning)', bg: 'var(--color-warning-light)' },
   aprovado:   { label: 'Aprovado',           color: 'var(--color-success)', bg: 'var(--color-success-light)' },
-  protocolado:{ label: 'Protocolado',        color: 'var(--color-primary)', bg: '#e8eaf0' },
+  protocolado:{ label: 'Protocolado',        color: 'var(--color-primary)', bg: 'var(--color-badge-tint)' },
   reprovado:  { label: 'Reprovado',          color: 'var(--color-danger)',  bg: 'var(--color-danger-light)' },
 }
 
@@ -45,13 +45,18 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 1200 }}>
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.02em', color: 'var(--color-foreground)' }}>
-          Bom dia, Dr. Marcos
+      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.02em', color: 'var(--color-foreground)' }}>
+            Bom dia, Dr. Marcos
+          </div>
+          <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 4 }}>
+            Segunda-feira, 17 de agosto de 2026
+            {emRevisao > 0 && ` · ${emRevisao} ${emRevisao === 1 ? 'item aguardando' : 'itens aguardando'} revisão`}
+          </div>
         </div>
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 4 }}>
-          Segunda-feira, 17 de agosto de 2026
-          {emRevisao > 0 && ` · ${emRevisao} ${emRevisao === 1 ? 'item aguardando' : 'itens aguardando'} revisão`}
+        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 10px', flexShrink: 0 }}>
+          DADOS DEMONSTRATIVOS
         </div>
       </div>
 
@@ -89,7 +94,7 @@ export default function Dashboard() {
                     <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{p.id}</td>
                     <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>{p.tipo}</td>
                     <td style={{ padding: '12px 22px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '2px 8px', borderRadius: 4 }}>{p.area}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 8px', borderRadius: 4 }}>{p.area}</span>
                     </td>
                     <td style={{ padding: '12px 22px', fontSize: 12, color: 'var(--color-muted)' }}>{p.cliente}</td>
                     <td style={{ padding: '12px 22px' }}>

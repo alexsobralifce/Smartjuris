@@ -1,13 +1,51 @@
-import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { useState, useEffect, useRef } from 'react'
+import { api, getErrorMessage } from '../api/client'
 import { maskCurrency } from '../utils/masks'
 import Toast, { ToastMessage } from './Toast'
+import Pagination, { usePagination } from './Pagination'
+
+// Converte "R$ 15.500,00" -> 15500; ignora valores não numéricos ("20% do valor recuperado").
+function parseValor(valor?: string): number {
+  if (!valor) return 0
+  const match = valor.match(/R\$\s*([\d.,]+)/)
+  if (!match) return 0
+  const normalized = match[1].replace(/\./g, '').replace(',', '.')
+  const n = parseFloat(normalized)
+  return Number.isNaN(n) ? 0 : n
+}
+
+const formatBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+// Aceita "YYYY-MM-DD" (padrão do input date) ou "DD/MM/YYYY".
+function parseDate(v?: string): Date | null {
+  if (!v) return null
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+  const br = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]))
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d
+}
 
 export default function Financeiro() {
   const [activeTab, setActiveTab] = useState<'honorarios' | 'timesheet'>('honorarios')
   const [lancamentos, setLancamentos] = useState<any[]>([])
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Clientes para o seletor de busca no lançamento
+  const [clientes, setClientes] = useState<any[]>([])
+  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false)
+  const clienteSearchRef = useRef<HTMLDivElement>(null)
+
+  // Paginação das tabelas de lançamentos e timesheet
+  const lancamentosPagination = usePagination(lancamentos, 10)
+  const timesheetsPagination = usePagination(timesheets, 10)
+
+  // Filtro de clientes para o seletor de busca (case-insensitive, até 8)
+  const clientesFiltrados = clientes
+    .filter(c => (c.nome || '').toLowerCase().includes(novoCliente.toLowerCase()))
+    .slice(0, 8)
 
   // Sistema de Toast
   const [toasts, setToasts] = useState<ToastMessage[]>([])
@@ -50,6 +88,31 @@ export default function Financeiro() {
     loadData()
   }, [])
 
+  // Carrega clientes cadastrados para o seletor de busca
+  useEffect(() => {
+    api.clientes.list()
+      .then(data => { if (Array.isArray(data)) setClientes(data) })
+      .catch(e => console.error(e))
+  }, [])
+
+  // Fecha o dropdown ao clicar fora ou pressionar Escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (clienteSearchRef.current && !clienteSearchRef.current.contains(e.target as Node)) {
+        setClienteDropdownOpen(false)
+      }
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setClienteDropdownOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   // Cronômetro de Timesheet
   useEffect(() => {
     let interval: any = null
@@ -80,12 +143,16 @@ export default function Financeiro() {
     }
     const minutos = Math.max(1, Math.round(seconds / 60))
     try {
-      await api.financeiro.createTimesheet({
+      const res = await api.financeiro.createTimesheet({
         advogado: 'Dr. Advogado',
         descricao: descricaoAtividade,
         minutos,
         valorHora: '350,00'
       })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao registrar as horas.'))
+        return
+      }
       setSeconds(0)
       setTimerRunning(false)
       setDescricaoAtividade('')
@@ -108,13 +175,17 @@ export default function Financeiro() {
       return
     }
     try {
-      await api.financeiro.createLancamento({
+      const res = await api.financeiro.createLancamento({
         cliente: novoCliente,
         tipo: novoTipo,
         valor: novoValor,
         vencimento: novoVencimento,
         status: 'pendente'
       })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao registrar lançamento financeiro.'))
+        return
+      }
       setShowNovoLancamento(false)
       setNovoCliente('')
       addToast('success', 'Lançamento de honorários registrado com sucesso!')
@@ -128,12 +199,31 @@ export default function Financeiro() {
   const handleToggleStatus = async (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'pago' ? 'pendente' : 'pago'
     try {
-      await api.financeiro.updateLancamento(id, { status: nextStatus })
+      const res = await api.financeiro.updateLancamento(id, { status: nextStatus })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao atualizar o status do lançamento.'))
+        return
+      }
       loadData()
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao atualizar o status do lançamento.')
     }
   }
+
+  // KPIs dos cards de resumo (valores reais derivados dos lançamentos)
+  const agora = new Date()
+  const pendentes = lancamentos.filter(l => l.status === 'pendente')
+  const pagos = lancamentos.filter(l => l.status === 'pago')
+  const noMesCorrente = (v?: string) => {
+    const d = parseDate(v)
+    return !!d && d.getFullYear() === agora.getFullYear() && d.getMonth() === agora.getMonth()
+  }
+  const pendentesDoMes = pendentes.filter(l => noMesCorrente(l.vencimento))
+  const pagosDoMes = pagos.filter(l => noMesCorrente(l.vencimento))
+  const aReceberNoMes = pendentesDoMes.reduce((acc, l) => acc + parseValor(l.valor), 0)
+  const recebidoNoMes = pagosDoMes.reduce((acc, l) => acc + parseValor(l.valor), 0)
+  const totalPendente = pendentes.reduce((acc, l) => acc + parseValor(l.valor), 0)
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -182,20 +272,20 @@ export default function Financeiro() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>A Receber neste Mês</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-primary)', marginTop: 6 }}>R$ 15.500,00</div>
-              <div style={{ fontSize: 11, color: 'var(--color-success)', marginTop: 4 }}>3 contratos ativos</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-primary)', marginTop: 6 }}>{formatBRL(aReceberNoMes)}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-success)', marginTop: 4 }}>{pendentes.length} {pendentes.length === 1 ? 'contrato ativo' : 'contratos ativos'}</div>
             </div>
 
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Honorários de Êxito (Ad Exitum)</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-accent)', marginTop: 6 }}>R$ 48.200,00</div>
-              <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 4 }}>Previsão baseada em jurimetria</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recebido no Mês</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-success)', marginTop: 6 }}>{formatBRL(recebidoNoMes)}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 4 }}>{pagosDoMes.length} {pagosDoMes.length === 1 ? 'pagamento no mês' : 'pagamentos no mês'}</div>
             </div>
 
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Taxa de Inadimplência</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-success)', marginTop: 6 }}>2.1%</div>
-              <div style={{ fontSize: 11, color: 'var(--color-success)', marginTop: 4 }}>Abaixo do padrão de mercado (8%)</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Pendente em Aberto</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-accent)', marginTop: 6 }}>{formatBRL(totalPendente)}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 4 }}>{pendentes.length} {pendentes.length === 1 ? 'pendência em aberto' : 'pendências em aberto'}</div>
             </div>
           </div>
 
@@ -226,7 +316,7 @@ export default function Financeiro() {
                 ) : lancamentos.length === 0 ? (
                   <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: 'var(--color-muted)' }}>Nenhum lançamento cadastrado.</td></tr>
                 ) : (
-                  lancamentos.map(l => (
+                  lancamentosPagination.pageItems.map(l => (
                     <tr key={l.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                       <td style={{ padding: '14px 18px', fontWeight: 600, fontSize: 13 }}>{l.cliente}</td>
                       <td style={{ padding: '14px 18px', fontSize: 12 }}>{l.tipo}</td>
@@ -254,6 +344,7 @@ export default function Financeiro() {
                 )}
               </tbody>
             </table>
+            <Pagination {...lancamentosPagination} onPageChange={lancamentosPagination.setPage} />
           </div>
         </div>
       )}
@@ -324,7 +415,7 @@ export default function Financeiro() {
                 {timesheets.length === 0 ? (
                   <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--color-muted)' }}>Nenhuma hora registrada ainda.</td></tr>
                 ) : (
-                  timesheets.map(t => (
+                  timesheetsPagination.pageItems.map(t => (
                     <tr key={t.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                       <td style={{ padding: '12px 18px', fontSize: 12, fontWeight: 600 }}>{t.advogado}</td>
                       <td style={{ padding: '12px 18px', fontSize: 13 }}>{t.descricao}</td>
@@ -342,6 +433,7 @@ export default function Financeiro() {
                 )}
               </tbody>
             </table>
+            <Pagination {...timesheetsPagination} onPageChange={timesheetsPagination.setPage} />
           </div>
         </div>
       )}
@@ -352,13 +444,56 @@ export default function Financeiro() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 28, width: 420 }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 18, fontFamily: 'var(--font-display)' }}>Novo Lançamento Financeiro</h3>
             <form onSubmit={handleCreateLancamento} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>NOME DO CLIENTE</label>
-                <input required type="text" placeholder="Ex: Fernanda Oliveira" value={novoCliente} onChange={e => setNovoCliente(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
+              <div ref={clienteSearchRef} style={{ position: 'relative' }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Nome do cliente</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  value={novoCliente}
+                  onChange={e => { setNovoCliente(e.target.value); setClienteDropdownOpen(true) }}
+                  onFocus={() => setClienteDropdownOpen(true)}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }}
+                />
+                {clienteDropdownOpen && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                    borderRadius: 6, marginTop: 4, boxShadow: '0 12px 32px rgba(24,23,15,0.14)',
+                    maxHeight: 240, overflowY: 'auto',
+                  }}>
+                    {clientesFiltrados.length === 0 ? (
+                      <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--color-muted)' }}>
+                        Nenhum cliente encontrado — digite o nome manualmente
+                      </div>
+                    ) : (
+                      clientesFiltrados.map(c => (
+                        <button
+                          type="button"
+                          key={c.id}
+                          onClick={() => { setNovoCliente(c.nome); setClienteDropdownOpen(false) }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface-2)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                            width: '100%', padding: '9px 12px', border: 'none', background: 'transparent',
+                            cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--color-foreground)',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</span>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 3, flexShrink: 0,
+                            background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: '#fff',
+                          }}>{c.tipo}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>TIPO DE HONORÁRIO</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Tipo de honorário</label>
                 <select value={novoTipo} onChange={e => setNovoTipo(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }}>
                   <option value="Honorário Fixo">Honorário Fixo</option>
                   <option value="Êxito (Ad Exitum)">Êxito (Ad Exitum)</option>
@@ -367,7 +502,7 @@ export default function Financeiro() {
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>VALOR MONETÁRIO *</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Valor monetário *</label>
                 <input
                   required
                   type="text"
@@ -379,7 +514,7 @@ export default function Financeiro() {
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>DATA DE VENCIMENTO *</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Data de vencimento *</label>
                 <input required type="date" value={novoVencimento} onChange={e => setNovoVencimento(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
               </div>
 

@@ -135,7 +135,7 @@ export default function Crm() {
                   <div key={lead.id} style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 6, padding: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-foreground)' }}>{lead.nome}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '2px 6px', borderRadius: 4 }}>{lead.area}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 6px', borderRadius: 4 }}>{lead.area}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600 }}>{lead.valorEstimado}</span>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>{lead.contato}</div>
@@ -181,7 +181,7 @@ export default function Crm() {
             <form onSubmit={handleAddLead} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)' }}>NOME DO PROSPECT / CLIENTE *</label>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)' }}>Nome do prospect / cliente *</label>
                   <span style={{ fontSize: 10, color: 'var(--color-accent)', fontWeight: 600 }}>🔍 Conflict Check Ativo</span>
                 </div>
                 <input required type="text" placeholder="Ex: Banco do Brasil S.A. ou Grupo Delta" value={novoNome} onChange={e => checkConflict(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: conflictAlert ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
@@ -194,7 +194,7 @@ export default function Crm() {
               )}
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>ÁREA DE ATUAÇÃO</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Área de atuação</label>
                 <select value={novoArea} onChange={e => setNovoArea(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }}>
                   <option value="Trabalhista">Trabalhista</option>
                   <option value="Consumerista">Consumerista</option>
@@ -204,12 +204,12 @@ export default function Crm() {
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>VALOR ESTIMADO DO CONTRATO *</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Valor estimado do contrato *</label>
                 <input required type="text" value={novoValor} onChange={e => setNovoValor(maskCurrency(e.target.value))} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>CONTATO / TELEFONE / EMAIL *</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Contato / telefone / e-mail *</label>
                 <input required type="text" placeholder="contato@empresa.com" value={novoContato} onChange={e => setNovoContato(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
               </div>
 

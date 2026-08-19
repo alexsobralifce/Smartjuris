@@ -6,7 +6,7 @@ import { requireAdmin } from '../middlewares/roleGuard.js';
 import { canMutate } from '../middlewares/ownership.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { encryptField, decryptField } from '../services/crypto.js';
-import { parseBody, clienteSchema, clientePatchSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, clienteSchema, clientePatchSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -26,7 +26,7 @@ router.post('/', async (req, res) => {
   try {
     const parsed = parseBody(clienteSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const data = parsed.data;
     const [inserted] = await db.insert(clientes).values({
@@ -67,7 +67,7 @@ router.patch('/:id', async (req, res) => {
     }
     const parsed = parseBody(clientePatchSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const updateData = { ...parsed.data };
     if (parsed.data.cpfCnpj !== undefined) {

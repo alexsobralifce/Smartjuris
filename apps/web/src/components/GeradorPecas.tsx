@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, getErrorMessage } from '../api/client'
 import { getApiBaseUrl } from '../api/config'
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
@@ -182,7 +182,7 @@ export default function GeradorPecas() {
                   setFontesRecuperadas(data.fontes || []);
                   
                   // Salva a peça no banco
-                  await api.pecas.create({
+                  const res = await api.pecas.create({
                     processoId: processoSelecionadoId || '',
                     tipo: tipo || 'Petição',
                     area,
@@ -193,14 +193,17 @@ export default function GeradorPecas() {
                     fontes: data.fontes?.length || 3,
                     conteudo: data.conteudo,
                   });
+                  if (!res.ok) {
+                    throw new Error(await getErrorMessage(res, 'Erro ao salvar a peça gerada.'));
+                  }
                   setTimeout(() => setStep('revisao'), 800);
                 }
               }
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error('Erro na geração', e);
-          setProgressoLabel('Erro na geração!');
+          setProgressoLabel(e?.message || 'Erro na geração!');
         }
       }
       run()
@@ -278,7 +281,7 @@ export default function GeradorPecas() {
                   padding: '9px 14px', marginBottom: 4, borderRadius: 6,
                   border: '1px solid', cursor: 'pointer',
                   borderColor: area === a ? 'var(--color-primary)' : 'var(--color-border)',
-                  background: area === a ? '#eef0f7' : 'var(--color-surface)',
+                  background: area === a ? 'var(--color-badge-tint)' : 'var(--color-surface)',
                   color: area === a ? 'var(--color-primary)' : 'var(--color-foreground)',
                   fontWeight: area === a ? 600 : 400, fontSize: 13,
                 }}>{a}</button>
@@ -293,7 +296,7 @@ export default function GeradorPecas() {
                     padding: '16px 18px', borderRadius: 8, textAlign: 'left',
                     border: '1px solid', cursor: 'pointer',
                     borderColor: tipo === t ? 'var(--color-primary)' : 'var(--color-border)',
-                    background: tipo === t ? '#eef0f7' : 'var(--color-surface)',
+                    background: tipo === t ? 'var(--color-badge-tint)' : 'var(--color-surface)',
                     color: tipo === t ? 'var(--color-primary)' : 'var(--color-foreground)',
                     fontWeight: tipo === t ? 600 : 400, fontSize: 13,
                     transition: 'all 0.12s',

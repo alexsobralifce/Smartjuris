@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '../api/client'
+import { api, getErrorMessage } from '../api/client'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import Pagination, { usePagination } from './Pagination'
 
 type Tab = 'usuarios' | 'metricas' | 'financeiro' | 'logs'
 type LogSubTab = 'logins' | 'tokens' | 'auditoria'
@@ -45,7 +46,7 @@ const fmtDate = (v: string | undefined | null) => {
 
 const roleMeta: Record<string, { label: string; color: string; bg: string }> = {
   root: { label: 'Root', color: 'var(--color-warning)', bg: 'var(--color-accent-light)' },
-  admin: { label: 'Administrador', color: 'var(--color-primary)', bg: '#e8eaf0' },
+  admin: { label: 'Administrador', color: 'var(--color-primary)', bg: 'var(--color-badge-tint)' },
   user: { label: 'Usuário', color: 'var(--color-muted)', bg: 'var(--color-surface-2)' },
 }
 
@@ -68,8 +69,6 @@ const labelStyle: React.CSSProperties = {
   color: 'var(--color-muted)',
   display: 'block',
   marginBottom: 4,
-  letterSpacing: '0.04em',
-  textTransform: 'uppercase',
 }
 
 const primaryBtn: React.CSSProperties = {
@@ -197,7 +196,11 @@ export default function Admin() {
   // ----- User actions -----
   const handleCreate = async (data: { nome: string; email: string; senha: string; role: string }) => {
     try {
-      await api.admin.createUser(data)
+      const res = await api.admin.createUser(data)
+      if (!res.ok) {
+        notify('error', await getErrorMessage(res, 'Falha ao criar usuário.'))
+        return
+      }
       setModal(null)
       notify('success', 'Usuário criado com sucesso.')
       loadUsers()
@@ -208,7 +211,11 @@ export default function Admin() {
 
   const handleEdit = async (id: string, patch: any) => {
     try {
-      await api.admin.updateUser(id, patch)
+      const res = await api.admin.updateUser(id, patch)
+      if (!res.ok) {
+        notify('error', await getErrorMessage(res, 'Falha ao atualizar usuário.'))
+        return
+      }
       setModal(null)
       notify('success', 'Usuário atualizado.')
       loadUsers()
@@ -219,7 +226,11 @@ export default function Admin() {
 
   const handleReset = async (id: string, senha: string) => {
     try {
-      await api.admin.resetPassword(id, senha)
+      const res = await api.admin.resetPassword(id, senha)
+      if (!res.ok) {
+        notify('error', await getErrorMessage(res, 'Falha ao redefinir senha.'))
+        return
+      }
       setModal(null)
       notify('success', 'Senha redefinida.')
     } catch (e) {
@@ -229,7 +240,11 @@ export default function Admin() {
 
   const handleToggleAtivo = async (u: any) => {
     try {
-      await api.admin.updateUser(u.id, { ativo: !u.ativo })
+      const res = await api.admin.updateUser(u.id, { ativo: !u.ativo })
+      if (!res.ok) {
+        notify('error', await getErrorMessage(res, 'Falha ao alterar status.'))
+        return
+      }
       notify('success', u.ativo ? 'Usuário desativado.' : 'Usuário reativado.')
       loadUsers()
     } catch (e) {
@@ -240,7 +255,11 @@ export default function Admin() {
   const handleDelete = async (u: any) => {
     if (!window.confirm(`Excluir definitivamente ${u.nome} (${u.email})?`)) return
     try {
-      await api.admin.deleteUser(u.id)
+      const res = await api.admin.deleteUser(u.id)
+      if (!res.ok) {
+        notify('error', await getErrorMessage(res, 'Falha ao excluir usuário.'))
+        return
+      }
       notify('success', 'Usuário excluído.')
       loadUsers()
     } catch (e) {
@@ -253,6 +272,8 @@ export default function Admin() {
     if (roleFilter && u.role !== roleFilter) return false
     return true
   })
+
+  const usersPagination = usePagination(filteredUsers, 10)
 
   // ----- Derived chart data -----
   const tokensPorDia = globalStats?.tokensPorDia || []
@@ -339,7 +360,7 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map(u => {
+                {usersPagination.pageItems.map(u => {
                   const rm = roleMeta[u.role] || roleMeta.user
                   return (
                     <tr key={u.id} style={{ borderTop: '1px solid var(--color-border)' }}
@@ -373,6 +394,7 @@ export default function Admin() {
                 {filteredUsers.length === 0 && <EmptyRow colSpan={8} text="Nenhum usuário encontrado." />}
               </tbody>
             </table>
+            <Pagination {...usersPagination} onPageChange={usersPagination.setPage} />
           </div>
         </>
       )}
@@ -605,7 +627,7 @@ export default function Admin() {
                       <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{fmtDate(l.createdAt)}</td>
                       <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>{l.actorNome}</td>
                       <td style={{ padding: '12px 22px' }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '3px 8px', borderRadius: 4 }}>{l.acao}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '3px 8px', borderRadius: 4 }}>{l.acao}</span>
                       </td>
                       <td style={{ padding: '12px 22px', fontSize: 12, color: 'var(--color-muted)' }}>{l.alvoEmail || '—'}</td>
                       <td style={{ padding: '12px 22px', fontSize: 12, color: 'var(--color-muted)' }}>{l.detalhes || '—'}</td>

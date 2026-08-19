@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, getErrorMessage } from '../api/client'
 import type { Documento } from '@lexia/shared'
+import Pagination, { usePagination } from './Pagination'
+import Toast, { ToastMessage } from './Toast'
 
 const colecoes = [
   { id: 'previdenciario', nome: 'Legislação Previdenciária', lastSync: '19/08/2026 14:15', status: 'ok', desc: 'Lei 8.213/91, Lei 8.212/91, Decreto 3.048/99 (RPS), IN 128/22 INSS, Súmulas TNU e CRPS' },
@@ -17,6 +19,14 @@ export default function Base() {
   const [uploadLabel, setUploadLabel] = useState('')
   const [done, setDone] = useState(false)
 
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
+
   const reload = async () => {
     try {
       const docs = await api.documentos.list()
@@ -27,6 +37,8 @@ export default function Base() {
   }
 
   useEffect(() => { reload() }, [])
+
+  const docsPagination = usePagination(documentos, 10)
 
   const contsPorColecao = colecoes.map(c => ({
     ...c,
@@ -57,10 +69,15 @@ export default function Base() {
           formData.append('colecao', 'Jurisprudência')
           // Append a dummy blob to simulate a file
           formData.append('file', new Blob(['fake-pdf-content'], { type: 'application/pdf' }), 'Documento-importado.pdf')
-          await api.documentos.upload(formData)
-          await reload()
+          const res = await api.documentos.upload(formData)
+          if (!res.ok) {
+            addToast('error', await getErrorMessage(res, 'Erro ao indexar documento.'))
+          } else {
+            await reload()
+          }
         } catch (e) {
           console.error(e)
+          addToast('error', 'Erro ao indexar documento.')
         }
         setTimeout(() => { setUploading(false); setDone(true) }, 400)
       }
@@ -149,14 +166,14 @@ export default function Base() {
             </tr>
           </thead>
           <tbody>
-            {documentos.map(d => (
+            {docsPagination.pageItems.map(d => (
               <tr key={d.id} style={{ borderTop: '1px solid var(--color-border)' }}
                 onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)'}
                 onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
               >
                 <td style={{ padding: '12px 22px', fontSize: 13 }}>{d.nome}</td>
                 <td style={{ padding: '12px 22px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '2px 8px', borderRadius: 4 }}>{d.colecao}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 8px', borderRadius: 4 }}>{d.colecao}</span>
                 </td>
                 <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{d.tamanho}</td>
                 <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{d.chunks}</td>
@@ -168,6 +185,7 @@ export default function Base() {
             )}
           </tbody>
         </table>
+        <Pagination {...docsPagination} onPageChange={docsPagination.setPage} />
       </div>
 
       {/* Config */}
@@ -187,6 +205,8 @@ export default function Base() {
           ))}
         </div>
       </div>
+
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

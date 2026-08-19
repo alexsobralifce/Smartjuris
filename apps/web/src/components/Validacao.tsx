@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, getErrorMessage } from '../api/client'
 import type { Peca } from '@lexia/shared'
+import Toast, { ToastMessage } from './Toast'
 
 const pecaTexto = `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO...
 
@@ -19,6 +20,14 @@ export default function Validacao() {
   const [selected, setSelected] = useState<Peca | null>(null)
   const [comment, setComment] = useState('')
 
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
+
   const reload = async () => {
     try {
       const todas = await api.pecas.list()
@@ -35,11 +44,16 @@ export default function Validacao() {
   const handle = async (action: 'aprovado' | 'reprovado') => {
     if (!selected) return
     try {
-      await api.pecas.update(selected.id, { status: action })
+      const res = await api.pecas.update(selected.id, { status: action })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao atualizar a peça.'))
+        return
+      }
       await reload()
       setComment('')
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao atualizar a peça.')
     }
   }
 
@@ -62,7 +76,7 @@ export default function Validacao() {
             style={{
               padding: '16px 20px', borderBottom: '1px solid var(--color-border)',
               cursor: 'pointer', transition: 'background 0.1s',
-              background: selected?.id === item.id ? '#eef0f7' : 'transparent',
+              background: selected?.id === item.id ? 'var(--color-badge-tint)' : 'transparent',
               borderLeft: selected?.id === item.id ? '3px solid var(--color-primary)' : '3px solid transparent',
             }}
           >
@@ -75,7 +89,7 @@ export default function Validacao() {
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>{item.tipo}</div>
             <div style={{ fontSize: 11, color: 'var(--color-muted)', marginBottom: 4 }}>{item.cliente}</div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '1px 7px', borderRadius: 3 }}>{item.area}</span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '1px 7px', borderRadius: 3 }}>{item.area}</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>prazo: {item.prazo}</span>
             </div>
           </div>
@@ -162,6 +176,8 @@ export default function Validacao() {
           Selecione uma peça para revisar.
         </div>
       )}
+
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

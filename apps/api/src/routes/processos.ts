@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { requireAdmin } from '../middlewares/roleGuard.js';
 import { canMutate } from '../middlewares/ownership.js';
 import { recordAudit } from '../middlewares/audit.js';
-import { parseBody, processosSchema, processosPatchSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, processosSchema, processosPatchSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -22,7 +22,7 @@ router.post('/', async (req, res) => {
   try {
     const parsed = parseBody(processosSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const data = parsed.data;
     const novo = await db.insert(processos).values({
@@ -56,7 +56,7 @@ router.patch('/:id', async (req, res) => {
     }
     const parsed = parseBody(processosPatchSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const atualizado = await db.update(processos).set(parsed.data).where(eq(processos.id, id)).returning();
     await recordAudit(req, 'UPDATE_PROCESSO', { alvoId: id, detalhes: parsed.data });

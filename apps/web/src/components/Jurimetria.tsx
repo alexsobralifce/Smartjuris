@@ -127,6 +127,9 @@ export default function Jurimetria() {
         <div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Jurimetria & Analytics</div>
           <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Inteligência e previsão sobre processos · Jan–Ago 2026</div>
+          <div style={{ marginTop: 10, fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 10px', display: 'inline-block' }}>
+            DADOS DEMONSTRATIVOS
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {(['overview', 'previsao', 'simulador', 'acordaos'] as const).map(t => (

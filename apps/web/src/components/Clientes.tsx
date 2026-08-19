@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, getErrorMessage } from '../api/client'
 import { maskCpfCnpj, maskCEP, maskPhone, isValidEmail } from '../utils/masks'
 import Toast, { ToastMessage } from './Toast'
+import Pagination, { usePagination } from './Pagination'
 
 const initialClientes = [
   {
@@ -173,7 +174,7 @@ export default function Clientes() {
       : `pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${cpfCnpj}, com sede na ${logradouro || 'Rua'}, nº ${numero || 'S/N'}, ${bairro || 'Bairro'}, ${cidade || 'São Paulo'}/${uf || 'SP'}`)
 
     try {
-      await api.clientes.create({
+      const res = await api.clientes.create({
         tipo,
         nome,
         cpfCnpj,
@@ -188,6 +189,10 @@ export default function Clientes() {
         uf,
         qualificacao: qualifText
       })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao salvar cliente no banco de dados.'))
+        return
+      }
       setShowModal(false)
       resetForm()
       addToast('success', 'Cliente cadastrado com sucesso!')
@@ -200,7 +205,11 @@ export default function Clientes() {
 
   const handleDeleteCliente = async (id: string) => {
     try {
-      await api.clientes.delete(id)
+      const res = await api.clientes.delete(id)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao remover cliente.'))
+        return
+      }
       addToast('info', 'Cliente removido.')
       loadClientes()
     } catch (e) {
@@ -231,6 +240,8 @@ export default function Clientes() {
     const matchSearch = !search || c.nome.toLowerCase().includes(search.toLowerCase()) || (c.cpfCnpj && c.cpfCnpj.includes(search))
     return matchTipo && matchSearch
   })
+
+  const clientesPagination = usePagination(filtered, 10)
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 1150, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -303,7 +314,7 @@ export default function Clientes() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-muted)' }}>Nenhum cliente cadastrado.</td></tr>
             ) : (
-              filtered.map(c => (
+              clientesPagination.pageItems.map(c => (
                 <tr key={c.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '14px 18px' }}>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: '#fff' }}>
@@ -336,6 +347,7 @@ export default function Clientes() {
             )}
           </tbody>
         </table>
+        <Pagination {...clientesPagination} onPageChange={clientesPagination.setPage} />
       </div>
 
       {/* Modal de Novo Cliente com ViaCEP */}
@@ -368,7 +380,7 @@ export default function Clientes() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.nome ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>NOME COMPLETO OU RAZÃO SOCIAL *</label>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.nome ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Nome completo ou razão social *</label>
                   <input
                     type="text"
                     placeholder="Ex: Fernanda Oliveira"
@@ -406,7 +418,7 @@ export default function Clientes() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>TELEFONE / WHATSAPP</label>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Telefone / WhatsApp</label>
                   <input
                     type="text"
                     placeholder="(11) 98877-6655"
@@ -417,7 +429,7 @@ export default function Clientes() {
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.email ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>EMAIL INSTITUCIONAL</label>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.email ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>E-mail institucional</label>
                   <input
                     type="email"
                     placeholder="cliente@email.com"
@@ -463,7 +475,7 @@ export default function Clientes() {
               </div>
 
               <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>QUALIFICAÇÃO JURÍDICA COMPLETA PARA PETIÇÕES (AUTOPREENCHIDA)</label>
+                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Qualificação jurídica completa para petições (autopreenchida)</label>
                 <textarea
                   value={qualificacao}
                   onChange={e => setQualificacao(e.target.value)}

@@ -23,6 +23,30 @@
   --color-danger: #7f1d1d;
   --color-danger-light: #fee2e2;
   --color-sidebar: #18170f;
+
+  --color-badge-tint: #e8eaf0;
+}
+
+/* Dark theme — "elegant dim ink" */
+:root[data-theme='dark'] {
+  --color-background: #0f1115;
+  --color-surface: #161a21;
+  --color-surface-2: #1d222b;
+  --color-border: #2a2f3a;
+  --color-foreground: #e6e6e6;
+  --color-muted: #9aa0a6;
+  --color-primary: #4f6cb0;
+  --color-primary-hover: #5d7ac2;
+  --color-accent: #d4b35a;
+  --color-accent-light: #3a3320;
+  --color-success: #4ea878;
+  --color-success-light: #1e2a23;
+  --color-warning: #d97706;
+  --color-warning-light: #3a2e15;
+  --color-danger: #d04545;
+  --color-danger-light: #3a1e1e;
+  --color-sidebar: #0c0b08;
+  --color-badge-tint: #232b3e;
 }
 
 * {

@@ -94,8 +94,8 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
         {/* Editor da Minuta */}
         <form onSubmit={handleAnaliseContrato} style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
-              Cole a Minuta Contratual (PDF / Texto)
+            <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', color: 'var(--color-muted)' }}>
+              Cole a minuta contratual (PDF / texto)
             </label>
             <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>{minutaTexto.length} caracteres</span>
           </div>
@@ -162,7 +162,7 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
                     </div>
 
                     {c.evidencia && (
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', background: '#eef0f7', padding: '4px 8px', borderRadius: 4, marginBottom: 8 }}>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '4px 8px', borderRadius: 4, marginBottom: 8 }}>
                         {c.evidencia}
                       </div>
                     )}

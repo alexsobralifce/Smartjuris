@@ -4,7 +4,7 @@ import { andamentos } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { deepseekClient } from '../services/ai.js';
 import { trackTokenUsage } from '../services/usage.js';
-import { parseBody, andamentoSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, andamentoSchema } from '../validation/schemas.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { redactPII } from '../services/pii.js';
@@ -30,7 +30,7 @@ router.post('/', aiRateLimiter, async (req, res) => {
   try {
     const parsed = parseBody(andamentoSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const { processoId, tipo, descricao, prazoFatal } = parsed.data;
 

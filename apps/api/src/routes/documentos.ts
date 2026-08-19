@@ -4,7 +4,7 @@ import { documentos, chunks, documentosGerados } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
-import { parseBody, colecaoSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, colecaoSchema } from '../validation/schemas.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
 
@@ -55,7 +55,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
     }
     const parsed = parseBody(colecaoSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const colecao = parsed.data.colecao;
     

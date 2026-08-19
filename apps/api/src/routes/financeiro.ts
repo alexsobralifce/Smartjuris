@@ -5,7 +5,7 @@ import { eq, desc } from 'drizzle-orm';
 import { canMutate } from '../middlewares/ownership.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { encryptField, decryptField } from '../services/crypto.js';
-import { parseBody, lancamentoSchema, lancamentoPatchSchema, timesheetSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, lancamentoSchema, lancamentoPatchSchema, timesheetSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -25,7 +25,7 @@ router.post('/lancamentos', async (req, res) => {
   try {
     const parsed = parseBody(lancamentoSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const data = parsed.data;
     const [inserted] = await db.insert(lancamentosFinanceiros).values({
@@ -58,7 +58,7 @@ router.patch('/lancamentos/:id', async (req, res) => {
     }
     const parsed = parseBody(lancamentoPatchSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const patch: { status?: string } = {};
     if (parsed.data.status !== undefined) patch.status = parsed.data.status;
@@ -90,7 +90,7 @@ router.post('/timesheet', async (req, res) => {
   try {
     const parsed = parseBody(timesheetSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const data = parsed.data;
     const [inserted] = await db.insert(timesheet).values({

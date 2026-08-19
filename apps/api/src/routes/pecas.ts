@@ -4,7 +4,7 @@ import { pecas, documentosGerados } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { canMutate } from '../middlewares/ownership.js';
 import { recordAudit } from '../middlewares/audit.js';
-import { parseBody, pecasSchema, pecasPatchSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, pecasSchema, pecasPatchSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.post('/', async (req, res) => {
   try {
     const parsed = parseBody(pecasSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const data = parsed.data;
     const [nova] = await db.insert(pecas).values({
@@ -74,7 +74,7 @@ router.patch('/:id', async (req, res) => {
     }
     const parsed = parseBody(pecasPatchSchema, req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Dados inválidos.' });
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     // Peças aprovadas/protocoladas são congeladas: conteúdo não pode ser alterado
     if ((existente.status === 'aprovado' || existente.status === 'protocolado') && parsed.data.conteudo !== undefined) {

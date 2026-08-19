@@ -106,3 +106,22 @@ export const timesheet = pgTable('timesheet', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
+export const clientes = pgTable('clientes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  tipo: text('tipo').notNull(), // 'PF' (Pessoa Física) | 'PJ' (Pessoa Jurídica)
+  nome: text('nome').notNull(),
+  cpfCnpj: text('cpf_cnpj').notNull(),
+  email: text('email').notNull(),
+  telefone: text('telefone').notNull(),
+  cep: text('cep'),
+  logradouro: text('logradouro'),
+  numero: text('numero'),
+  complemento: text('complemento'),
+  bairro: text('bairro'),
+  cidade: text('cidade'),
+  uf: text('uf'),
+  qualificacao: text('qualificacao'), // ex: "brasileira, solteira, auxiliar administrativa"
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
+

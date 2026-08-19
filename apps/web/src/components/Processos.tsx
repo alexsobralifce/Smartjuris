@@ -31,10 +31,17 @@ export default function Processos() {
   const [novoPrazoAndamento, setNovoPrazoAndamento] = useState('')
   const [addingAndamento, setAddingAndamento] = useState(false)
 
+  // Clientes para Autocomplete
+  const [clientesList, setClientesList] = useState<any[]>([])
+
   const reload = async () => {
     try {
-      const data = await api.processos.list()
+      const [data, cData] = await Promise.all([
+        api.processos.list(),
+        api.clientes.list()
+      ])
       setProcessos(data)
+      if (Array.isArray(cData)) setClientesList(cData)
     } catch (e) {
       console.error(e)
     }
@@ -316,11 +323,19 @@ export default function Processos() {
                 <div key={f.key} style={{ gridColumn: f.full ? '1 / -1' : undefined }}>
                   <label style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>{f.label}</label>
                   <input
+                    list={f.key === 'cliente' ? 'clientes-processo-datalist' : undefined}
                     value={(form as Record<string, string>)[f.key] || ''}
                     onChange={e => setForm(v => ({ ...v, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none' }}
                   />
+                  {f.key === 'cliente' && (
+                    <datalist id="clientes-processo-datalist">
+                      {clientesList.map(c => (
+                        <option key={c.id} value={c.nome}>{c.nome} ({c.cpfCnpj})</option>
+                      ))}
+                    </datalist>
+                  )}
                 </div>
               ))}
               <div>

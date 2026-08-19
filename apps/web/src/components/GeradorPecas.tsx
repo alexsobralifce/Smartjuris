@@ -63,8 +63,9 @@ export default function GeradorPecas() {
   const [progressoLabel, setProgressoLabel] = useState('')
   const [copied, setCopied] = useState(false)
 
-  // Lista de processos para vinculo
+  // Lista de processos e clientes para vinculo e autocomplete
   const [processosList, setProcessosList] = useState<any[]>([])
+  const [clientesList, setClientesList] = useState<any[]>([])
   const [processoSelecionadoId, setProcessoSelecionadoId] = useState('')
 
   // Campos do formulário
@@ -83,11 +84,15 @@ export default function GeradorPecas() {
   const etapas = ['Selecionar Tipo', 'Dados do Caso', 'Geração IA', 'Revisão']
   const etapaIndex = ['tipo', 'dados', 'gerando', 'revisao'].indexOf(step)
 
-  // Carrega lista de processos ao iniciar
+  // Carrega lista de processos e clientes ao iniciar
   useEffect(() => {
-    api.processos.list().then(data => {
-      if (Array.isArray(data)) setProcessosList(data)
-    }).catch(err => console.error('Erro ao carregar processos:', err))
+    Promise.all([
+      api.processos.list(),
+      api.clientes.list()
+    ]).then(([pData, cData]) => {
+      if (Array.isArray(pData)) setProcessosList(pData)
+      if (Array.isArray(cData)) setClientesList(cData)
+    }).catch(err => console.error('Erro ao carregar dados:', err))
   }, [])
 
   // Quando o usuário seleciona um processo, preenche os campos automaticamente
@@ -363,16 +368,32 @@ export default function GeradorPecas() {
             </div>
 
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Nome do Autor / Cliente</label>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Nome do Autor / Cliente (Autocomplete)</label>
               <input
-                placeholder="Fernanda Oliveira"
+                list="clientes-datalist"
+                placeholder="Digite o nome ou selecione um cliente..."
                 value={nomeCliente}
-                onChange={e => setNomeCliente(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value
+                  setNomeCliente(val)
+                  const found = clientesList.find(c => c.nome === val)
+                  if (found) {
+                    setCpfCliente(found.cpfCnpj || '')
+                    if (found.qualificacao) {
+                      setDadosCaso(prev => prev ? `${prev}\n\n[QUALIFICAÇÃO DO CLIENTE]: ${found.qualificacao}` : `[QUALIFICAÇÃO DO CLIENTE]: ${found.qualificacao}`)
+                    }
+                  }
+                }}
                 style={{
                   width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
                   fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
                 }}
               />
+              <datalist id="clientes-datalist">
+                {clientesList.map(c => (
+                  <option key={c.id} value={c.nome}>{c.nome} ({c.cpfCnpj})</option>
+                ))}
+              </datalist>
             </div>
 
             <div>

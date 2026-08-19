@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.js';
 import jurimetriaRoutes from './routes/jurimetria.js';
 import financeiroRoutes from './routes/financeiro.js';
 import andamentosRoutes from './routes/andamentos.js';
+import clientesRoutes from './routes/clientes.js';
 
 import { authMiddleware } from './middlewares/auth.js';
 
@@ -31,6 +32,7 @@ app.use('/api/rag', authMiddleware, ragRoutes);
 app.use('/api/jurimetria', authMiddleware, jurimetriaRoutes);
 app.use('/api/financeiro', authMiddleware, financeiroRoutes);
 app.use('/api/andamentos', authMiddleware, andamentosRoutes);
+app.use('/api/clientes', authMiddleware, clientesRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

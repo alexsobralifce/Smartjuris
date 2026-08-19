@@ -81,5 +81,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data)
     }).then(r => r.json()),
+  },
+  clientes: {
+    list: () => authFetch('/api/clientes').then(r => r.json()),
+    create: (data: any) => authFetch('/api/clientes', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }).then(r => r.json()),
+    update: (id: string, patch: any) => authFetch(`/api/clientes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch)
+    }).then(r => r.json()),
+    delete: (id: string) => authFetch(`/api/clientes/${id}`, { method: 'DELETE' }),
   }
 };

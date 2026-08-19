@@ -24,20 +24,13 @@ RUN pnpm --filter @lexia/web build
 FROM node:22-alpine AS runner
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# Copy built frontend static files
+COPY --from=builder /app/apps/web/dist /app/dist
 
-# Copy workspace config
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json apps/web/
-COPY packages/ packages/
+# Install serve globally to host the static site
+RUN npm install -g serve
 
-# Install only production deps
-RUN pnpm install --frozen-lockfile --prod
-
-# Copy built frontend
-COPY --from=builder /app/apps/web/dist /app/apps/web/dist
-
-# Use vite preview to serve
 EXPOSE 8443
 
-CMD ["pnpm", "--filter", "@lexia/web", "preview"]
+# Serve the static dist folder
+CMD ["serve", "-s", "/app/dist", "-l", "8443"]

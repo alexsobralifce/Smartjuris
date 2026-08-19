@@ -3,14 +3,14 @@ import cors from 'cors';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 
-import processosRoutes from './routes/processos';
-import pecasRoutes from './routes/pecas';
-import documentosRoutes from './routes/documentos';
-import ragRoutes from './routes/rag';
-import authRoutes from './routes/auth';
-import jurimetriaRoutes from './routes/jurimetria';
+import processosRoutes from './routes/processos.js';
+import pecasRoutes from './routes/pecas.js';
+import documentosRoutes from './routes/documentos.js';
+import ragRoutes from './routes/rag.js';
+import authRoutes from './routes/auth.js';
+import jurimetriaRoutes from './routes/jurimetria.js';
 
-import { authMiddleware } from './middlewares/auth';
+import { authMiddleware } from './middlewares/auth.js';
 
 dotenv.config({ path: resolve(process.cwd(), '../../.env') });
 

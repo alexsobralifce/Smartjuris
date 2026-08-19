@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { db } from '../db/client';
-import { documentos, chunks } from '../db/schema';
+import { db } from '../db/client.js';
+import { documentos, chunks } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
-import { generateEmbedding } from '../services/embedding';
+import { generateEmbedding } from '../services/embedding.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });

@@ -2,8 +2,8 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
-import { db } from '../db/client';
-import { usuarios } from '../db/schema';
+import { db } from '../db/client.js';
+import { usuarios } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 

@@ -32,5 +32,5 @@ RUN npm install -g serve
 
 EXPOSE 8443
 
-# Serve the static dist folder
-CMD ["serve", "-s", "/app/dist", "-l", "8443"]
+# Serve the static dist folder on PORT provided by Railway or fallback to 8443
+CMD ["sh", "-c", "serve -s /app/dist -l ${PORT:-8443}"]

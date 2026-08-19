@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { db } from '../db/client';
-import { chunks } from '../db/schema';
-import { generateEmbedding } from '../services/embedding';
-import { deepseekClient } from '../services/ai';
+import { db } from '../db/client.js';
+import { chunks } from '../db/schema.js';
+import { generateEmbedding } from '../services/embedding.js';
+import { deepseekClient } from '../services/ai.js';
 import { cosineDistance, sql, desc } from 'drizzle-orm';
 
 const router = Router();

@@ -1,5 +1,5 @@
-import { db } from './client';
-import { processos, pecas, documentos, usuarios } from './schema';
+import { db } from './client.js';
+import { processos, pecas, documentos, usuarios } from './schema.js';
 import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 

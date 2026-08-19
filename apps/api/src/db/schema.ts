@@ -74,3 +74,35 @@ export const usuarios = pgTable('usuarios', {
   role: text('role').notNull(), // 'admin' | 'user'
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
+
+export const andamentos = pgTable('andamentos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  processoId: uuid('processo_id').references(() => processos.id),
+  data: timestamp('data', { withTimezone: true }).defaultNow(),
+  tipo: text('tipo').notNull(), // 'Intimação' | 'Despacho' | 'Sentença' | 'Audiência'
+  descricao: text('descricao').notNull(),
+  resumoIA: text('resumo_ia'),
+  prazoFatal: text('prazo_fatal'),
+});
+
+export const lancamentosFinanceiros = pgTable('lancamentos_financeiros', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  processoId: uuid('processo_id').references(() => processos.id),
+  cliente: text('cliente').notNull(),
+  tipo: text('tipo').notNull(), // 'Honorário Fixo' | 'Êxito' | 'Despesa Processual'
+  valor: text('valor').notNull(),
+  vencimento: text('vencimento').notNull(),
+  status: text('status').default('pendente'), // 'pago' | 'pendente' | 'atrasado'
+});
+
+export const timesheet = pgTable('timesheet', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  processoId: uuid('processo_id').references(() => processos.id),
+  advogado: text('advogado').notNull(),
+  descricao: text('descricao').notNull(),
+  minutos: integer('minutos').notNull(),
+  valorHora: text('valor_hora').default('350,00'),
+  faturado: text('faturado').default('nao'),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+

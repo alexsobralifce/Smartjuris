@@ -58,5 +58,28 @@ export const api = {
   },
   jurimetria: {
     stats: () => authFetch('/api/jurimetria/stats').then(r => r.json()),
+  },
+  financeiro: {
+    listLancamentos: () => authFetch('/api/financeiro/lancamentos').then(r => r.json()),
+    createLancamento: (data: any) => authFetch('/api/financeiro/lancamentos', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }).then(r => r.json()),
+    updateLancamento: (id: string, patch: any) => authFetch(`/api/financeiro/lancamentos/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch)
+    }).then(r => r.json()),
+    listTimesheet: () => authFetch('/api/financeiro/timesheet').then(r => r.json()),
+    createTimesheet: (data: any) => authFetch('/api/financeiro/timesheet', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }).then(r => r.json()),
+  },
+  andamentos: {
+    listByProcesso: (processoId: string) => authFetch(`/api/andamentos/processo/${processoId}`).then(r => r.json()),
+    create: (data: any) => authFetch('/api/andamentos', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }).then(r => r.json()),
   }
 };

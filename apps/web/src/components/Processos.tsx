@@ -8,7 +8,7 @@ const statusConfig: Record<StatusProcesso, { label: string; color: string; bg: s
   arquivado: { label: 'Arquivado', color: 'var(--color-muted)',   bg: 'var(--color-surface-2)' },
 }
 
-const areas = ['Todas', 'Cível', 'Trabalhista', 'Tributário', 'Penal']
+const areas = ['Todas', 'Cível', 'Trabalhista', 'Tributário', 'Penal', 'Consumerista']
 
 const emptyForm: Omit<Processo, 'id'> = {
   tipo: '', cliente: '', adverso: '', vara: '', area: 'Cível',
@@ -23,6 +23,14 @@ export default function Processos() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
 
+  // Timeline / Andamentos do processo selecionado
+  const [andamentosList, setAndamentosList] = useState<any[]>([])
+  const [loadingAndamentos, setLoadingAndamentos] = useState(false)
+  const [novoTipoAndamento, setNovoTipoAndamento] = useState('Intimação')
+  const [novaDescricaoAndamento, setNovaDescricaoAndamento] = useState('')
+  const [novoPrazoAndamento, setNovoPrazoAndamento] = useState('')
+  const [addingAndamento, setAddingAndamento] = useState(false)
+
   const reload = async () => {
     try {
       const data = await api.processos.list()
@@ -33,6 +41,19 @@ export default function Processos() {
   }
 
   useEffect(() => { reload() }, [])
+
+  // Carrega andamentos do processo selecionado
+  useEffect(() => {
+    if (selected) {
+      setLoadingAndamentos(true)
+      api.andamentos.listByProcesso(selected.id)
+        .then(data => {
+          if (Array.isArray(data)) setAndamentosList(data)
+        })
+        .catch(err => console.error(err))
+        .finally(() => setLoadingAndamentos(false))
+    }
+  }, [selected])
 
   const filtered = processos.filter(p => {
     const matchArea = areaFilter === 'Todas' || p.area === areaFilter
@@ -65,14 +86,36 @@ export default function Processos() {
     }
   }
 
+  const handleAddAndamento = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selected || !novaDescricaoAndamento.trim()) return
+    setAddingAndamento(true)
+    try {
+      await api.andamentos.create({
+        processoId: selected.id,
+        tipo: novoTipoAndamento,
+        descricao: novaDescricaoAndamento,
+        prazoFatal: novoPrazoAndamento || null
+      })
+      setNovaDescricaoAndamento('')
+      setNovoPrazoAndamento('')
+      const updated = await api.andamentos.listByProcesso(selected.id)
+      setAndamentosList(updated)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAddingAndamento(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* List pane */}
       <div style={{ flex: 1, overflow: 'auto', padding: '32px 36px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Processos</div>
-            <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>{filtered.length} processos encontrados</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Gestão de Processos</div>
+            <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>{filtered.length} processos cadastrados</div>
           </div>
           <button onClick={() => setShowForm(true)} style={{
             background: 'var(--color-primary)', color: '#fff', border: 'none',
@@ -125,7 +168,7 @@ export default function Processos() {
                     onMouseLeave={e => { if (selected?.id !== p.id) (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
                   >
                     <td style={{ padding: '13px 18px' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>{p.id}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>{p.id.slice(0, 16)}...</div>
                     </td>
                     <td style={{ padding: '13px 18px' }}>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{p.tipo}</div>
@@ -134,7 +177,7 @@ export default function Processos() {
                     <td style={{ padding: '13px 18px' }}>
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: '#e8eaf0', padding: '2px 8px', borderRadius: 4 }}>{p.area}</span>
                     </td>
-                    <td style={{ padding: '13px 18px', fontSize: 12, color: 'var(--color-muted)' }}>{p.advogado.replace('Dr. ', '').replace('Dra. ', '')}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 12, color: 'var(--color-muted)' }}>{p.advogado}</td>
                     <td style={{ padding: '13px 18px', fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500 }}>{p.valor}</td>
                     <td style={{ padding: '13px 18px', fontFamily: 'var(--font-mono)', fontSize: 11, color: p.prazo === '—' ? 'var(--color-muted)' : 'var(--color-foreground)' }}>{p.prazo}</td>
                     <td style={{ padding: '13px 18px' }}>
@@ -158,29 +201,93 @@ export default function Processos() {
         </div>
       </div>
 
-      {/* Detail pane */}
+      {/* Detail & Matter Dashboard Pane */}
       {selected && (
-        <div style={{ width: 340, borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)', padding: '28px 24px', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>Detalhes do Processo</div>
-            <button onClick={() => setSelected(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 18, lineHeight: 1 }}>×</button>
-          </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, letterSpacing: '-0.02em' }}>{selected.tipo}</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)', marginBottom: 20 }}>{selected.id}</div>
-          {[
-            { label: 'Cliente', value: selected.cliente },
-            { label: 'Parte Adversa', value: selected.adverso },
-            { label: 'Vara', value: selected.vara },
-            { label: 'Área', value: selected.area },
-            { label: 'Advogado Responsável', value: selected.advogado },
-            { label: 'Valor da Causa', value: selected.valor },
-            { label: 'Próximo Prazo', value: selected.prazo },
-          ].map(f => (
-            <div key={f.label} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 3 }}>{f.label}</div>
-              <div style={{ fontSize: 13 }}>{f.value || '—'}</div>
+        <div style={{ width: 420, borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)', padding: '24px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
+              MATTER DASHBOARD & LINHA DO TEMPO
             </div>
-          ))}
+            <button onClick={() => setSelected(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 20, lineHeight: 1 }}>×</button>
+          </div>
+
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 2 }}>{selected.tipo}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>ID: {selected.id}</div>
+          </div>
+
+          {/* Ficha rápida */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--color-background)', padding: 14, borderRadius: 6, border: '1px solid var(--color-border)' }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>AUTOR / CLIENTE</div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>{selected.cliente}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>RÉU / ADVERSO</div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>{selected.adverso}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>JUÍZO / VARA</div>
+              <div style={{ fontSize: 11, marginTop: 2 }}>{selected.vara}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>VALOR CAUSA</div>
+              <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, marginTop: 2 }}>{selected.valor}</div>
+            </div>
+          </div>
+
+          {/* Seção Linha do Tempo */}
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>📜 Linha do Tempo & Intimações</span>
+              <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>Resumo IA Nativo</span>
+            </div>
+
+            {/* Cadastro de novo andamento */}
+            <form onSubmit={handleAddAndamento} style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--color-background)', padding: 12, borderRadius: 6, border: '1px solid var(--color-border)', marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select value={novoTipoAndamento} onChange={e => setNovoTipoAndamento(e.target.value)} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 11 }}>
+                  <option value="Intimação">Intimação (DJEN)</option>
+                  <option value="Despacho">Despacho</option>
+                  <option value="Sentença">Sentença</option>
+                  <option value="Audiência">Audiência</option>
+                </select>
+                <input type="text" placeholder="Prazo fatal (dd/mm/aaaa)" value={novoPrazoAndamento} onChange={e => setNovoPrazoAndamento(e.target.value)} style={{ flex: 1, padding: '6px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+              </div>
+              <textarea placeholder="Cole o texto da intimação para a IA resumir..." value={novaDescricaoAndamento} onChange={e => setNovaDescricaoAndamento(e.target.value)} rows={2} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 11, outline: 'none', resize: 'vertical' }} />
+              <button disabled={addingAndamento} type="submit" style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end' }}>
+                {addingAndamento ? 'IA Resumindo...' : '+ Adicionar & Resumir via IA'}
+              </button>
+            </form>
+
+            {/* Lista de Andamentos */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {loadingAndamentos ? (
+                <div style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: 12 }}>Carregando linha do tempo...</div>
+              ) : andamentosList.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: 12 }}>Nenhum andamento cadastrado ainda.</div>
+              ) : (
+                andamentosList.map(item => (
+                  <div key={item.id} style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-primary)' }}>{item.tipo}</span>
+                      {item.prazoFatal && (
+                        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '1px 6px', borderRadius: 4 }}>
+                          Prazo: {item.prazoFatal}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-foreground)', lineHeight: 1.4 }}>{item.descricao}</div>
+                    {item.resumoIA && (
+                      <div style={{ background: 'var(--color-accent-light)', border: '1px dashed var(--color-accent)', padding: '6px 8px', borderRadius: 4, fontSize: 11, color: 'var(--color-foreground)', marginTop: 2 }}>
+                        {item.resumoIA}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 

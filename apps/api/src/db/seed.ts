@@ -1,5 +1,5 @@
 import { db } from './client.js';
-import { processos, pecas, documentos, usuarios } from './schema.js';
+import { processos, pecas, documentos, usuarios, andamentos, lancamentosFinanceiros, timesheet } from './schema.js';
 import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
@@ -157,6 +157,79 @@ em face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e 
       colecao: 'Jurisprudência',
       tamanho: '850 KB',
       chunks: 95
+    }
+  ]);
+
+  console.log('Inserting andamentos...');
+  await db.insert(andamentos).values([
+    {
+      processoId: insertProcessos[0].id,
+      tipo: 'Intimação',
+      descricao: 'Publicação no Diário Eletrônico da Justiça do Trabalho (DJEN) designando Audiência de Conciliação.',
+      resumoIA: '🤖 Resumo IA: Intimação para Audiência Inicial em 15/09/2026. Ação Recomendada: Elaborar minuta de proposta e notificar a Reclamante.',
+      prazoFatal: '2026-09-10'
+    },
+    {
+      processoId: insertProcessos[0].id,
+      tipo: 'Despacho',
+      descricao: 'Determina a juntada dos cartões de ponto e demonstrativos de pagamento pela Reclamada.',
+      resumoIA: '🤖 Resumo IA: Juiz concedeu 5 dias úteis para a Reclamada apresentar documentos cadastrais.',
+      prazoFatal: '2026-08-28'
+    },
+    {
+      processoId: insertProcessos[1].id,
+      tipo: 'Intimação',
+      descricao: 'Intimação da Companhia Aérea para apresentação de Contestação no prazo de 15 dias.',
+      resumoIA: '🤖 Resumo IA: Início do prazo de defesa do Réu. Prazo fatal: 25/08/2026.',
+      prazoFatal: '2026-08-25'
+    }
+  ]);
+
+  console.log('Inserting lancamentosFinanceiros...');
+  await db.insert(lancamentosFinanceiros).values([
+    {
+      processoId: insertProcessos[0].id,
+      cliente: 'Fernanda Oliveira',
+      tipo: 'Honorário Fixo',
+      valor: 'R$ 3.500,00',
+      vencimento: '2026-09-05',
+      status: 'pago'
+    },
+    {
+      processoId: insertProcessos[0].id,
+      cliente: 'Fernanda Oliveira',
+      tipo: 'Êxito',
+      valor: '20% do valor recuperado',
+      vencimento: '2026-10-01',
+      status: 'pendente'
+    },
+    {
+      processoId: insertProcessos[2].id,
+      cliente: 'Construtora Alfa',
+      tipo: 'Honorário Fixo',
+      valor: 'R$ 12.000,00',
+      vencimento: '2026-08-30',
+      status: 'pendente'
+    }
+  ]);
+
+  console.log('Inserting timesheet...');
+  await db.insert(timesheet).values([
+    {
+      processoId: insertProcessos[0].id,
+      advogado: adminUser.nome,
+      descricao: 'Análise de cartões de ponto e cálculo preliminar de horas extras',
+      minutos: 140,
+      valorHora: 'R$ 350,00',
+      faturado: 'nao'
+    },
+    {
+      processoId: insertProcessos[1].id,
+      advogado: normalUser1.nome,
+      descricao: 'Elaboração da petição inicial de Danos Morais e verificação de vouchers de viagem',
+      minutos: 90,
+      valorHora: 'R$ 300,00',
+      faturado: 'sim'
     }
   ]);
 

@@ -9,6 +9,8 @@ import documentosRoutes from './routes/documentos.js';
 import ragRoutes from './routes/rag.js';
 import authRoutes from './routes/auth.js';
 import jurimetriaRoutes from './routes/jurimetria.js';
+import financeiroRoutes from './routes/financeiro.js';
+import andamentosRoutes from './routes/andamentos.js';
 
 import { authMiddleware } from './middlewares/auth.js';
 
@@ -27,6 +29,8 @@ app.use('/api/pecas', authMiddleware, pecasRoutes);
 app.use('/api/documentos', authMiddleware, documentosRoutes);
 app.use('/api/rag', authMiddleware, ragRoutes);
 app.use('/api/jurimetria', authMiddleware, jurimetriaRoutes);
+app.use('/api/financeiro', authMiddleware, financeiroRoutes);
+app.use('/api/andamentos', authMiddleware, andamentosRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

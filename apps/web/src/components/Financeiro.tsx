@@ -42,6 +42,12 @@ export default function Financeiro() {
   const lancamentosPagination = usePagination(lancamentos, 10)
   const timesheetsPagination = usePagination(timesheets, 10)
 
+  // Estado do modal de novo lançamento (declarado ANTES do filtro de clientes para evitar TDZ)
+  const [novoCliente, setNovoCliente] = useState('')
+  const [novoTipo, setNovoTipo] = useState('Honorário Fixo')
+  const [novoValor, setNovoValor] = useState('R$ 2.500,00')
+  const [novoVencimento, setNovoVencimento] = useState('2026-09-10')
+
   // Filtro de clientes para o seletor de busca (case-insensitive, até 8)
   const clientesFiltrados = clientes
     .filter(c => (c.nome || '').toLowerCase().includes(novoCliente.toLowerCase()))
@@ -63,10 +69,6 @@ export default function Financeiro() {
 
   // Modal de novo lançamento
   const [showNovoLancamento, setShowNovoLancamento] = useState(false)
-  const [novoCliente, setNovoCliente] = useState('')
-  const [novoTipo, setNovoTipo] = useState('Honorário Fixo')
-  const [novoValor, setNovoValor] = useState('R$ 2.500,00')
-  const [novoVencimento, setNovoVencimento] = useState('2026-09-10')
 
   const loadData = async () => {
     setLoading(true)

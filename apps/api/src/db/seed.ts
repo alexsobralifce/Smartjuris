@@ -1,6 +1,7 @@
 import { db } from './client';
-import { processos, pecas, documentos } from './schema';
+import { processos, pecas, documentos, usuarios } from './schema';
 import { sql } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
 
 async function seed() {
   console.log('Seeding database...');
@@ -12,6 +13,34 @@ async function seed() {
   await db.delete(pecas);
   await db.delete(processos);
   await db.delete(documentos);
+  await db.delete(usuarios);
+
+  // Hashing passwords
+  const hashedAdminPassword = await bcrypt.hash('admin123', 10);
+  const hashedUserPassword = await bcrypt.hash('user123', 10);
+
+  // Insert Users
+  console.log('Inserting usuarios...');
+  const [adminUser, normalUser1, normalUser2] = await db.insert(usuarios).values([
+    {
+      nome: 'Dr. Marcos Costa',
+      email: 'admin@smartjuris.com',
+      senha: hashedAdminPassword,
+      role: 'admin',
+    },
+    {
+      nome: 'Dra. Aline Mendes',
+      email: 'aline@smartjuris.com',
+      senha: hashedUserPassword,
+      role: 'user',
+    },
+    {
+      nome: 'Dr. Carlos Eduardo',
+      email: 'carlos@smartjuris.com',
+      senha: hashedUserPassword,
+      role: 'user',
+    }
+  ]).returning({ id: usuarios.id, nome: usuarios.nome });
 
   // Insert Processos
   console.log('Inserting processos...');
@@ -24,8 +53,8 @@ async function seed() {
       area: 'Trabalhista',
       status: 'ativo',
       valor: 'R$ 87.500,00',
-      prazo: '2024-05-15',
-      advogado: 'Dr. Marcos Costa',
+      prazo: '2026-09-15',
+      advogado: adminUser.nome,
     },
     {
       tipo: 'Ação de Danos Morais',
@@ -35,19 +64,30 @@ async function seed() {
       area: 'Consumerista',
       status: 'ativo',
       valor: 'R$ 15.000,00',
-      prazo: '2024-04-30',
-      advogado: 'Dra. Aline Mendes',
+      prazo: '2026-08-25',
+      advogado: normalUser1.nome,
     },
     {
-      tipo: 'Contestação',
+      tipo: 'Defesa Cível',
       cliente: 'Construtora Alfa',
       adverso: 'Sindicato dos Trabalhadores',
-      vara: '10ª Vara do Trabalho de SP',
-      area: 'Trabalhista',
-      status: 'arquivado',
+      vara: '10ª Vara Cível de SP',
+      area: 'Cível',
+      status: 'ativo',
       valor: 'R$ 150.000,00',
-      prazo: '2023-11-20',
-      advogado: 'Dr. Marcos Costa',
+      prazo: '2026-09-01',
+      advogado: adminUser.nome,
+    },
+    {
+      tipo: 'Ação Ordinária de Cobrança',
+      cliente: 'Lúcia Ferreira',
+      adverso: 'Banco do Brasil S.A.',
+      vara: '5ª Vara de Família de SP',
+      area: 'Cível',
+      status: 'arquivado',
+      valor: 'R$ 42.000,00',
+      prazo: '2025-11-20',
+      advogado: normalUser2.nome,
     }
   ]).returning({ id: processos.id });
 
@@ -56,25 +96,44 @@ async function seed() {
   await db.insert(pecas).values([
     {
       processoId: insertProcessos[0].id,
-      tipo: 'Reclamação Trabalhista',
+      tipo: 'Petição Inicial Trabalhista',
       area: 'Trabalhista',
       cliente: 'Fernanda Oliveira',
       status: 'revisao',
-      prazo: '2024-05-10',
-      modelo: 'Claude 3.5 Sonnet',
+      prazo: '2026-09-10',
+      modelo: 'DeepSeek Chat',
       fontes: 4,
-      conteudo: 'EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO DE SÃO PAULO — SP\n\nProcesso nº 0001234-56.2024.5.02.0001\n\nFERNANDA OLIVEIRA, brasileira, solteira... [Gerado via IA]'
+      conteudo: `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO DE SÃO PAULO — SP
+
+Processo nº 0001234-56.2026.5.02.0001
+
+FERNANDA OLIVEIRA, brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 000.000.000-00, resident e domiciliada na Rua das Flores, nº 123, São Paulo/SP, por seu advogado infra-assinado, vem, mui respeitosamente, perante Vossa Excelência, propor a presente:
+
+RECLAMAÇÃO TRABALHISTA
+
+em face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e fundamentos a seguir expostos...`
     },
     {
       processoId: insertProcessos[1].id,
-      tipo: 'Petição Inicial CDC',
+      tipo: 'Petição Inicial de Danos Morais',
       area: 'Consumerista',
       cliente: 'Roberto Souza',
       status: 'aprovado',
-      prazo: '2024-04-28',
-      modelo: 'GPT-4o',
+      prazo: '2026-08-23',
+      modelo: 'DeepSeek Chat',
       fontes: 2,
       conteudo: 'EXCELENTÍSSIMO JUIZ DA 2ª VARA CÍVEL DA COMARCA DE GUARULHOS - SP...'
+    },
+    {
+      processoId: insertProcessos[2].id,
+      tipo: 'Contestação Cível',
+      area: 'Cível',
+      cliente: 'Construtora Alfa',
+      status: 'revisao',
+      prazo: '2026-08-30',
+      modelo: 'DeepSeek Chat',
+      fontes: 3,
+      conteudo: 'EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DA 10ª VARA CÍVEL DA CAPITAL...'
     }
   ]);
 
@@ -92,6 +151,12 @@ async function seed() {
       colecao: 'Jurisprudência',
       tamanho: '1.1 MB',
       chunks: 312
+    },
+    {
+      nome: 'Jurisprudencia_Danos_Morais_Aereo.pdf',
+      colecao: 'Jurisprudência',
+      tamanho: '850 KB',
+      chunks: 95
     }
   ]);
 

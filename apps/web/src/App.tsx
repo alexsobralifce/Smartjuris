@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Dashboard from './components/Dashboard'
 import Processos from './components/Processos'
 import GeradorPecas from './components/GeradorPecas'
 import Validacao from './components/Validacao'
 import Jurimetria from './components/Jurimetria'
 import Base from './components/Base'
+import LandingPage from './components/LandingPage'
 
 type Route = 'dashboard' | 'processos' | 'pecas' | 'validacao' | 'jurimetria' | 'base'
 
@@ -18,8 +19,40 @@ const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
 ]
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('smartjuris_token'))
+  const [user, setUser] = useState<{ name: string; role: string; email: string } | null>(null)
   const [route, setRoute] = useState<Route>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  useEffect(() => {
+    const cachedUser = localStorage.getItem('smartjuris_user')
+    if (cachedUser) {
+      setUser(JSON.parse(cachedUser))
+    }
+  }, [token])
+
+  const handleLoginSuccess = (newToken: string, newUser: { name: string; role: string; email: string }) => {
+    localStorage.setItem('smartjuris_token', newToken)
+    localStorage.setItem('smartjuris_user', JSON.stringify(newUser))
+    setToken(newToken)
+    setUser(newUser)
+    setRoute('dashboard')
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('smartjuris_token')
+    localStorage.removeItem('smartjuris_user')
+    setToken(null)
+    setUser(null)
+  }
+
+  // Se não estiver logado, exibe Landing Page
+  if (!token) {
+    return <LandingPage onLoginSuccess={handleLoginSuccess} />
+  }
+
+  // Iniciais do usuário
+  const initials = user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'U'
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-background)' }}>
@@ -128,19 +161,39 @@ export default function App() {
             {sidebarOpen && <span style={{ fontSize: 12 }}>Recolher</span>}
           </button>
 
-          {sidebarOpen && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px 2px' }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: 'var(--color-accent)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 700, color: '#18170f', flexShrink: 0,
-              }}>MC</div>
-              <div>
-                <div style={{ color: '#fff', fontSize: 12, fontWeight: 500 }}>Dr. Marcos Costa</div>
-                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10 }}>Administrador</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px 2px', justifyContent: sidebarOpen ? 'flex-start' : 'center' }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'var(--color-accent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 700, color: '#18170f', flexShrink: 0,
+            }}>{initials}</div>
+            {sidebarOpen && (
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div style={{ color: '#fff', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'Dr. Advogado'}</div>
+                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'capitalize' }}>{user?.role === 'admin' ? 'Administrador' : 'Advogado'}</div>
               </div>
-            </div>
+            )}
+          </div>
+
+          {sidebarOpen && (
+            <button
+              onClick={handleLogout}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '8px 10px', borderRadius: 6,
+                border: 'none', cursor: 'pointer', width: '100%',
+                background: 'transparent', color: 'var(--color-danger)',
+                fontSize: 12, fontWeight: 500, marginTop: 8
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 0, 0, 0.05)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Sair da Conta</span>
+            </button>
           )}
         </div>
       </aside>

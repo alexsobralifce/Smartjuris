@@ -65,3 +65,12 @@ export const chunks = pgTable('chunks', {
 }, (table) => ({
   embeddingIndex: index('embedding_index').using('hnsw', table.embedding.op('vector_cosine_ops')),
 }));
+
+export const usuarios = pgTable('usuarios', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  nome: text('nome').notNull(),
+  email: text('email').unique().notNull(),
+  senha: text('senha').notNull(), // hashed
+  role: text('role').notNull(), // 'admin' | 'user'
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});

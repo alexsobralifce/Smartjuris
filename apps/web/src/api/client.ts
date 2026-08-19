@@ -1,39 +1,56 @@
+const authFetch = (url: string, options: RequestInit = {}) => {
+  const token = localStorage.getItem('smartjuris_token');
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return fetch(url, { ...options, headers }).then(async r => {
+    if (r.status === 401) {
+      localStorage.removeItem('smartjuris_token');
+      localStorage.removeItem('smartjuris_user');
+      window.location.reload();
+    }
+    return r;
+  });
+};
+
 export const api = {
   processos: {
-    list: () => fetch('/api/processos').then(r => r.json()),
-    create: (p: any) => fetch('/api/processos', {
+    list: () => authFetch('/api/processos').then(r => r.json()),
+    create: (p: any) => authFetch('/api/processos', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p)
     }).then(r => r.json()),
-    update: (id: string, patch: any) => fetch(`/api/processos/${id}`, {
+    update: (id: string, patch: any) => authFetch(`/api/processos/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     }).then(r => r.json()),
-    delete: (id: string) => fetch(`/api/processos/${id}`, { method: 'DELETE' }),
+    delete: (id: string) => authFetch(`/api/processos/${id}`, { method: 'DELETE' }),
   },
   pecas: {
-    list: () => fetch('/api/pecas').then(r => r.json()),
-    create: (p: any) => fetch('/api/pecas', {
+    list: () => authFetch('/api/pecas').then(r => r.json()),
+    create: (p: any) => authFetch('/api/pecas', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p)
     }).then(r => r.json()),
-    update: (id: string, patch: any) => fetch(`/api/pecas/${id}`, {
+    update: (id: string, patch: any) => authFetch(`/api/pecas/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     }).then(r => r.json()),
   },
   documentos: {
-    list: () => fetch('/api/documentos').then(r => r.json()),
-    upload: (formData: FormData) => fetch('/api/documentos/upload', {
+    list: () => authFetch('/api/documentos').then(r => r.json()),
+    upload: (formData: FormData) => authFetch('/api/documentos/upload', {
       method: 'POST',
       body: formData
     }).then(r => r.json()),
   },
   jurimetria: {
-    stats: () => fetch('/api/jurimetria/stats').then(r => r.json()),
+    stats: () => authFetch('/api/jurimetria/stats').then(r => r.json()),
   }
 };

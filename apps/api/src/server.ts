@@ -10,6 +10,8 @@ import ragRoutes from './routes/rag';
 import authRoutes from './routes/auth';
 import jurimetriaRoutes from './routes/jurimetria';
 
+import { authMiddleware } from './middlewares/auth';
+
 dotenv.config({ path: resolve(process.cwd(), '../../.env') });
 
 const app = express();
@@ -20,11 +22,11 @@ app.use(express.json());
 
 // Rotas
 app.use('/api/auth', authRoutes);
-app.use('/api/processos', processosRoutes);
-app.use('/api/pecas', pecasRoutes);
-app.use('/api/documentos', documentosRoutes);
-app.use('/api/rag', ragRoutes);
-app.use('/api/jurimetria', jurimetriaRoutes);
+app.use('/api/processos', authMiddleware, processosRoutes);
+app.use('/api/pecas', authMiddleware, pecasRoutes);
+app.use('/api/documentos', authMiddleware, documentosRoutes);
+app.use('/api/rag', authMiddleware, ragRoutes);
+app.use('/api/jurimetria', authMiddleware, jurimetriaRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -16,10 +16,14 @@ if (!SECRET || SECRET.length < 32) {
 }
 
 const COOKIE_NAME = 'smartjuris_token';
+const isProduction = process.env.NODE_ENV === 'production';
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  secure: isProduction,
+  // `*.up.railway.app` são sites distintos (up.railway.app está no Public Suffix List),
+  // então o cookie precisa de SameSite=None para ser enviado cross-origin entre web e API.
+  // Em dev (localhost = same-site) mantemos Lax, pois None exige Secure (incompatível com http).
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
   maxAge: 86400000,
   path: '/',
 };
@@ -186,12 +190,7 @@ router.post('/logout', (req, res) => {
     }
   }
 
-  res.clearCookie(COOKIE_NAME, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
+  res.clearCookie(COOKIE_NAME, cookieOptions);
   res.status(200).json({ message: 'Logout realizado com sucesso.' });
 });
 

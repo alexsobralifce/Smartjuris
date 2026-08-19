@@ -104,10 +104,12 @@ export default function Documentacao() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
                 {[
-                  { title: 'Gestão Processual (CRM)', desc: 'Controle de processos judiciais, clientes, partes adversas, prazos fatais e atribuição de advogados.' },
-                  { title: 'Geração com RAG & IA', desc: 'Produção automatizada de petições iniciais, contestações e recursos com base na jurisprudência do escritório.' },
-                  { title: 'Fila de Validação Humana', desc: 'Supervisão ética obrigatória: nenhuma peça é finalizada sem a revisão e chancela do advogado.' },
-                  { title: 'Jurimetria Preditiva', desc: 'Análise de dados estatísticos de varas e comarcas para prever probabilidades de êxito e tempo de julgamento.' },
+                  { title: 'Gestão Processual & Matter Dashboard', desc: 'Controle de processos, linha do tempo de andamentos, resumo automático de intimações por IA e calculadora de prazos.' },
+                  { title: 'Geração com RAG & IA (DeepSeek)', desc: 'Produção automatizada de petições iniciais, contestações e recursos ancorados na base vetorial pgvector.' },
+                  { title: 'Financeiro & Timesheet Faturável', desc: 'Gestão de honorários fixos e de êxito (ad exitum), com cronômetro de horas faturáveis (billable hours).' },
+                  { title: 'Revisão Contratual & Riscos', desc: 'Scanner autônomo de minutas contratuais para detecção de cláusulas abusivas e sugestão de redações do playbook.' },
+                  { title: 'CRM & Funil de Oportunidades', desc: 'Pipeline Kanban de atração e conversão de clientes desde o primeiro contato até a assinatura.' },
+                  { title: 'Fila de Validação Humana', desc: 'Supervisão ética e trilha de auditoria: nenhuma peça é finalizada sem o crivo do advogado.' },
                 ].map(item => (
                   <div key={item.title} style={{ padding: 16, border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-background)' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', marginBottom: 4 }}>{item.title}</div>

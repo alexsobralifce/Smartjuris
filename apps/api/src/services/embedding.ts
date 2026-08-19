@@ -1,6 +1,8 @@
 
 
-export async function generateEmbedding(text: string): Promise<number[]> {
+import { trackTokenUsage } from './usage.js';
+
+export async function generateEmbedding(text: string, usuarioId?: string): Promise<number[]> {
   const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
   const model = 'bge-m3'; // O modelo de embeddings que usaremos via Ollama
   
@@ -20,16 +22,16 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.warn(`[Embedding Service] Erro Ollama [${response.status}]: ${errText}. Usando Mock.`);
-      return Array.from({ length: 1024 }, () => Math.random() * 2 - 1);
+      throw new Error(`Ollama embedding failed with status ${response.status}: ${errText}`);
     }
 
     const data = await response.json() as { embedding: number[] };
+    await trackTokenUsage(usuarioId, 'embedding', 'bge-m3', {
+      prompt_tokens: Math.ceil(text.length / 4),
+    });
     return data.embedding;
   } catch (error) {
     clearTimeout(timeoutId);
-    console.warn('[Embedding Service] Ollama timeout ou erro (CPU fraca/Desligado). Retornando Mock Rápido para não travar a UI de Geração de Peças.');
-    // Retorna mock (pseudo-bge-m3) pra destravar a etapa 3 de geração
-    return Array.from({ length: 1024 }, () => Math.random() * 2 - 1);
+    throw new Error('Ollama indisponível. Verifique se o serviço de embeddings está rodando.');
   }
 }

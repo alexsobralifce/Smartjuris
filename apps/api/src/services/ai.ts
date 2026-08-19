@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const deepseekClient = new OpenAI({
   baseURL: 'https://api.deepseek.com/v1',
-  apiKey: process.env.DEEP_SEEK_API || process.env.ANTHROPIC_API_KEY || '',
+  apiKey: process.env.DEEP_SEEK_API || '',
 });
 
 export async function generatePecaWithDeepSeek(

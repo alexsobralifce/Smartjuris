@@ -71,7 +71,7 @@ export default function Financeiro() {
 
   const handleSaveTimer = async () => {
     if (seconds === 0) {
-      addToast('error', 'Inicie o cronômetro antes de salvar o timesheet.')
+      addToast('error', 'Inicie o cronômetro antes de salvar o registro de horas.')
       return
     }
     if (!descricaoAtividade.trim()) {
@@ -89,11 +89,11 @@ export default function Financeiro() {
       setSeconds(0)
       setTimerRunning(false)
       setDescricaoAtividade('')
-      addToast('success', 'Registro de horas salvo no Timesheet com sucesso!')
+      addToast('success', 'Registro de horas salvo com sucesso!')
       loadData()
     } catch (e) {
       console.error(e)
-      addToast('error', 'Erro ao salvar horas no timesheet.')
+      addToast('error', 'Erro ao registrar as horas.')
     }
   }
 
@@ -144,7 +144,7 @@ export default function Financeiro() {
             GESTÃO DE HONORÁRIOS & FATURAMENTO
           </div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, margin: 0, fontWeight: 400, letterSpacing: '-0.02em' }}>
-            Financeiro & Timesheet
+            Financeiro & Registro de Horas
           </h1>
           <p style={{ color: 'var(--color-muted)', fontSize: 14, marginTop: 4 }}>
             Controle de honorários contratuais, taxa de êxito e horas faturáveis de advogados.
@@ -170,7 +170,7 @@ export default function Financeiro() {
               color: activeTab === 'timesheet' ? '#fff' : 'var(--color-muted)', cursor: 'pointer'
             }}
           >
-            ⏱️ Timesheet (Horas)
+            ⏱️ Registro de Horas
           </button>
         </div>
       </div>
@@ -265,7 +265,7 @@ export default function Financeiro() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, marginRight: 24 }}>
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
-                ⏱️ CRONÔMETRO DE ATIVIDADE FATURÁVEL (BILLABLE HOURS)
+                ⏱️ CRONÔMETRO DE ATIVIDADE FATURÁVEL (HORAS COBRÁVEIS)
               </div>
               <input
                 type="text"
@@ -307,7 +307,7 @@ export default function Financeiro() {
             </div>
           </div>
 
-          {/* Histórico do Timesheet */}
+          {/* Histórico do Registro de Horas */}
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, fontSize: 13 }}>
               Histórico de Horas Registradas no Mês

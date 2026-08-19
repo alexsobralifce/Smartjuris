@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { chunks } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
+import { trackTokenUsage } from '../services/usage.js';
 import { deepseekClient } from '../services/ai.js';
 import { cosineDistance, sql, desc } from 'drizzle-orm';
 
@@ -10,17 +11,16 @@ const router = Router();
 router.post('/generate', async (req, res) => {
   const { tipo, area, dadosCaso } = req.body;
   
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
-  });
-
   try {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
     res.write(`data: ${JSON.stringify({ progress: 10, label: 'Gerando embeddings da requisição...' })}\n\n`);
     
     const queryText = `${tipo} ${area} ${dadosCaso}`;
-    const embedding = await generateEmbedding(queryText);
+    const embedding = await generateEmbedding(queryText, (req as any).user?.id);
 
     res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
     
@@ -59,9 +59,11 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
       ],
       temperature: 0.3,
       stream: true,
+      stream_options: { include_usage: true },
     });
 
     let fullText = '';
+    let lastUsage: any = null;
     res.write(`data: ${JSON.stringify({ progress: 70, label: 'Gerando conteúdo...' })}\n\n`);
 
     for await (const chunk of stream) {
@@ -69,11 +71,19 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
       // Limpa asteriscos do fluxo em tempo real
       const cleanDelta = delta.replace(/\*/g, '');
       fullText += cleanDelta;
+      if ((chunk as any).usage) lastUsage = (chunk as any).usage;
       // Option to stream tokens to client if UI supports it
       res.write(`data: ${JSON.stringify({ token: cleanDelta })}\n\n`);
     }
 
     res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);
+
+    if (lastUsage) {
+      await trackTokenUsage((req as any).user?.id, 'rag_generate', 'deepseek-chat', {
+        prompt_tokens: lastUsage.prompt_tokens,
+        completion_tokens: lastUsage.completion_tokens,
+      });
+    }
 
     const finalResult = {
       done: true,

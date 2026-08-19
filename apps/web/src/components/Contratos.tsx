@@ -172,7 +172,7 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
                     </div>
 
                     <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 4, padding: 10, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                      <strong>💡 Sugestão de Redação Playbook:</strong><br/>
+                      <strong>💡 Sugestão de Redação Padronizada:</strong><br/>
                       {c.sugestao}
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
-import { documentos, chunks } from '../db/schema.js';
+import { documentos, chunks, documentosGerados } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
@@ -43,10 +43,17 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     
     const docId = novo[0].id;
 
+    await db.insert(documentosGerados).values({
+      usuarioId: (req as any).user?.id || null,
+      documentoId: docId,
+      tipo: 'upload',
+      titulo: req.file.originalname,
+    });
+
     // Process chunks and get embeddings
     for (const chunkText of rawChunks) {
       try {
-        const embedding = await generateEmbedding(chunkText);
+        const embedding = await generateEmbedding(chunkText, (req as any).user?.id);
         await db.insert(chunks).values({
           documentoId: docId,
           colecao: colecao || 'Jurisprudência',

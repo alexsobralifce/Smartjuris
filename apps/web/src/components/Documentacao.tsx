@@ -10,13 +10,13 @@ export default function Documentacao() {
   const wizardSteps = [
     {
       step: 1,
-      title: '1. CRM, Captação & Conflict Check',
-      subtitle: 'Gestão de Leads e mitigação de conflito de interesses na origem',
+      title: '1. Captação de Clientes & Checagem de Conflitos',
+      subtitle: 'Gestão de Oportunidades e mitigação de conflito de interesses na origem',
       icon: '🎯',
       badge: 'Fase Inicial',
-      desc: 'Toda nova oportunidade entra pelo módulo "CRM". O sistema utiliza um funil Kanban em 4 fases: Novos Leads, Diagnóstico, Proposta Enviada e Contrato Assinado. Ao cadastrar o Nome do Prospect, o sistema realiza um Conflict Check instantâneo.',
+      desc: 'Toda nova oportunidade entra pelo módulo "Funil de Clientes". O sistema utiliza um funil Kanban em 4 fases: Novas Oportunidades, Diagnóstico, Proposta Enviada e Contrato Assinado. Ao cadastrar o Nome do Cliente Potencial, o sistema realiza uma Checagem de Conflitos instantânea.',
       tips: [
-        '🔍 Conflict Check Ativo: O sistema cruza o nome digitado com as partes adversas de todos os processos ativos do escritório para evitar patrocínio infiel.',
+        '🔍 Checagem de Conflitos Ativa: O sistema cruza o nome digitado com as partes adversas de todos os processos ativos do escritório para evitar patrocínio infiel.',
         'Os valores de honorários previstos são inseridos no card, garantindo previsibilidade de receita.'
       ]
     },
@@ -34,11 +34,11 @@ export default function Documentacao() {
     },
     {
       step: 3,
-      title: '3. Processos & Matter Dashboard',
+      title: '3. Processos & Painel do Processo',
       subtitle: 'Gestão visual de andamentos e resumos de intimações por IA',
       icon: '📂',
       badge: 'Contencioso',
-      desc: 'No módulo "Processos", você centraliza todas as ações ativas. O coração deste módulo é o "Matter Dashboard" (Linha do Tempo Interativa), onde toda a vida do processo fica registrada.',
+      desc: 'No módulo "Processos", você centraliza todas as ações ativas. O coração deste módulo é o "Painel do Processo" (Linha do Tempo Interativa), onde toda a vida do processo fica registrada.',
       tips: [
         'Cole publicações do Diário Eletrônico (DJEN) na linha do tempo para a IA extrair a ordem judicial, gerar um resumo em 1 linha e calcular o prazo fatal em dias úteis.',
         'O autocomplete vincula instantaneamente as partes (Clientes cadastrados) ao processo criado.'
@@ -50,7 +50,7 @@ export default function Documentacao() {
       subtitle: 'Petições elaboradas via IA com citação à legislação oficial',
       icon: '🤖',
       badge: 'Inteligência Artificial',
-      desc: 'No módulo "Gerador de Peças", selecione o Processo Ativo vinculado. Em vez de escrever do zero, escolha um Playbook de Tese (ex: Indenização Voo Atrasado, Aposentadoria Especial, Assédio Moral). O modelo de IA fundamenta o pedido consultando o banco de dados vetorial de legislação real (RAG).',
+      desc: 'No módulo "Gerador de Peças", selecione o Processo Ativo vinculado. Em vez de escrever do zero, escolha um Modelo de Tese (ex: Indenização Voo Atrasado, Aposentadoria Especial, Assédio Moral). O modelo de IA fundamenta o pedido consultando o banco de dados vetorial de legislação real (RAG).',
       tips: [
         'Toda petição gerada recebe citação das Leis, Decretos e Súmulas indexadas, eliminando o risco da IA "alucinar" leis que não existem.',
         'O conteúdo é gerado em tempo real por streaming, e a petição segue em formato pré-pronto.'
@@ -71,22 +71,22 @@ export default function Documentacao() {
     {
       step: 6,
       title: '6. Scanner e Revisão Contratual',
-      subtitle: 'Due diligence com rastreabilidade de evidências',
+      subtitle: 'Auditoria com rastreabilidade de evidências',
       icon: '📝',
-      badge: 'Legal Ops',
+      badge: 'Operações Jurídicas',
       desc: 'No módulo "Contratos", cole o texto integral de uma minuta (ex: NDA ou Prestação de Serviços). A IA faz uma varredura para identificar problemas e calcula o Índice de Risco (0-100).',
       tips: [
-        'O Agente Autônomo classifica cada cláusula como: Conforme, Atenção ou Risco Alto, fornecendo a Sugestão de Redação ideal baseada no playbook do escritório.',
+        'O Agente Autônomo classifica cada cláusula como: Conforme, Atenção ou Risco Alto, fornecendo a Sugestão de Redação ideal baseada no banco de modelos do escritório.',
         '📍 Rastreabilidade de Evidência: Cada análise indica com precisão a Página, Parágrafo e Linha em que a cláusula problemática se encontra no documento.'
       ]
     },
     {
       step: 7,
       title: '7. Jurimetria & Resumidor Executivo de Acórdãos',
-      subtitle: 'Data analytics com extração da Ratio Decidendi de julgados',
+      subtitle: 'Análise de dados com extração da fundamentação de julgados',
       icon: '📊',
       badge: 'Análise Estratégica',
-      desc: 'Acesse "Jurimetria" para visualizar KPIs do escritório: Taxa de Êxito (Win Rate), Tempo Médio e a Calculadora Preditiva de Acordos. Você também conta com o Resumidor de Acórdãos IA.',
+      desc: 'Acesse "Jurimetria" para visualizar indicadores (KPIs) do escritório: Taxa de Êxito (Sucesso), Tempo Médio e a Calculadora Preditiva de Acordos. Você também conta com o Resumidor de Acórdãos IA.',
       tips: [
         '📜 Cole decisões extensas e ementas na aba de Acórdãos. A IA sumariará em segundos o texto, destacando a "Ratio Decidendi" (O fundamento determinante do julgamento) e o resultado (Provido / Improvido).',
         'Os resultados ajudam na precificação do risco em litígios futuros na Calculadora Preditiva.'
@@ -94,20 +94,20 @@ export default function Documentacao() {
     },
     {
       step: 8,
-      title: '8. Gestão Financeira & Timesheet',
+      title: '8. Gestão Financeira & Registro de Horas',
       subtitle: 'Controle de honorários, fluxo de caixa e horas faturáveis',
       icon: '💰',
       badge: 'Gestão do Escritório',
       desc: 'No módulo "Financeiro", controle os honorários do tipo Fixo, Êxito (Ad Exitum) e Partido Mensal. Registre vencimentos e valores recuperados nas sentenças.',
       tips: [
-        '⏱️ Timesheet Integrado: Ligue o cronômetro enquanto atua em uma demanda. O sistema salva as horas trabalhadas calculando o valor final pela tarifa do advogado (ex: R$ 350,00/h).',
+        '⏱️ Registro de Horas Integrado: Ligue o cronômetro enquanto atua em uma demanda. O sistema salva as horas trabalhadas calculando o valor final pela tarifa do advogado (ex: R$ 350,00/h).',
         'Formulários possuem máscaras financeiras completas e validação contra campos não preenchidos.'
       ]
     }
   ]
 
   const sections = [
-    { id: 'wizard', label: '🎓 Wizard Passo a Passo', icon: '🪄' },
+    { id: 'wizard', label: '🎓 Guia Passo a Passo', icon: '🪄' },
     { id: 'visao-geral', label: '1. Visão Geral', icon: '🏛️' },
     { id: 'fluxo-trabalho', label: '2. Fluxo Operacional', icon: '⚡' },
     { id: 'motor-rag', label: '3. Motor RAG & Leis', icon: '🧠' },
@@ -131,6 +131,10 @@ export default function Documentacao() {
     {
       q: 'Como funciona a qualificação de partes nas peças?',
       a: 'Ao selecionar o cliente cadastrado durante o peticionamento, a qualificação jurídica é preenchida automaticamente no cabeçalho e corpo da petição.'
+    },
+    {
+      q: 'Como funciona a Fila de Revisão/Validação?',
+      a: 'A fila de revisão atua como um crivo ético obrigatório. Nenhuma peça gerada pela IA é finalizada automaticamente. O documento fica pendente na fila, onde o advogado pode verificar a Trilha de Auditoria (com os modelos e leis RAG utilizadas), editar o texto e, finalmente, clicar em "Aprovar para Protocolo" ou "Reprovar". Apenas peças aprovadas podem ser exportadas.'
     }
   ]
 
@@ -142,7 +146,7 @@ export default function Documentacao() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--color-border)', paddingBottom: 24 }}>
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>
-            MANUAL DO USUÁRIO, WIZARD & ARQUITETURA DE IA
+            MANUAL DO USUÁRIO, GUIA & ARQUITETURA DE IA
           </div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, margin: 0, fontWeight: 400, letterSpacing: '-0.02em' }}>
             Central de Documentação & Guia
@@ -192,6 +196,51 @@ export default function Documentacao() {
               <span>{sec.label}</span>
             </button>
           ))}
+
+          {/* Suporte Técnico Box */}
+          <div style={{
+            marginTop: 24,
+            padding: 16,
+            background: 'var(--color-background)',
+            borderRadius: 6,
+            border: '1px solid var(--color-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>💬</span> Suporte Técnico
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: 0, lineHeight: 1.4 }}>
+              Dúvidas ou problemas com o sistema? Fale com nosso suporte técnico no WhatsApp.
+            </p>
+            <a
+              href="https://wa.me/5588993573809"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                background: 'var(--color-primary)',
+                color: '#ffffff',
+                textDecoration: 'none',
+                padding: '8px 12px',
+                borderRadius: 4,
+                fontSize: 12,
+                fontWeight: 600,
+                transition: 'background 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-primary-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--color-primary)'}
+            >
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.733-1.455L0 24zm6.59-4.846c1.66.986 3.292 1.503 5.343 1.504 5.518 0 10.005-4.486 10.008-10.004.002-2.673-1.04-5.184-2.937-7.082C17.16 1.671 14.654.626 12.012.626 6.495.626 2.006 5.111 2.003 10.63c-.001 2.083.548 4.115 1.591 5.922L2.557 20.3l3.96-1.036c.057.031.114.062.17.09z"/>
+              </svg>
+              <span>WhatsApp Suporte</span>
+            </a>
+          </div>
         </div>
 
         {/* Painel de Conteúdo */}
@@ -300,12 +349,12 @@ export default function Documentacao() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
                 {[
-                  { title: 'Gestão Processual & Matter Dashboard', desc: 'Controle de processos, linha do tempo de andamentos, resumo automático de intimações por IA e calculadora de prazos.' },
+                  { title: 'Gestão Processual & Painel do Processo', desc: 'Controle de processos, linha do tempo de andamentos, resumo automático de intimações por IA e calculadora de prazos.' },
                   { title: 'Geração com RAG & IA (DeepSeek)', desc: 'Produção automatizada de petições iniciais, contestações e recursos ancorados na base vetorial pgvector.' },
                   { title: 'Cadastro de Clientes & ViaCEP', desc: 'Consulta automática de endereço por CEP e preenchimento instantâneo da qualificação jurídica.' },
-                  { title: 'Financeiro & Timesheet Faturável', desc: 'Gestão de honorários fixos e de êxito (ad exitum), com cronômetro de horas faturáveis (billable hours).' },
-                  { title: 'Revisão Contratual & Riscos', desc: 'Scanner autônomo de minutas contratuais para detecção de cláusulas abusivas e sugestão de redações do playbook.' },
-                  { title: 'CRM & Funil de Oportunidades', desc: 'Pipeline Kanban de atração e conversão de clientes desde o primeiro contato até a assinatura.' },
+                  { title: 'Financeiro & Horas Cobráveis', desc: 'Gestão de honorários fixos e de êxito (ad exitum), com cronômetro de horas faturáveis (horas cobráveis).' },
+                  { title: 'Revisão Contratual & Riscos', desc: 'Scanner autônomo de minutas contratuais para detecção de cláusulas abusivas e sugestão de redações padronizadas.' },
+                  { title: 'Funil de Clientes & Oportunidades', desc: 'Pipeline Kanban de atração e conversão de clientes desde o primeiro contato até a assinatura.' },
                 ].map(item => (
                   <div key={item.title} style={{ padding: 16, border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-background)' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', marginBottom: 4 }}>{item.title}</div>
@@ -333,8 +382,8 @@ export default function Documentacao() {
                   },
                   {
                     step: 'Passo 2',
-                    title: 'Geração Assistida via RAG & Playbooks',
-                    desc: 'No Gerador de Peças, escolha o tipo e aplique um Playbook de Teses (Trabalhista, Cível ou Consumerista). O motor RAG consulta a legislação oficial indexada e transmite a minuta em tempo real.'
+                    title: 'Geração Assistida via RAG & Modelos',
+                    desc: 'No Gerador de Peças, escolha o tipo e aplique um Modelo de Teses (Trabalhista, Cível ou Consumerista). O motor RAG consulta a legislação oficial indexada e transmite a minuta em tempo real.'
                   },
                   {
                     step: 'Passo 3',

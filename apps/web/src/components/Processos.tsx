@@ -208,12 +208,12 @@ export default function Processos() {
         </div>
       </div>
 
-      {/* Detail & Matter Dashboard Pane */}
+      {/* Detail & Painel do Processo Pane */}
       {selected && (
         <div style={{ width: 420, borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)', padding: '24px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
-              MATTER DASHBOARD & LINHA DO TEMPO
+              PAINEL DO PROCESSO & LINHA DO TEMPO
             </div>
             <button onClick={() => setSelected(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 20, lineHeight: 1 }}>×</button>
           </div>

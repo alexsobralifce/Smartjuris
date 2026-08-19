@@ -1,5 +1,5 @@
 import { db } from './db/client.js';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { readdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -22,23 +22,6 @@ async function runMigrations() {
       id SERIAL PRIMARY KEY,
       hash text NOT NULL,
       created_at bigint
-    );
-    CREATE TABLE IF NOT EXISTS clientes (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      tipo text NOT NULL,
-      nome text NOT NULL,
-      cpf_cnpj text NOT NULL,
-      email text NOT NULL,
-      telefone text NOT NULL,
-      cep text,
-      logradouro text,
-      numero text,
-      complemento text,
-      bairro text,
-      cidade text,
-      uf text,
-      qualificacao text,
-      created_at timestamp with time zone DEFAULT now()
     );
   `);
 
@@ -91,6 +74,12 @@ async function runMigrations() {
 
 async function runSeedIfEmpty() {
   try {
+    // Skip demo seed in production to avoid exposing known credentials
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔒 Production mode: skipping demo seed. Create admin user manually.');
+      return;
+    }
+
     const existingUsers = await db.select().from(usuarios).limit(1);
     if (existingUsers.length > 0) {
       console.log('🌱 Database already seeded.');
@@ -296,8 +285,33 @@ async function runSeedIfEmpty() {
   }
 }
 
+async function ensureRootUser() {
+  try {
+    const existingRoot = await db.select().from(usuarios).where(eq(usuarios.role, 'root')).limit(1);
+    if (existingRoot.length > 0) {
+      return;
+    }
+    const rootEmail = process.env.ROOT_EMAIL || 'root@smartjuris.com';
+    const rootPassword = process.env.ROOT_PASSWORD || 'Crede123*';
+    const hashed = await bcrypt.hash(rootPassword, 12);
+    await db.insert(usuarios).values({
+      nome: 'Root Administrator',
+      email: rootEmail,
+      senha: hashed,
+      role: 'root',
+    });
+    console.log(`👑 Root user created: ${rootEmail}`);
+    if (process.env.NODE_ENV === 'production' && !process.env.ROOT_PASSWORD) {
+      console.warn('⚠️  Root usando senha padrão em produção. Altere imediatamente!');
+    }
+  } catch (e) {
+    console.error('⚠️ Error ensuring root user:', e);
+  }
+}
+
 async function start() {
   await runMigrations();
+  await ensureRootUser();
   await runSeedIfEmpty();
   console.log('🚀 Starting server...');
   await import('./server.js');

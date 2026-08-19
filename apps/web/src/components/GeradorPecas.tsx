@@ -308,7 +308,7 @@ export default function GeradorPecas() {
               {tesesPlaybook[area] && tesesPlaybook[area].length > 0 && (
                 <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--color-border)' }}>
                   <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
-                    📚 Modelos de Teses Frequentes (Playbooks do Escritório)
+                    📚 Modelos de Teses Frequentes (Modelos do Escritório)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {tesesPlaybook[area].map((tese, idx) => (
@@ -452,14 +452,14 @@ export default function GeradorPecas() {
                 </label>
                 {tesesPlaybook[area] && (
                   <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>
-                    💡 Dica: Playbooks disponíveis
+                    💡 Dica: Modelos disponíveis
                   </span>
                 )}
               </div>
               <textarea 
                 value={dadosCaso}
                 onChange={e => setDadosCaso(e.target.value)}
-                placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados ou selecione um playbook..." 
+                placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados ou selecione um modelo..." 
                 rows={5} 
                 style={{
                   width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 6,

@@ -3,6 +3,7 @@ import { db } from '../db/client.js';
 import { andamentos } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { deepseekClient } from '../services/ai.js';
+import { trackTokenUsage } from '../services/usage.js';
 
 const router = Router();
 
@@ -35,6 +36,10 @@ router.post('/', async (req, res) => {
           temperature: 0.2,
         });
         resumoIA = `🤖 Resumo IA: ${completion.choices[0]?.message?.content || 'Intimação registrada.'}`;
+        await trackTokenUsage((req as any).user?.id, 'resumo_andamento', 'deepseek-chat', {
+          prompt_tokens: (completion as any)?.usage?.prompt_tokens,
+          completion_tokens: (completion as any)?.usage?.completion_tokens,
+        });
       } catch (aiErr) {
         console.warn('Erro ao gerar resumo de IA:', aiErr);
         resumoIA = `🤖 Resumo IA: Intimação cadastrada. Ação recomendada: Análise dos autos para providências cabíveis.`;
@@ -46,7 +51,8 @@ router.post('/', async (req, res) => {
       tipo,
       descricao,
       resumoIA: resumoIA || null,
-      prazoFatal: prazoFatal || null
+      prazoFatal: prazoFatal || null,
+      usuarioId: (req as any).user?.id || null
     }).returning();
 
     res.status(201).json(inserted);

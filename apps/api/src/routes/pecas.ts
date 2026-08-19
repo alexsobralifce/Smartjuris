@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
-import { pecas } from '../db/schema.js';
+import { pecas, documentosGerados } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
 const router = Router();
@@ -16,8 +16,16 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const nova = await db.insert(pecas).values(req.body).returning();
-    res.status(201).json(nova[0]);
+    const [nova] = await db.insert(pecas).values({ ...req.body, usuarioId: (req as any).user?.id || null }).returning();
+    if (nova) {
+      await db.insert(documentosGerados).values({
+        usuarioId: (req as any).user?.id || null,
+        pecaId: nova.id,
+        tipo: 'peca_gerada',
+        titulo: nova.tipo,
+      });
+    }
+    res.status(201).json(nova);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar peça' });
   }

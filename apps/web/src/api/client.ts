@@ -1,5 +1,10 @@
 import { getApiBaseUrl } from './config';
 
+const qs = (params: Record<string, string | undefined>) => {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
+};
+
 const authFetch = (url: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('smartjuris_token');
   const headers: Record<string, string> = {
@@ -93,5 +98,17 @@ export const api = {
       body: JSON.stringify(patch)
     }).then(r => r.json()),
     delete: (id: string) => authFetch(`/api/clientes/${id}`, { method: 'DELETE' }),
+  },
+  admin: {
+    listUsers: () => authFetch('/api/admin/users').then(r => r.json()),
+    createUser: (data: any) => authFetch('/api/admin/users', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+    updateUser: (id: string, patch: any) => authFetch(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then(r => r.json()),
+    deleteUser: (id: string) => authFetch(`/api/admin/users/${id}`, { method: 'DELETE' }).then(r => r.json()),
+    resetPassword: (id: string, senha: string) => authFetch(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ senha }) }).then(r => r.json()),
+    getGlobalStats: (from?: string, to?: string) => authFetch('/api/admin/stats/global' + qs({ from, to })).then(r => r.json()),
+    getFinancialStats: (from?: string, to?: string) => authFetch('/api/admin/stats/financial' + qs({ from, to })).then(r => r.json()),
+    getLoginLogs: (from?: string, to?: string, sucesso?: string) => authFetch('/api/admin/logs/logins' + qs({ from, to, sucesso })).then(r => r.json()),
+    getTokenLogs: (from?: string, to?: string) => authFetch('/api/admin/logs/tokens' + qs({ from, to })).then(r => r.json()),
+    getAuditLogs: (from?: string, to?: string) => authFetch('/api/admin/logs/audit' + qs({ from, to })).then(r => r.json()),
   }
 };

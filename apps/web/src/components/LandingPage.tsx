@@ -149,7 +149,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             marginBottom: 32,
             maxWidth: 620
           }}>
-            O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA Nativa</strong>. Crie minutas de peças em segundos com RAG vetorial, revise contratos com scanner de risco e acompanhe o <em>Matter Dashboard</em> de prazos.
+            O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA Nativa</strong>. Crie minutas de peças em segundos com RAG vetorial, revise contratos com scanner de risco e acompanhe a linha do tempo do processo e prazos.
           </p>
 
           {/* Ilustração SVG de Advogados e Tecnologia da Justiça */}
@@ -184,7 +184,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 Arquitetura em 4 Camadas de Segurança
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-                1. Geração LLM · 2. RAG Vetorial (BGE-M3) · 3. Playbooks de Cláusulas · 4. Validação e Crivo Humano Obrigatório.
+                1. Geração LLM · 2. RAG Vetorial (BGE-M3) · 3. Banco de Cláusulas · 4. Validação e Crivo Humano Obrigatório.
               </div>
             </div>
           </div>
@@ -193,10 +193,10 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
             {[
               { title: 'Gerador RAG', desc: 'Peças fundamentadas na base do escritório.' },
-              { title: 'Matter Dashboard', desc: 'Linha do tempo & intimações resumidas por IA.' },
+              { title: 'Painel do Processo', desc: 'Linha do tempo & intimações resumidas por IA.' },
               { title: 'Validação Humana', desc: 'Trilha de auditoria e crivo ético OAB.' },
               { title: 'Jurimetria Preditiva', desc: 'Simulador de probabilidade de êxito.' },
-              { title: 'Financeiro & Timesheet', desc: 'Honorários e gravação de horas faturáveis.' },
+              { title: 'Financeiro & Horas', desc: 'Honorários e gravação de horas faturáveis.' },
               { title: 'Revisão Contratual', desc: 'Scanner autônomo de cláusulas abusivas.' },
             ].map(f => (
               <div key={f.title} style={{ borderLeft: '2px solid var(--color-accent)', paddingLeft: 12 }}>
@@ -364,7 +364,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         color: 'var(--color-muted)',
         background: 'var(--color-surface)'
       }}>
-        © {new Date().getFullYear()} SmartJuris LexOS. Inteligência Artificial Jurídica & Gestão para Advocacia Contemporânea. Estética Vignelli.
+        © {new Date().getFullYear()} SmartJuris LexOS. Inteligência Artificial Jurídica & Gestão para Advocacia Contemporânea. Suporte Técnico via WhatsApp: <a href="https://wa.me/5588993573809" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}>88 99357-3809</a>. Estética Vignelli.
       </footer>
     </div>
   )

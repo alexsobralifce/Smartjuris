@@ -35,6 +35,7 @@ COPY --from=builder /app/apps/api/node_modules apps/api/node_modules/
 # Copy built dist and migration files
 COPY --from=builder /app/apps/api/dist apps/api/dist
 COPY --from=builder /app/apps/api/src/db/migrations apps/api/src/db/migrations
+COPY --from=builder /app/apps/api/src/db/migrations apps/api/dist/db/migrations
 COPY --from=builder /app/apps/api/drizzle.config.ts apps/api/
 COPY --from=builder /app/apps/api/src/db apps/api/src/db
 

@@ -4,6 +4,10 @@ import { andamentos } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { deepseekClient } from '../services/ai.js';
 import { trackTokenUsage } from '../services/usage.js';
+import { parseBody, andamentoSchema } from '../validation/schemas.js';
+import { aiRateLimiter } from '../middlewares/rateLimit.js';
+import { recordAudit } from '../middlewares/audit.js';
+import { redactPII } from '../services/pii.js';
 
 const router = Router();
 
@@ -22,14 +26,20 @@ router.get('/processo/:processoId', async (req, res) => {
 });
 
 // Adicionar novo andamento e gerar resumo de IA se for intimação
-router.post('/', async (req, res) => {
+router.post('/', aiRateLimiter, async (req, res) => {
   try {
-    const { processoId, tipo, descricao, prazoFatal } = req.body;
+    const parsed = parseBody(andamentoSchema, req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Dados inválidos.' });
+    }
+    const { processoId, tipo, descricao, prazoFatal } = parsed.data;
 
     let resumoIA = '';
     if (tipo === 'Intimação' || tipo === 'Despacho') {
       try {
-        const prompt = `Você é um assistente jurídico sênior. Resuma a seguinte intimação/despacho em 2 frases curtas, destacando a AÇÃO RECOMENDADA ao advogado e o prazo fatal:\n\n${descricao}`;
+        // Redact PII before sending to the LLM (descricao original continues stored in DB)
+        const safeDescricao = redactPII(descricao);
+        const prompt = `Você é um assistente jurídico sênior. Resuma a seguinte intimação/despacho em 2 frases curtas, destacando a AÇÃO RECOMENDADA ao advogado e o prazo fatal:\n\n${safeDescricao}`;
         const completion = await deepseekClient.chat.completions.create({
           model: 'deepseek-chat',
           messages: [{ role: 'user', content: prompt }],
@@ -55,6 +65,7 @@ router.post('/', async (req, res) => {
       usuarioId: (req as any).user?.id || null
     }).returning();
 
+    await recordAudit(req, 'CREATE_ANDAMENTO', { alvoId: inserted.id, detalhes: { processoId, tipo, prazoFatal } });
     res.status(201).json(inserted);
   } catch (error) {
     console.error('Error creating andamento:', error);

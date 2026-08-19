@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 
@@ -16,11 +17,16 @@ import adminRoutes from './routes/admin.js';
 
 import { authMiddleware } from './middlewares/auth.js';
 import { requireRoot } from './middlewares/roleGuard.js';
+import { globalApiLimiter } from './middlewares/rateLimit.js';
+import { client } from './db/client.js';
 
 dotenv.config({ path: resolve(process.cwd(), '../../.env') });
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+// Trust Railway proxy so req.ip reflects the real client IP
+app.set('trust proxy', 1);
 
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
@@ -42,6 +48,10 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use(cookieParser());
+
+// Global rate limiter for all /api routes
+app.use('/api', globalApiLimiter);
 
 // Rotas
 app.use('/api/auth', authRoutes);
@@ -59,6 +69,29 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`🚀 API Server running on http://localhost:${port}`);
+});
+
+async function shutdown(signal: string, exitCode = 0) {
+  console.log(`🛑 Received ${signal}, shutting down...`);
+  server.close(() => {
+    console.log('HTTP server closed.');
+  });
+  try {
+    await client.end({ timeout: 5 });
+  } catch (err) {
+    console.error('Error closing database client:', err);
+  }
+  process.exit(exitCode);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  shutdown('uncaughtException', 1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
 });

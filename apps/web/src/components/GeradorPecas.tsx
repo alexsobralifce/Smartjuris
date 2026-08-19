@@ -138,14 +138,11 @@ export default function GeradorPecas() {
       const run = async () => {
         setTextoEmGeracao('');
         try {
-          const token = localStorage.getItem('smartjuris_token');
           const apiBase = getApiBaseUrl();
           const response = await fetch(`${apiBase}/api/rag/generate`, {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            },
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ 
               tipo, 
               area, 

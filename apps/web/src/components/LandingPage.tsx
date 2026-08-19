@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { api } from '../api/client'
 
 interface LandingPageProps {
-  onLoginSuccess: (token: string, user: { name: string; role: string; email: string }) => void
+  onLoginSuccess: (user: { name: string; role: string; email: string }) => void
 }
 
 export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
@@ -16,23 +17,14 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
     setLoading(true)
 
     try {
-      // Endpoint para login
-      const apiBase = window.location.hostname.includes('railway.app') 
-        ? 'https://smartjuris-api-production.up.railway.app' 
-        : 'http://localhost:3001'
-
-      const res = await fetch(`${apiBase}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
+      const res = await api.auth.login(email, password)
 
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.error || 'Credenciais inválidas.')
       }
 
-      onLoginSuccess(data.token, data.user)
+      onLoginSuccess(data.user)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -321,7 +313,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             <div style={{ fontWeight: 600, color: 'var(--color-foreground)', marginBottom: 8 }}>
               🔑 Credenciais Prontas para Teste:
             </div>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)' }}>
               <button
                 type="button"

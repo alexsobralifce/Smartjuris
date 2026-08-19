@@ -4,10 +4,21 @@ import { readdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { usuarios, processos, pecas, documentos, clientes } from './db/schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function generateRandomPassword(length: number): string {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = randomBytes(length);
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += charset[bytes[i] % charset.length];
+  }
+  return password;
+}
 
 async function runMigrations() {
   console.log('🔄 Running migrations...');
@@ -87,9 +98,13 @@ async function runSeedIfEmpty() {
     }
 
     console.log('🌱 Database is empty. Seeding initial demonstration data...');
-    
-    const hashedAdminPassword = await bcrypt.hash('admin123', 10);
-    const hashedUserPassword = await bcrypt.hash('user123', 10);
+
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
+    const userPassword = process.env.SEED_USER_PASSWORD || 'user123';
+    console.log(`🔑 Dev seed passwords -> admin@smartjuris.com: ${adminPassword} | aline@smartjuris.com / carlos@smartjuris.com: ${userPassword}`);
+
+    const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
+    const hashedUserPassword = await bcrypt.hash(userPassword, 10);
 
     const [adminUser, normalUser1, normalUser2] = await db.insert(usuarios).values([
       {
@@ -292,7 +307,22 @@ async function ensureRootUser() {
       return;
     }
     const rootEmail = process.env.ROOT_EMAIL || 'root@smartjuris.com';
-    const rootPassword = process.env.ROOT_PASSWORD || 'Crede123*';
+    const configuredRootPassword = process.env.ROOT_PASSWORD;
+
+    let rootPassword: string;
+    if (process.env.NODE_ENV === 'production') {
+      if (!configuredRootPassword || configuredRootPassword.length < 12) {
+        console.error('❌ ROOT_PASSWORD must be set and at least 12 characters long in production. Refusing to create a weak root user.');
+        process.exit(1);
+      }
+      rootPassword = configuredRootPassword;
+    } else if (configuredRootPassword) {
+      rootPassword = configuredRootPassword;
+    } else {
+      rootPassword = generateRandomPassword(16);
+      console.log(`🔑 ROOT_PASSWORD not set. Generated temporary root password: ${rootPassword}`);
+    }
+
     const hashed = await bcrypt.hash(rootPassword, 12);
     await db.insert(usuarios).values({
       nome: 'Root Administrator',
@@ -301,9 +331,6 @@ async function ensureRootUser() {
       role: 'root',
     });
     console.log(`👑 Root user created: ${rootEmail}`);
-    if (process.env.NODE_ENV === 'production' && !process.env.ROOT_PASSWORD) {
-      console.warn('⚠️  Root usando senha padrão em produção. Altere imediatamente!');
-    }
   } catch (e) {
     console.error('⚠️ Error ensuring root user:', e);
   }

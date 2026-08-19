@@ -11,3 +11,5 @@ export const requireRole = (...roles: string[]) =>
   };
 
 export const requireRoot = requireRole('root');
+
+export const requireAdmin = requireRole('admin', 'root');

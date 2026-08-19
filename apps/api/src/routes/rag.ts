@@ -4,25 +4,39 @@ import { chunks } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage } from '../services/usage.js';
 import { deepseekClient } from '../services/ai.js';
+import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { cosineDistance, sql, desc } from 'drizzle-orm';
 
 const router = Router();
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', aiRateLimiter, async (req, res) => {
   const { tipo, area, dadosCaso } = req.body;
-  
+  const controller = new AbortController();
+  let aborted = false;
+  const abort = () => {
+    if (aborted) return;
+    aborted = true;
+    controller.abort();
+  };
+  // Max 2 minutes per generation
+  const timeout = setTimeout(abort, 120000);
+
   try {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive'
     });
-    res.write(`data: ${JSON.stringify({ progress: 10, label: 'Gerando embeddings da requisição...' })}\n\n`);
+
+    // Client disconnect cancels the in-flight DeepSeek stream
+    req.on('close', abort);
+
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 10, label: 'Gerando embeddings da requisição...' })}\n\n`);
     
     const queryText = `${tipo} ${area} ${dadosCaso}`;
     const embedding = await generateEmbedding(queryText, (req as any).user?.id);
 
-    res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
     
     // Similarity search
     const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
@@ -38,7 +52,7 @@ router.post('/generate', async (req, res) => {
 
     const contexto = relevantChunks.map(c => c.texto).join('\n\n');
 
-    res.write(`data: ${JSON.stringify({ progress: 50, label: 'Enviando para o modelo DeepSeek...' })}\n\n`);
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 50, label: 'Enviando para o modelo DeepSeek...' })}\n\n`);
 
     const prompt = `Você é um assistente jurídico experiente.
 Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
@@ -60,23 +74,24 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
       temperature: 0.3,
       stream: true,
       stream_options: { include_usage: true },
-    });
+    }, { signal: controller.signal });
 
     let fullText = '';
     let lastUsage: any = null;
-    res.write(`data: ${JSON.stringify({ progress: 70, label: 'Gerando conteúdo...' })}\n\n`);
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 70, label: 'Gerando conteúdo...' })}\n\n`);
 
     for await (const chunk of stream) {
+      if (aborted) break;
       const delta = chunk.choices[0]?.delta?.content || '';
       // Limpa asteriscos do fluxo em tempo real
       const cleanDelta = delta.replace(/\*/g, '');
       fullText += cleanDelta;
       if ((chunk as any).usage) lastUsage = (chunk as any).usage;
       // Option to stream tokens to client if UI supports it
-      res.write(`data: ${JSON.stringify({ token: cleanDelta })}\n\n`);
+      if (!res.writableEnded) res.write(`data: ${JSON.stringify({ token: cleanDelta })}\n\n`);
     }
 
-    res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);
 
     if (lastUsage) {
       await trackTokenUsage((req as any).user?.id, 'rag_generate', 'deepseek-chat', {
@@ -95,12 +110,19 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
       conteudo: fullText
     };
     
-    res.write(`data: ${JSON.stringify(finalResult)}\n\n`);
-    res.end();
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(finalResult)}\n\n`);
+      res.end();
+    }
   } catch (err: any) {
-    console.error('Erro na rota de RAG:', err);
-    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-    res.end();
+    if (!res.writableEnded) {
+      console.error('Erro na rota de RAG:', err);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  } finally {
+    clearTimeout(timeout);
+    req.removeListener('close', abort);
   }
 });
 

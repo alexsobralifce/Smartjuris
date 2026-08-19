@@ -56,7 +56,7 @@ export default function Base() {
           const formData = new FormData()
           formData.append('colecao', 'Jurisprudência')
           // Append a dummy blob to simulate a file
-          formData.append('file', new Blob(['fake-pdf-content']), 'Documento-importado.pdf')
+          formData.append('file', new Blob(['fake-pdf-content'], { type: 'application/pdf' }), 'Documento-importado.pdf')
           await api.documentos.upload(formData)
           await reload()
         } catch (e) {

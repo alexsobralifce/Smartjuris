@@ -5,11 +5,12 @@ const qs = (params: Record<string, string | undefined>) => {
   return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
 };
 
+const RELOAD_GUARD_KEY = 'smartjuris_auth_reloading';
+let isReloading = false;
+
 const authFetch = (url: string, options: RequestInit = {}) => {
-  const token = localStorage.getItem('smartjuris_token');
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
   };
 
   if (!(options.body instanceof FormData)) {
@@ -20,17 +21,30 @@ const authFetch = (url: string, options: RequestInit = {}) => {
   const normalizedPath = url.startsWith('/') ? url : `/${url}`;
   const fullUrl = url.startsWith('http') ? url : `${baseUrl}${normalizedPath}`;
 
-  return fetch(fullUrl, { ...options, headers }).then(async r => {
+  return fetch(fullUrl, { ...options, headers, credentials: 'include' }).then(async r => {
     if (r.status === 401) {
-      localStorage.removeItem('smartjuris_token');
       localStorage.removeItem('smartjuris_user');
-      window.location.reload();
+      // Guarda contra loops infinitos de reload: só recarrega uma vez por sessão
+      // (o App chama /me no mount, que retorna 401 para visitantes sem cookie).
+      if (!isReloading && !sessionStorage.getItem(RELOAD_GUARD_KEY)) {
+        isReloading = true;
+        sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+        window.location.reload();
+      }
     }
     return r;
   });
 };
 
 export const api = {
+  auth: {
+    login: (email: string, password: string) => {
+      sessionStorage.removeItem(RELOAD_GUARD_KEY);
+      return authFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    },
+    logout: () => authFetch('/api/auth/logout', { method: 'POST' }),
+    me: () => authFetch('/api/auth/me'),
+  },
   processos: {
     list: () => authFetch('/api/processos').then(r => r.json()),
     create: (p: any) => authFetch('/api/processos', {

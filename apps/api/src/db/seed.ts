@@ -99,9 +99,12 @@ async function seed() {
     }
   ]);
 
-  // Hashing passwords
-  const hashedAdminPassword = await bcrypt.hash('admin123', 10);
-  const hashedUserPassword = await bcrypt.hash('user123', 10);
+  // Hashing passwords (dev/test credentials; production seed is skipped in startup.ts)
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
+  const userPassword = process.env.SEED_USER_PASSWORD || 'user123';
+  console.log(`🔑 Seed passwords -> admin@smartjuris.com: ${adminPassword} | aline@smartjuris.com / carlos@smartjuris.com: ${userPassword}`);
+  const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
+  const hashedUserPassword = await bcrypt.hash(userPassword, 10);
 
   // Insert Users
   console.log('Inserting usuarios...');

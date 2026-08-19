@@ -30,6 +30,7 @@ export const processos = pgTable('processos', {
   prazo: date('prazo').notNull(),
   advogado: text('advogado').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  usuarioId: uuid('usuario_id').references(() => usuarios.id),
 });
 
 export const pecas = pgTable('pecas', {
@@ -45,6 +46,8 @@ export const pecas = pgTable('pecas', {
   fontes: integer('fontes').notNull(),
   conteudo: text('conteudo').notNull(),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  updatedBy: uuid('updated_by').references(() => usuarios.id),
 });
 
 export const documentos = pgTable('documentos', {
@@ -98,6 +101,7 @@ export const lancamentosFinanceiros = pgTable('lancamentos_financeiros', {
   valor: text('valor').notNull(),
   vencimento: text('vencimento').notNull(),
   status: text('status').default('pendente'), // 'pago' | 'pendente' | 'atrasado'
+  usuarioId: uuid('usuario_id').references(() => usuarios.id),
 });
 
 export const timesheet = pgTable('timesheet', {
@@ -109,6 +113,7 @@ export const timesheet = pgTable('timesheet', {
   valorHora: text('valor_hora').default('350,00'),
   faturado: text('faturado').default('nao'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  usuarioId: uuid('usuario_id').references(() => usuarios.id),
 });
 
 export const clientes = pgTable('clientes', {
@@ -127,6 +132,7 @@ export const clientes = pgTable('clientes', {
   uf: text('uf'),
   qualificacao: text('qualificacao'), // ex: "brasileira, solteira, auxiliar administrativa"
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  usuarioId: uuid('usuario_id').references(() => usuarios.id),
 });
 
 export const logins = pgTable('logins', {

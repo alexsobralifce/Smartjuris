@@ -1,12 +1,43 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../db/client.js';
 import { documentos, chunks, documentosGerados } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
+import { parseBody, colecaoSchema } from '../validation/schemas.js';
+import { aiRateLimiter } from '../middlewares/rateLimit.js';
+import { recordAudit } from '../middlewares/audit.js';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Somente arquivos PDF são permitidos.'));
+    }
+  },
+});
+
+// Converte erros do multer (tamanho/tipo) em respostas JSON
+function handleUploadError(err: unknown, _req: Request, res: Response, next: NextFunction): void {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({ error: 'Arquivo excede o limite de 15 MB.' });
+      return;
+    }
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  if (err instanceof Error) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  next(err);
+}
 
 router.get('/', async (req, res) => {
   try {
@@ -17,15 +48,25 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
-    const { colecao } = req.body;
+    const parsed = parseBody(colecaoSchema, req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Dados inválidos.' });
+    }
+    const colecao = parsed.data.colecao;
     
     // Mock upload flow for Phase 1 -> Now Real Flow!
     const sizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
+
+    // Valida magic bytes do PDF (conteúdo deve começar com %PDF)
+    const header = req.file.buffer.subarray(0, 5).toString('latin1');
+    if (!header.startsWith('%PDF')) {
+      return res.status(400).json({ error: 'Arquivo inválido: o conteúdo não é um PDF válido.' });
+    }
     
     // Parse PDF
     const pdfData = await pdfParse(req.file.buffer);
@@ -36,12 +77,17 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     
     const novo = await db.insert(documentos).values({
       nome: req.file.originalname,
-      colecao: colecao || 'Jurisprudência',
+      colecao,
       tamanho: `${sizeMB} MB`,
       chunks: rawChunks.length,
     }).returning();
     
     const docId = novo[0].id;
+
+    await recordAudit(req, 'UPLOAD_DOCUMENTO', {
+      alvoId: docId,
+      detalhes: { nome: req.file.originalname, colecao, tamanho: `${sizeMB} MB`, chunks: rawChunks.length },
+    });
 
     await db.insert(documentosGerados).values({
       usuarioId: (req as any).user?.id || null,
@@ -56,7 +102,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         const embedding = await generateEmbedding(chunkText, (req as any).user?.id);
         await db.insert(chunks).values({
           documentoId: docId,
-          colecao: colecao || 'Jurisprudência',
+          colecao,
           texto: chunkText,
           embedding,
           metadata: { fonte: req.file.originalname }

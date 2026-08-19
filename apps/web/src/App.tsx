@@ -12,6 +12,7 @@ import Crm from './components/Crm'
 import Clientes from './components/Clientes'
 import Admin from './components/Admin'
 import LandingPage from './components/LandingPage'
+import { api } from './api/client'
 
 type Route = 'dashboard' | 'processos' | 'clientes' | 'pecas' | 'validacao' | 'jurimetria' | 'financeiro' | 'contratos' | 'crm' | 'base' | 'documentacao' | 'admin'
 
@@ -30,18 +31,52 @@ const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
   { id: 'admin', label: 'Administração', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
 ]
 
+const readCachedUser = (): { name: string; role: string; email: string } | null => {
+  try {
+    const cachedUser = localStorage.getItem('smartjuris_user')
+    return cachedUser ? JSON.parse(cachedUser) : null
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('smartjuris_token'))
-  const [user, setUser] = useState<{ name: string; role: string; email: string } | null>(null)
+  const [user, setUser] = useState<{ name: string; role: string; email: string } | null>(readCachedUser)
+  const [loading, setLoading] = useState(true)
   const [route, setRoute] = useState<Route>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   useEffect(() => {
-    const cachedUser = localStorage.getItem('smartjuris_user')
-    if (cachedUser) {
-      setUser(JSON.parse(cachedUser))
-    }
-  }, [token])
+    let cancelled = false
+
+    api.auth.me()
+      .then(async res => {
+        if (cancelled) return
+        if (res.ok) {
+          const data = await res.json()
+          if (data?.user) {
+            setUser(data.user)
+            localStorage.setItem('smartjuris_user', JSON.stringify(data.user))
+          } else {
+            setUser(null)
+            localStorage.removeItem('smartjuris_user')
+          }
+        } else {
+          setUser(null)
+          localStorage.removeItem('smartjuris_user')
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUser(null)
+        localStorage.removeItem('smartjuris_user')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     const handleNav = () => setRoute('pecas')
@@ -49,23 +84,29 @@ export default function App() {
     return () => window.removeEventListener('nav-pecas', handleNav)
   }, [])
 
-  const handleLoginSuccess = (newToken: string, newUser: { name: string; role: string; email: string }) => {
-    localStorage.setItem('smartjuris_token', newToken)
+  const handleLoginSuccess = (newUser: { name: string; role: string; email: string }) => {
     localStorage.setItem('smartjuris_user', JSON.stringify(newUser))
-    setToken(newToken)
     setUser(newUser)
     setRoute('dashboard')
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('smartjuris_token')
+    api.auth.logout().catch(() => {})
     localStorage.removeItem('smartjuris_user')
-    setToken(null)
     setUser(null)
   }
 
+  // Enquanto valida a sessão com /me, exibe estado de carregamento
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-background)' }}>
+        <div style={{ padding: 24 }}>Carregando...</div>
+      </div>
+    )
+  }
+
   // Se não estiver logado, exibe Landing Page
-  if (!token) {
+  if (!user) {
     return <LandingPage onLoginSuccess={handleLoginSuccess} />
   }
 

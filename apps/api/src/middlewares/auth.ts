@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { isRevoked } from './revocation.js';
 
-const SECRET: string = process.env.JWT_SECRET ?? (() => {
-  throw new Error('JWT_SECRET environment variable is required');
-})();
+const SECRET: string = process.env.JWT_SECRET ?? '';
+if (!SECRET || SECRET.length < 32) {
+  throw new Error('JWT_SECRET must be at least 32 characters');
+}
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -15,23 +17,34 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Token não fornecido.' });
-  }
+  // Resolve token: cookie first, then Bearer header
+  let token: string | undefined = req.cookies?.smartjuris_token;
 
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2) {
-    return res.status(401).json({ error: 'Erro no token.' });
-  }
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Token não fornecido.' });
+    }
 
-  const [scheme, token] = parts;
-  if (!/^Bearer$/i.test(scheme)) {
-    return res.status(401).json({ error: 'Token malformatado.' });
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2) {
+      return res.status(401).json({ error: 'Erro no token.' });
+    }
+
+    const [scheme, bearerToken] = parts;
+    if (!/^Bearer$/i.test(scheme)) {
+      return res.status(401).json({ error: 'Token malformatado.' });
+    }
+
+    token = bearerToken;
   }
 
   jwt.verify(token, SECRET, (err, decoded: any) => {
     if (err) {
+      return res.status(401).json({ error: 'Token inválido ou expirado.' });
+    }
+
+    if (decoded?.jti && isRevoked(decoded.jti)) {
       return res.status(401).json({ error: 'Token inválido ou expirado.' });
     }
 

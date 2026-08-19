@@ -3,11 +3,10 @@ import { api } from '../api/client'
 import type { Documento } from '@lexia/shared'
 
 const colecoes = [
-  { id: 'jurisprudencia', nome: 'Jurisprudência',       lastSync: '17/08/2026 06:00', status: 'ok',           desc: 'STF, STJ, TRT-2, TJ-SP — inteiro teor + ementa' },
-  { id: 'legislacao',    nome: 'Legislação Federal',    lastSync: '15/08/2026 12:00', status: 'ok',           desc: 'CLT, CPC, CC, CF/88, CTN, CDC — via LexML' },
-  { id: 'interno',       nome: 'Peças do Escritório',   lastSync: '17/08/2026 14:35', status: 'ok',           desc: 'Peças aprovadas e protocoladas — usadas como base de estilo' },
-  { id: 'clausulas',     nome: 'Banco de Cláusulas',    lastSync: '10/08/2026 09:00', status: 'ok',           desc: 'Cláusulas aprovadas por área e tipo de contrato' },
-  { id: 'doutrina',      nome: 'Doutrina Selecionada',  lastSync: '01/08/2026 00:00', status: 'desatualizado', desc: 'Capítulos de obras de referência por área' },
+  { id: 'legislacao',    nome: 'Legislação Federal Compilada', lastSync: '19/08/2026 14:00', status: 'ok', desc: 'CPC/2015, CLT, Código Civil, CDC, CF/88, CTN — BGE-M3 (1024d)' },
+  { id: 'jurisprudencia', nome: 'Jurisprudência Oficial & Súmulas', lastSync: '19/08/2026 12:00', status: 'ok', desc: 'Súmulas Vinculantes STF, Súmulas STJ, TST e TJs estaduais' },
+  { id: 'interno',       nome: 'Peças & Modelos do Escritório', lastSync: '18/08/2026 16:30', status: 'ok', desc: 'Peças aprovadas e protocoladas — estilo e teses proprietárias' },
+  { id: 'clausulas',     nome: 'Banco de Cláusulas Contratuais', lastSync: '15/08/2026 10:00', status: 'ok', desc: 'Playbooks de minutas contratuais por ramo e tipo de risco' },
 ]
 
 export default function Base() {

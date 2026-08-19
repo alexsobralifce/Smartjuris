@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
-import { usuarios, processos, pecas, documentos } from './db/schema.js';
+import { usuarios, processos, pecas, documentos, clientes } from './db/schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +22,23 @@ async function runMigrations() {
       id SERIAL PRIMARY KEY,
       hash text NOT NULL,
       created_at bigint
+    );
+    CREATE TABLE IF NOT EXISTS clientes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tipo text NOT NULL,
+      nome text NOT NULL,
+      cpf_cnpj text NOT NULL,
+      email text NOT NULL,
+      telefone text NOT NULL,
+      cep text,
+      logradouro text,
+      numero text,
+      complemento text,
+      bairro text,
+      cidade text,
+      uf text,
+      qualificacao text,
+      created_at timestamp with time zone DEFAULT now()
     );
   `);
 
@@ -105,6 +122,69 @@ async function runSeedIfEmpty() {
         role: 'user',
       }
     ]).returning({ id: usuarios.id, nome: usuarios.nome });
+
+    await db.insert(clientes).values([
+      {
+        tipo: 'PF',
+        nome: 'Fernanda Oliveira',
+        cpfCnpj: '321.654.987-00',
+        email: 'fernanda.oliveira@email.com',
+        telefone: '(11) 98765-4321',
+        cep: '01001-000',
+        logradouro: 'Praça da Sé',
+        numero: '100',
+        complemento: 'Apto 42',
+        bairro: 'Sé',
+        cidade: 'São Paulo',
+        uf: 'SP',
+        qualificacao: 'brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 321.654.987-00, residente e domiciliada na Praça da Sé, nº 100, Sé, São Paulo/SP, CEP 01001-000'
+      },
+      {
+        tipo: 'PF',
+        nome: 'Roberto Souza',
+        cpfCnpj: '123.456.789-11',
+        email: 'roberto.souza@email.com',
+        telefone: '(11) 97654-3210',
+        cep: '04001-000',
+        logradouro: 'Rua Vergueiro',
+        numero: '500',
+        complemento: 'Bloco B',
+        bairro: 'Vila Mariana',
+        cidade: 'São Paulo',
+        uf: 'SP',
+        qualificacao: 'brasileiro, casado, engenheiro civil, inscrito no CPF sob o nº 123.456.789-11, residente e domiciliado na Rua Vergueiro, nº 500, Vila Mariana, São Paulo/SP, CEP 04001-000'
+      },
+      {
+        tipo: 'PJ',
+        nome: 'Construtora Alfa',
+        cpfCnpj: '12.345.678/0001-99',
+        email: 'contato@construtoraalfa.com.br',
+        telefone: '(11) 3344-5566',
+        cep: '01310-100',
+        logradouro: 'Avenida Paulista',
+        numero: '1500',
+        complemento: 'Conj 81',
+        bairro: 'Bela Vista',
+        cidade: 'São Paulo',
+        uf: 'SP',
+        qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-99, com sede na Avenida Paulista, nº 1500, Conj 81, Bela Vista, São Paulo/SP, CEP 01310-100'
+      },
+      {
+        tipo: 'PF',
+        nome: 'Lúcia Ferreira',
+        cpfCnpj: '456.789.012-33',
+        email: 'lucia.ferreira@email.com',
+        telefone: '(11) 96543-2109',
+        cep: '05401-000',
+        logradouro: 'Rua Teodoro Sampaio',
+        numero: '800',
+        complemento: 'Apto 12',
+        bairro: 'Pinheiros',
+        cidade: 'São Paulo',
+        uf: 'SP',
+        qualificacao: 'brasileira, viúva, aposentada, inscrita no CPF sob o nº 456.789.012-33, residente e domiciliada na Rua Teodoro Sampaio, nº 800, Pinheiros, São Paulo/SP, CEP 05401-000'
+      }
+    ]);
 
     const insertProcessos = await db.insert(processos).values([
       {

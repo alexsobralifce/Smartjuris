@@ -66,8 +66,8 @@ Gere o documento final estruturado e formal. Apenas o conteúdo do documento, se
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content || '';
       fullText += delta;
-      // Option to stream tokens to client if UI supports it, currently UI waits for final result
-      // res.write(`data: ${JSON.stringify({ token: delta })}\n\n`);
+      // Option to stream tokens to client if UI supports it
+      res.write(`data: ${JSON.stringify({ token: delta })}\n\n`);
     }
 
     res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);

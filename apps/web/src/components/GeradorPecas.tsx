@@ -96,6 +96,7 @@ export default function GeradorPecas() {
 
   const [dadosCaso, setDadosCaso] = useState('')
   const [pecaConteudo, setPecaConteudo] = useState('')
+  const [textoEmGeracao, setTextoEmGeracao] = useState('')
   const [fontesRecuperadas, setFontesRecuperadas] = useState<any[]>([])
 
   const etapas = ['Selecionar Tipo', 'Dados do Caso', 'Geração IA', 'Revisão']
@@ -135,6 +136,7 @@ export default function GeradorPecas() {
   useEffect(() => {
     if (step === 'gerando') {
       const run = async () => {
+        setTextoEmGeracao('');
         try {
           const token = localStorage.getItem('smartjuris_token');
           const apiBase = getApiBaseUrl();
@@ -174,6 +176,9 @@ export default function GeradorPecas() {
                 if (data.progress !== undefined) {
                   setProgresso(data.progress);
                   setProgressoLabel(data.label);
+                }
+                if (data.token !== undefined) {
+                  setTextoEmGeracao(prev => prev + data.token);
                 }
                 if (data.done) {
                   setPecaConteudo(data.conteudo);
@@ -484,7 +489,7 @@ export default function GeradorPecas() {
 
       {/* Step 3: Gerando */}
       {step === 'gerando' && (
-        <div style={{ maxWidth: 560 }}>
+        <div style={{ maxWidth: 800 }}>
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '32px' }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 24 }}>Consultando Base RAG & Gerando Minuta...</div>
 
@@ -496,7 +501,23 @@ export default function GeradorPecas() {
                 transition: 'width 0.6s ease',
               }}/>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)', marginBottom: 28 }}>{progressoLabel}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)', marginBottom: 28, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{progressoLabel}</span>
+              {progresso >= 50 && <span style={{ color: 'var(--color-accent)' }}>Recebendo stream da IA...</span>}
+            </div>
+
+            {textoEmGeracao && (
+              <div style={{
+                marginTop: 20, marginBottom: 20, padding: 20,
+                background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 6,
+                maxHeight: 300, overflowY: 'auto',
+                fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6, color: 'var(--color-foreground)',
+                whiteSpace: 'pre-wrap'
+              }}>
+                {textoEmGeracao}
+                <span style={{ display: 'inline-block', width: 6, height: 12, background: 'var(--color-primary)', marginLeft: 4, animation: 'blink 1s step-start infinite' }} />
+              </div>
+            )}
 
             <div style={{ fontSize: 11, color: 'var(--color-muted)', lineHeight: 1.6, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
               🔍 <strong>Pipeline ativo:</strong> Ingestão semântica ➔ Embeddings BGE-M3 ➔ Busca vetorial no pgvector ➔ Síntese DeepSeek Chat ➔ Validação anti-alucinação.

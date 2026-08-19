@@ -176,9 +176,9 @@ export default function Base() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
           {[
             { label: 'Modelo de Embeddings', value: 'BGE-M3 (multilíngue)' },
-            { label: 'Vector Store',          value: 'FAISS + BM25 híbrido' },
+            { label: 'Vector Store',          value: 'PostgreSQL (pgvector)' },
             { label: 'Chunk Size',            value: '512 tokens' },
-            { label: 'Modelo de Geração',     value: 'Claude 3.5 Sonnet (API)' },
+            { label: 'Modelo de Geração',     value: 'DeepSeek' },
           ].map(c => (
             <div key={c.label} style={{ padding: '12px 16px', background: 'var(--color-surface-2)', borderRadius: 6 }}>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>{c.label}</div>

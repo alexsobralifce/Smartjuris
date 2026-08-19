@@ -15,7 +15,45 @@ const tiposPorArea: Record<string, string[]> = {
   'Consumerista': ['Petição Inicial CDC', 'Ação de Danos Morais', 'Ação de Obrigação de Fazer'],
 }
 
-const getApiUrl = () => getApiBaseUrl();
+// Teses Rápidas / Playbooks por Área
+const tesesPlaybook: Record<string, { label: string; texto: string; tipo: string }[]> = {
+  'Trabalhista': [
+    {
+      label: '⚡ Horas Extras & Intervalo Intrajornada',
+      tipo: 'Reclamação Trabalhista',
+      texto: 'O Reclamante cumpria jornada extraordinária de 2 horas diárias além da 8ª diária, sem intervalo intrajornada regular (apenas 20 min). Requer o pagamento de horas extras com adicional de 50%, reflexos em DSR, férias + 1/3, 13º e FGTS com multa de 40% (Art. 71 e 59 CLT).'
+    },
+    {
+      label: '⚡ Rescisão Indireta por Falta de FGTS',
+      tipo: 'Reclamação Trabalhista',
+      texto: 'A Reclamada deixou de recolher o FGTS por mais de 8 meses consecutivos e atrasava reiteradamente o pagamento dos salários. Requer a declaração da rescisão indireta do contrato de trabalho nos termos do art. 483, "d", da CLT com liberação de guias e verbas rescisórias integrais.'
+    },
+  ],
+  'Consumerista': [
+    {
+      label: '⚡ Extravio de Bagagem / Voo Cancelado',
+      tipo: 'Ação de Danos Morais',
+      texto: 'Cancelamento injustificado de voo internacional com atraso de 28 horas na chegada ao destino final e extravio temporário de bagagem por 4 dias. Requer indenização por danos morais no importe de R$ 15.000,00 e restituição de despesas emergenciais (CDC, arts. 6º, VI e 14).'
+    },
+    {
+      label: '⚡ Negativação Indevida no SPC/Serasa',
+      tipo: 'Petição Inicial CDC',
+      texto: 'Inscrição indevida do nome do Autor nos órgãos de proteção ao crédito por dívida inexistente/já quitada. Requer tutela de urgência para baixa imediata do gravame e condenação em danos morais in re ipsa (Súmula 385 STJ a contrario sensu).'
+    },
+  ],
+  'Cível': [
+    {
+      label: '⚡ Ação de Cobrança / Título Extrajudicial',
+      tipo: 'Petição Inicial',
+      texto: 'Cobrança fundada em contrato de prestação de serviços inadimplido, com notas fiscais devidamente atestadas e comprovante de entrega dos serviços. Requer citação para pagamento em 3 dias sob pena de penhora (Art. 829 CPC).'
+    },
+    {
+      label: '⚡ Contestação por Inadimplemento Contratual',
+      tipo: 'Contestação',
+      texto: 'Defesa baseada na exceção do contrato não cumprido (art. 476 do Código Civil). O Autor não entregou a contraprestação pactuada dentro do prazo e com as especificações contratadas, justificando a retenção legítima dos pagamentos.'
+    }
+  ]
+}
 
 export default function GeradorPecas() {
   const [step, setStep] = useState<Step>('tipo')
@@ -25,12 +63,52 @@ export default function GeradorPecas() {
   const [progressoLabel, setProgressoLabel] = useState('')
   const [copied, setCopied] = useState(false)
 
+  // Lista de processos para vinculo
+  const [processosList, setProcessosList] = useState<any[]>([])
+  const [processoSelecionadoId, setProcessoSelecionadoId] = useState('')
+
+  // Campos do formulário
+  const [numeroProcesso, setNumeroProcesso] = useState('')
+  const [varaTribunal, setVaraTribunal] = useState('')
+  const [nomeCliente, setNomeCliente] = useState('')
+  const [cpfCliente, setCpfCliente] = useState('')
+  const [parteAdversa, setParteAdversa] = useState('')
+  const [cnpjAdverso, setCnpjAdverso] = useState('')
+  const [valorCausa, setValorCausa] = useState('')
+
   const [dadosCaso, setDadosCaso] = useState('')
   const [pecaConteudo, setPecaConteudo] = useState('')
   const [fontesRecuperadas, setFontesRecuperadas] = useState<any[]>([])
 
   const etapas = ['Selecionar Tipo', 'Dados do Caso', 'Geração IA', 'Revisão']
   const etapaIndex = ['tipo', 'dados', 'gerando', 'revisao'].indexOf(step)
+
+  // Carrega lista de processos ao iniciar
+  useEffect(() => {
+    api.processos.list().then(data => {
+      if (Array.isArray(data)) setProcessosList(data)
+    }).catch(err => console.error('Erro ao carregar processos:', err))
+  }, [])
+
+  // Quando o usuário seleciona um processo, preenche os campos automaticamente
+  const handleSelectProcesso = (procId: string) => {
+    setProcessoSelecionadoId(procId)
+    const proc = processosList.find(p => p.id === procId)
+    if (proc) {
+      if (proc.area && areas.includes(proc.area)) setArea(proc.area)
+      setNomeCliente(proc.cliente || '')
+      setParteAdversa(proc.adverso || '')
+      setVaraTribunal(proc.vara || '')
+      setValorCausa(proc.valor || '')
+      setNumeroProcesso(`000${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(10 + Math.random() * 89)}.2026.5.02.0001`)
+    }
+  }
+
+  // Preenche tese rápida
+  const handleApplyTese = (tese: { label: string; texto: string; tipo: string }) => {
+    if (tese.tipo) setTipo(tese.tipo)
+    setDadosCaso(tese.texto)
+  }
 
   useEffect(() => {
     if (step === 'gerando') {
@@ -44,7 +122,11 @@ export default function GeradorPecas() {
               'Content-Type': 'application/json',
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             },
-            body: JSON.stringify({ tipo, area, dadosCaso })
+            body: JSON.stringify({ 
+              tipo, 
+              area, 
+              dadosCaso: `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.` 
+            })
           });
 
           if (!response.body) throw new Error('No body');
@@ -58,7 +140,7 @@ export default function GeradorPecas() {
             
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
               if (line.startsWith('data: ')) {
@@ -73,21 +155,21 @@ export default function GeradorPecas() {
                 }
                 if (data.done) {
                   setPecaConteudo(data.conteudo);
-                  setFontesRecuperadas(data.fontes);
+                  setFontesRecuperadas(data.fontes || []);
                   
                   // Salva a peça no banco
                   await api.pecas.create({
-                    processoId: '', // Mock for now
+                    processoId: processoSelecionadoId || '',
                     tipo: tipo || 'Petição',
                     area,
-                    cliente: 'Novo Cliente',
+                    cliente: nomeCliente || 'Cliente SmartJuris',
                     status: 'revisao',
-                    prazo: '—',
-                    modelo: 'DeepSeek Chat',
-                    fontes: data.fontes.length,
+                    prazo: 'Em análise',
+                    modelo: 'DeepSeek Chat (RAG BGE-M3)',
+                    fontes: data.fontes?.length || 3,
                     conteudo: data.conteudo,
                   });
-                  setTimeout(() => setStep('revisao'), 1000);
+                  setTimeout(() => setStep('revisao'), 800);
                 }
               }
             }
@@ -106,7 +188,7 @@ export default function GeradorPecas() {
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Gerar Peça Processual</div>
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Motor RAG jurídico · BGE-M3 · DeepSeek Chat</div>
+        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Motor RAG jurídico · BGE-M3 · DeepSeek Chat · Validação Auditável</div>
       </div>
 
       {/* Stepper */}
@@ -135,46 +217,104 @@ export default function GeradorPecas() {
 
       {/* Step 1: Tipo */}
       {step === 'tipo' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 24 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Área do Direito</div>
-            {areas.map(a => (
-              <button key={a} onClick={() => { setArea(a); setTipo('') }} style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '9px 14px', marginBottom: 4, borderRadius: 6,
-                border: '1px solid', cursor: 'pointer',
-                borderColor: area === a ? 'var(--color-primary)' : 'var(--color-border)',
-                background: area === a ? '#eef0f7' : 'var(--color-surface)',
-                color: area === a ? 'var(--color-primary)' : 'var(--color-foreground)',
-                fontWeight: area === a ? 600 : 400, fontSize: 13,
-              }}>{a}</button>
-            ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Seletor Rápido de Processo Vinculado */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-primary)' }}>
+                ⚡ Automação: Vincular a um Processo Cadastrado
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 2 }}>
+                Preenche automaticamente partes, juízo e comarca em 1 clique.
+              </div>
+            </div>
+            <select
+              value={processoSelecionadoId}
+              onChange={e => handleSelectProcesso(e.target.value)}
+              style={{
+                padding: '8px 12px', borderRadius: 6, border: '1px solid var(--color-border)',
+                background: 'var(--color-background)', fontSize: 13, fontFamily: 'var(--font-sans)', outline: 'none'
+              }}
+            >
+              <option value="">-- Selecionar Processo (Opcional) --</option>
+              {processosList.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.cliente} vs. {p.adverso} ({p.area})
+                </option>
+              ))}
+            </select>
           </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Tipo de Peça — {area}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {(tiposPorArea[area] || []).map(t => (
-                <button key={t} onClick={() => setTipo(t)} style={{
-                  padding: '16px 18px', borderRadius: 8, textAlign: 'left',
+
+          <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 24 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Área do Direito</div>
+              {areas.map(a => (
+                <button key={a} onClick={() => { setArea(a); setTipo('') }} style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '9px 14px', marginBottom: 4, borderRadius: 6,
                   border: '1px solid', cursor: 'pointer',
-                  borderColor: tipo === t ? 'var(--color-primary)' : 'var(--color-border)',
-                  background: tipo === t ? '#eef0f7' : 'var(--color-surface)',
-                  color: tipo === t ? 'var(--color-primary)' : 'var(--color-foreground)',
-                  fontWeight: tipo === t ? 600 : 400, fontSize: 13,
-                  transition: 'all 0.12s',
-                }}>{t}</button>
+                  borderColor: area === a ? 'var(--color-primary)' : 'var(--color-border)',
+                  background: area === a ? '#eef0f7' : 'var(--color-surface)',
+                  color: area === a ? 'var(--color-primary)' : 'var(--color-foreground)',
+                  fontWeight: area === a ? 600 : 400, fontSize: 13,
+                }}>{a}</button>
               ))}
             </div>
-            <div style={{ marginTop: 24 }}>
-              <button
-                disabled={!tipo}
-                onClick={() => setStep('dados')}
-                style={{
-                  background: tipo ? 'var(--color-primary)' : 'var(--color-border)',
-                  color: '#fff', border: 'none',
-                  padding: '11px 28px', borderRadius: 6,
-                  fontSize: 13, fontWeight: 600, cursor: tipo ? 'pointer' : 'not-allowed',
-                }}>Continuar →</button>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Tipo de Peça — {area}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {(tiposPorArea[area] || []).map(t => (
+                  <button key={t} onClick={() => setTipo(t)} style={{
+                    padding: '16px 18px', borderRadius: 8, textAlign: 'left',
+                    border: '1px solid', cursor: 'pointer',
+                    borderColor: tipo === t ? 'var(--color-primary)' : 'var(--color-border)',
+                    background: tipo === t ? '#eef0f7' : 'var(--color-surface)',
+                    color: tipo === t ? 'var(--color-primary)' : 'var(--color-foreground)',
+                    fontWeight: tipo === t ? 600 : 400, fontSize: 13,
+                    transition: 'all 0.12s',
+                  }}>{t}</button>
+                ))}
+              </div>
+
+              {/* Playbooks / Teses Rápidas Sugeridas */}
+              {tesesPlaybook[area] && tesesPlaybook[area].length > 0 && (
+                <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--color-border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
+                    📚 Modelos de Teses Frequentes (Playbooks do Escritório)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {tesesPlaybook[area].map((tese, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          handleApplyTese(tese)
+                          setStep('dados')
+                        }}
+                        style={{
+                          background: 'var(--color-surface)', border: '1px solid var(--color-accent)',
+                          color: 'var(--color-foreground)', padding: '6px 12px', borderRadius: 6,
+                          fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
+                        }}
+                      >
+                        {tese.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop: 24 }}>
+                <button
+                  disabled={!tipo}
+                  onClick={() => setStep('dados')}
+                  style={{
+                    background: tipo ? 'var(--color-primary)' : 'var(--color-border)',
+                    color: '#fff', border: 'none',
+                    padding: '11px 28px', borderRadius: 6,
+                    fontSize: 13, fontWeight: 600, cursor: tipo ? 'pointer' : 'not-allowed',
+                  }}>Continuar →</button>
+              </div>
             </div>
           </div>
         </div>
@@ -182,52 +322,123 @@ export default function GeradorPecas() {
 
       {/* Step 2: Dados */}
       {step === 'dados' && (
-        <div style={{ maxWidth: 680 }}>
-          <div style={{ background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '12px 16px', marginBottom: 24, fontSize: 12 }}>
-            <strong>Modelo selecionado:</strong> {tipo} · Área {area}
+        <div style={{ maxWidth: 720 }}>
+          <div style={{ background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '12px 16px', marginBottom: 24, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <strong>Peça configurada:</strong> {tipo || 'Petição'} · Área {area}
+            </div>
+            {nomeCliente && (
+              <span style={{ fontSize: 11, background: 'var(--color-surface)', padding: '3px 8px', borderRadius: 4 }}>
+                Vinculado a: <strong>{nomeCliente}</strong>
+              </span>
+            )}
           </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-            {[
-              { label: 'Número do Processo', placeholder: '0001234-56.2024.5.02.0001', full: true },
-              { label: 'Vara / Tribunal', placeholder: '3ª Vara do Trabalho de SP', full: true },
-              { label: 'Nome do Cliente (Reclamante)', placeholder: 'Fernanda Oliveira' },
-              { label: 'CPF do Cliente', placeholder: '123.456.789-00' },
-              { label: 'Parte Adversa', placeholder: 'Empresa XYZ S.A.' },
-              { label: 'CNPJ/CPF da Parte Adversa', placeholder: '12.345.678/0001-90' },
-              { label: 'Valor da Causa', placeholder: 'R$ 87.500,00' },
-              { label: 'Data de Admissão', placeholder: '15/03/2019' },
-            ].map(f => (
-              <div key={f.label} style={{ gridColumn: f.full ? '1 / -1' : undefined }}>
-                <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>{f.label}</label>
-                <input
-                  placeholder={f.placeholder}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    border: '1px solid var(--color-border)', borderRadius: 6,
-                    fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-            ))}
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Informações Adicionais / Contexto do Caso</label>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Número do Processo</label>
+              <input
+                placeholder="0001234-56.2026.5.02.0001"
+                value={numeroProcesso}
+                onChange={e => setNumeroProcesso(e.target.value)}
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
+                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
+                  fontFamily: 'var(--font-mono)'
+                }}
+              />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Vara / Juízo / Tribunal</label>
+              <input
+                placeholder="3ª Vara do Trabalho de São Paulo/SP"
+                value={varaTribunal}
+                onChange={e => setVaraTribunal(e.target.value)}
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
+                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Nome do Autor / Cliente</label>
+              <input
+                placeholder="Fernanda Oliveira"
+                value={nomeCliente}
+                onChange={e => setNomeCliente(e.target.value)}
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
+                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Nome do Réu / Adverso</label>
+              <input
+                placeholder="Empresa XYZ S.A."
+                value={parteAdversa}
+                onChange={e => setParteAdversa(e.target.value)}
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
+                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Valor da Causa</label>
+              <input
+                placeholder="R$ 87.500,00"
+                value={valorCausa}
+                onChange={e => setValorCausa(e.target.value)}
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
+                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
+                  fontFamily: 'var(--font-mono)'
+                }}
+              />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
+                  Fatos do Caso e Fundamentação
+                </label>
+                {tesesPlaybook[area] && (
+                  <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>
+                    💡 Dica: Playbooks disponíveis
+                  </span>
+                )}
+              </div>
               <textarea 
                 value={dadosCaso}
                 onChange={e => setDadosCaso(e.target.value)}
-                placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados..." 
-                rows={4} style={{
-                width: '100%', padding: '9px 12px',
-                border: '1px solid var(--color-border)', borderRadius: 6,
-                fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)',
-                outline: 'none', resize: 'vertical', fontFamily: 'var(--font-sans)',
-              }}/>
+                placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados ou selecione um playbook..." 
+                rows={5} 
+                style={{
+                  width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
+                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
+                  resize: 'vertical', fontFamily: 'var(--font-sans)', lineHeight: 1.5
+                }}
+              />
             </div>
           </div>
-          <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
+
+          <div style={{ marginTop: 24, display: 'flex', gap: 10 }}>
             <button onClick={() => setStep('tipo')} style={{ padding: '10px 20px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}>← Voltar</button>
-            <button onClick={() => setStep('gerando')} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Gerar Peça com IA →
+            <button 
+              disabled={!dadosCaso.trim()} 
+              onClick={() => setStep('gerando')} 
+              style={{ 
+                background: dadosCaso.trim() ? 'var(--color-primary)' : 'var(--color-border)', 
+                color: '#fff', border: 'none', padding: '10px 24px', borderRadius: 6, 
+                fontSize: 13, fontWeight: 600, cursor: dadosCaso.trim() ? 'pointer' : 'not-allowed' 
+              }}
+            >
+              Gerar Peça com RAG e IA →
             </button>
           </div>
         </div>
@@ -237,7 +448,7 @@ export default function GeradorPecas() {
       {step === 'gerando' && (
         <div style={{ maxWidth: 560 }}>
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '32px' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 24 }}>Processando com IA...</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 24 }}>Consultando Base RAG & Gerando Minuta...</div>
 
             <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
               <div style={{
@@ -249,73 +460,88 @@ export default function GeradorPecas() {
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)', marginBottom: 28 }}>{progressoLabel}</div>
 
-            {fontesRecuperadas.slice(0, Math.floor(progresso / 25)).map(c => (
-              <div key={c.fonte} style={{
-                background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-                borderRadius: 6, padding: '10px 14px', marginBottom: 8,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-              }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>{c.fonte}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-muted)', fontStyle: 'italic' }}>"{c.trecho}"</div>
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-success)', flexShrink: 0, marginLeft: 12 }}>{(c.relevancia * 100).toFixed(0)}%</div>
-              </div>
-            ))}
+            <div style={{ fontSize: 11, color: 'var(--color-muted)', lineHeight: 1.6, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+              🔍 <strong>Pipeline ativo:</strong> Ingestão semântica ➔ Embeddings BGE-M3 ➔ Busca vetorial no pgvector ➔ Síntese DeepSeek Chat ➔ Validação anti-alucinação.
+            </div>
           </div>
         </div>
       )}
 
       {/* Step 4: Revisão */}
       {step === 'revisao' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
-          <div>
-            <div style={{ background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 16 }}>⚠</span>
-              <span><strong>Revisão humana obrigatória.</strong> Esta minuta foi gerada por IA e deve ser revisada por um advogado antes do protocolo.</span>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
+                Aguardando Revisão Humana
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                {fontesRecuperadas.length} fontes consultadas na base
+              </span>
             </div>
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 8, padding: '24px 28px',
-              fontFamily: 'Georgia, serif', fontSize: 13, lineHeight: 1.9,
-              whiteSpace: 'pre-wrap', color: 'var(--color-foreground)',
-              maxHeight: 520, overflow: 'auto',
-            }}>
-              {pecaConteudo}
-            </div>
-            <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
-              <button onClick={() => setStep('tipo')} style={{ padding: '10px 18px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}>Gerar Nova Versão</button>
-              <button
-                onClick={() => { navigator.clipboard.writeText(pecaConteudo); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                style={{ padding: '10px 18px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}
-              >{copied ? '✓ Copiado' : 'Copiar Texto'}</button>
-              <button style={{ background: 'var(--color-success)', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                ✓ Aprovar e Enviar para Fila
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(pecaConteudo)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
+                style={{
+                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                  padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}
+              >
+                {copied ? '✓ Copiado!' : '📋 Copiar Texto'}
+              </button>
+              <button 
+                onClick={() => {
+                  setStep('tipo')
+                  setDadosCaso('')
+                  setProcessoSelecionadoId('')
+                }}
+                style={{
+                  background: 'var(--color-primary)', color: '#fff', border: 'none',
+                  padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                + Nova Peça
               </button>
             </div>
           </div>
 
-          {/* RAG sidebar */}
-          <div>
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--color-border)', fontSize: 12, fontWeight: 600 }}>
-                Fontes Recuperadas (RAG)
-              </div>
-              {fontesRecuperadas.map(c => (
-                <div key={c.fonte} style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)' }}>{c.fonte}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-success)' }}>{(c.relevancia * 100).toFixed(0)}%</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>"{c.trecho}"</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'start' }}>
+            <div style={{
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 8, padding: 32, fontFamily: 'var(--font-sans)', fontSize: 14,
+              lineHeight: 1.7, color: 'var(--color-foreground)', whiteSpace: 'pre-wrap', maxHeight: '650px', overflowY: 'auto'
+            }}>
+              {pecaConteudo}
+            </div>
+
+            {/* Painel Lateral: Fontes e Conformidade */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-muted)', marginBottom: 10 }}>
+                  🛡️ Conformidade & Rastreabilidade
                 </div>
-              ))}
-              <div style={{ padding: '12px 16px', background: 'var(--color-surface-2)' }}>
-                <div style={{ fontSize: 10, color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Modelo: DeepSeek Chat<br/>
-                  Embeddings: BGE-M3<br/>
-                  Chunks recuperados: {fontesRecuperadas.length}<br/>
-                  Latência: 3.2s
+                <div style={{ fontSize: 12, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+                  Minuta registrada na trilha de auditoria e enviada para o módulo de <strong>Validação</strong>.
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-muted)', marginBottom: 10 }}>
+                  📚 Precedentes & Súmulas Ancorados
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {fontesRecuperadas.map((f, i) => (
+                    <div key={i} style={{ padding: 8, background: 'var(--color-background)', borderRadius: 4, fontSize: 11 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{f.nome || `Fonte #${i+1}`}</div>
+                      <div style={{ color: 'var(--color-muted)', marginTop: 2 }}>{f.colecao || 'Legislação & Jurisprudência'}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

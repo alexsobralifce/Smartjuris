@@ -5,9 +5,10 @@ import GeradorPecas from './components/GeradorPecas'
 import Validacao from './components/Validacao'
 import Jurimetria from './components/Jurimetria'
 import Base from './components/Base'
+import Documentacao from './components/Documentacao'
 import LandingPage from './components/LandingPage'
 
-type Route = 'dashboard' | 'processos' | 'pecas' | 'validacao' | 'jurimetria' | 'base'
+type Route = 'dashboard' | 'processos' | 'pecas' | 'validacao' | 'jurimetria' | 'base' | 'documentacao'
 
 const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -16,6 +17,7 @@ const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
   { id: 'validacao', label: 'Validação', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', badge: 3 },
   { id: 'jurimetria', label: 'Jurimetria', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   { id: 'base', label: 'Base RAG', icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4' },
+  { id: 'documentacao', label: 'Documentação', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
 ]
 
 export default function App() {
@@ -30,6 +32,12 @@ export default function App() {
       setUser(JSON.parse(cachedUser))
     }
   }, [token])
+
+  useEffect(() => {
+    const handleNav = () => setRoute('pecas')
+    window.addEventListener('nav-pecas', handleNav)
+    return () => window.removeEventListener('nav-pecas', handleNav)
+  }, [])
 
   const handleLoginSuccess = (newToken: string, newUser: { name: string; role: string; email: string }) => {
     localStorage.setItem('smartjuris_token', newToken)
@@ -206,6 +214,7 @@ export default function App() {
         {route === 'validacao' && <Validacao />}
         {route === 'jurimetria' && <Jurimetria />}
         {route === 'base' && <Base />}
+        {route === 'documentacao' && <Documentacao />}
       </main>
     </div>
   )

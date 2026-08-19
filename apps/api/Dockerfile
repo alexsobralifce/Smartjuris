@@ -23,6 +23,8 @@ RUN pnpm --filter @lexia/api build
 FROM node:22-alpine AS runner
 WORKDIR /app
 
+ENV NODE_ENV=production
+
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy entire workspace (with node_modules from builder)

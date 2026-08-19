@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { maskCurrency } from '../utils/masks'
+import Toast, { ToastMessage } from './Toast'
 
 interface Lead {
   id: string
@@ -24,6 +26,15 @@ export default function Crm() {
   const [novoValor, setNovoValor] = useState('R$ 30.000,00')
   const [novoContato, setNovoContato] = useState('')
 
+  // Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
+
   const fases = [
     { id: 'lead', title: '1. Novos Leads', color: 'var(--color-primary)' },
     { id: 'diagnostico', title: '2. Em Diagnóstico', color: 'var(--color-accent)' },
@@ -33,7 +44,14 @@ export default function Crm() {
 
   const handleAddLead = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!novoNome.trim()) return
+    if (!novoNome.trim()) {
+      addToast('error', 'O Nome do Prospect / Cliente é obrigatório.')
+      return
+    }
+    if (!novoContato.trim()) {
+      addToast('error', 'Informe um meio de contato (telefone ou e-mail).')
+      return
+    }
     const item: Lead = {
       id: Date.now().toString(),
       nome: novoNome,
@@ -46,6 +64,7 @@ export default function Crm() {
     setShowNovo(false)
     setNovoNome('')
     setNovoContato('')
+    addToast('success', 'Nova oportunidade criada no funil CRM!')
   }
 
   const handleMoveFase = (id: string, nextFase: 'lead' | 'diagnostico' | 'proposta' | 'fechado') => {
@@ -154,12 +173,12 @@ export default function Crm() {
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>VALOR ESTIMADO DO CONTRATO</label>
-                <input required type="text" value={novoValor} onChange={e => setNovoValor(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>VALOR ESTIMADO DO CONTRATO *</label>
+                <input required type="text" value={novoValor} onChange={e => setNovoValor(maskCurrency(e.target.value))} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>CONTATO / TELEFONE / EMAIL</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>CONTATO / TELEFONE / EMAIL *</label>
                 <input required type="text" placeholder="contato@empresa.com" value={novoContato} onChange={e => setNovoContato(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
               </div>
 
@@ -171,6 +190,9 @@ export default function Crm() {
           </div>
         </div>
       )}
+
+      {/* Componente Toast */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

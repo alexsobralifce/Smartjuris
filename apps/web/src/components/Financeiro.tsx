@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import { maskCurrency } from '../utils/masks'
+import Toast, { ToastMessage } from './Toast'
 
 export default function Financeiro() {
   const [activeTab, setActiveTab] = useState<'honorarios' | 'timesheet'>('honorarios')
   const [lancamentos, setLancamentos] = useState<any[]>([])
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Sistema de Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
 
   // Timer local
   const [timerRunning, setTimerRunning] = useState(false)
@@ -59,7 +70,14 @@ export default function Financeiro() {
   }
 
   const handleSaveTimer = async () => {
-    if (seconds === 0 || !descricaoAtividade.trim()) return
+    if (seconds === 0) {
+      addToast('error', 'Inicie o cronômetro antes de salvar o timesheet.')
+      return
+    }
+    if (!descricaoAtividade.trim()) {
+      addToast('error', 'Digite a descrição da atividade faturável.')
+      return
+    }
     const minutos = Math.max(1, Math.round(seconds / 60))
     try {
       await api.financeiro.createTimesheet({
@@ -71,14 +89,24 @@ export default function Financeiro() {
       setSeconds(0)
       setTimerRunning(false)
       setDescricaoAtividade('')
+      addToast('success', 'Registro de horas salvo no Timesheet com sucesso!')
       loadData()
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao salvar horas no timesheet.')
     }
   }
 
   const handleCreateLancamento = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!novoCliente.trim()) {
+      addToast('error', 'O Nome do Cliente é obrigatório no lançamento financeiro.')
+      return
+    }
+    if (!novoValor.trim()) {
+      addToast('error', 'Informe o Valor do lançamento.')
+      return
+    }
     try {
       await api.financeiro.createLancamento({
         cliente: novoCliente,
@@ -89,9 +117,11 @@ export default function Financeiro() {
       })
       setShowNovoLancamento(false)
       setNovoCliente('')
+      addToast('success', 'Lançamento de honorários registrado com sucesso!')
       loadData()
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao registrar lançamento financeiro.')
     }
   }
 
@@ -337,12 +367,19 @@ export default function Financeiro() {
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>VALOR</label>
-                <input required type="text" value={novoValor} onChange={e => setNovoValor(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>VALOR MONETÁRIO *</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="R$ 0,00"
+                  value={novoValor}
+                  onChange={e => setNovoValor(maskCurrency(e.target.value))}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }}
+                />
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>DATA DE VENCIMENTO</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>DATA DE VENCIMENTO *</label>
                 <input required type="date" value={novoVencimento} onChange={e => setNovoVencimento(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
               </div>
 
@@ -354,6 +391,9 @@ export default function Financeiro() {
           </div>
         </div>
       )}
+
+      {/* Componente de Mensageria Flutuante */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

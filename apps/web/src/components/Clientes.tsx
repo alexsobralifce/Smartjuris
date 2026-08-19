@@ -1,12 +1,85 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import { maskCpfCnpj, maskCEP, maskPhone, isValidEmail } from '../utils/masks'
+import Toast, { ToastMessage } from './Toast'
+
+const initialClientes = [
+  {
+    id: 'c1',
+    tipo: 'PF',
+    nome: 'Fernanda Oliveira',
+    cpfCnpj: '321.654.987-00',
+    email: 'fernanda.oliveira@email.com',
+    telefone: '(11) 98765-4321',
+    cidade: 'São Paulo',
+    uf: 'SP',
+    qualificacao: 'brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 321.654.987-00, residente e domiciliada na Praça da Sé, nº 100, Sé, São Paulo/SP, CEP 01001-000'
+  },
+  {
+    id: 'c2',
+    tipo: 'PF',
+    nome: 'Roberto Souza',
+    cpfCnpj: '123.456.789-11',
+    email: 'roberto.souza@email.com',
+    telefone: '(11) 97654-3210',
+    cidade: 'São Paulo',
+    uf: 'SP',
+    qualificacao: 'brasileiro, casado, engenheiro civil, inscrito no CPF sob o nº 123.456.789-11, residente e domiciliado na Rua Vergueiro, nº 500, Vila Mariana, São Paulo/SP, CEP 04001-000'
+  },
+  {
+    id: 'c3',
+    tipo: 'PJ',
+    nome: 'Construtora Alfa',
+    cpfCnpj: '12.345.678/0001-99',
+    email: 'contato@construtoraalfa.com.br',
+    telefone: '(11) 3344-5566',
+    cidade: 'São Paulo',
+    uf: 'SP',
+    qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-99, com sede na Avenida Paulista, nº 1500, Conj 81, Bela Vista, São Paulo/SP, CEP 01310-100'
+  },
+  {
+    id: 'c4',
+    tipo: 'PF',
+    nome: 'Lúcia Ferreira',
+    cpfCnpj: '456.789.012-33',
+    email: 'lucia.ferreira@email.com',
+    telefone: '(11) 96543-2109',
+    cidade: 'São Paulo',
+    uf: 'SP',
+    qualificacao: 'brasileira, viúva, aposentada, inscrita no CPF sob o nº 456.789.012-33, residente e domiciliada na Rua Teodoro Sampaio, nº 800, Pinheiros, São Paulo/SP, CEP 05401-000'
+  },
+  {
+    id: 'c5',
+    tipo: 'PJ',
+    nome: 'Indústria Metalúrgica Sul',
+    cpfCnpj: '98.765.432/0001-10',
+    email: 'diretoria@metalsul.com.br',
+    telefone: '(11) 4004-9988',
+    cidade: 'Santo André',
+    uf: 'SP',
+    qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 98.765.432/0001-10, com sede na Avenida Industrial, nº 2000, Santo André/SP, CEP 09010-000'
+  }
+]
 
 export default function Clientes() {
-  const [clientes, setClientes] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [clientes, setClientes] = useState<any[]>(initialClientes)
+  const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [tipoFilter, setTipoFilter] = useState<'Todos' | 'PF' | 'PJ'>('Todos')
   const [showModal, setShowModal] = useState(false)
+
+  // Sistema de Mensageria / Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4500)
+  }
+  const dismissToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }
 
   // Formulário
   const [tipo, setTipo] = useState<'PF' | 'PJ'>('PF')
@@ -22,6 +95,9 @@ export default function Clientes() {
   const [cidade, setCidade] = useState('')
   const [uf, setUf] = useState('')
   const [qualificacao, setQualificacao] = useState('')
+
+  // Erros de validação inline
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Estado de consulta do ViaCEP
   const [buscandoCep, setBuscandoCep] = useState(false)
@@ -45,8 +121,9 @@ export default function Clientes() {
 
   // Função para buscar endereço por CEP na API publica ViaCEP
   const handleBuscarCep = async (cepInput: string) => {
-    setCep(cepInput)
-    const cleanCep = cepInput.replace(/\D/g, '')
+    const masked = maskCEP(cepInput)
+    setCep(masked)
+    const cleanCep = masked.replace(/\D/g, '')
     if (cleanCep.length === 8) {
       setBuscandoCep(true)
       setCepMsg('Buscando endereço via ViaCEP...')
@@ -75,11 +152,25 @@ export default function Clientes() {
 
   const handleSaveCliente = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!nome.trim()) return
+
+    // Validação estrita dos campos obrigatórios
+    const newErrors: Record<string, string> = {}
+    if (!nome.trim()) newErrors.nome = 'O Nome / Razão Social é obrigatório.'
+    if (!cpfCnpj.trim()) newErrors.cpfCnpj = `O ${tipo === 'PF' ? 'CPF' : 'CNPJ'} é obrigatório.`
+    if (email.trim() && !isValidEmail(email)) newErrors.email = 'Insira um e-mail válido.'
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      const msg = Object.values(newErrors)[0]
+      addToast('error', msg)
+      return
+    }
+
+    setErrors({})
 
     const qualifText = qualificacao.trim() || (tipo === 'PF' 
-      ? `brasileiro(a), inscrito(a) no CPF sob o nº ${cpfCnpj || '000.000.000-00'}, residente e domiciliado(a) na ${logradouro || 'Rua'}, nº ${numero || 'S/N'}, ${bairro || 'Bairro'}, ${cidade || 'São Paulo'}/${uf || 'SP'}, CEP ${cep || '00000-000'}`
-      : `pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${cpfCnpj || '00.000.000/0001-00'}, com sede na ${logradouro || 'Rua'}, nº ${numero || 'S/N'}, ${bairro || 'Bairro'}, ${cidade || 'São Paulo'}/${uf || 'SP'}`)
+      ? `brasileiro(a), inscrito(a) no CPF sob o nº ${cpfCnpj}, residente e domiciliado(a) na ${logradouro || 'Rua'}, nº ${numero || 'S/N'}, ${bairro || 'Bairro'}, ${cidade || 'São Paulo'}/${uf || 'SP'}, CEP ${cep || '00000-000'}`
+      : `pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${cpfCnpj}, com sede na ${logradouro || 'Rua'}, nº ${numero || 'S/N'}, ${bairro || 'Bairro'}, ${cidade || 'São Paulo'}/${uf || 'SP'}`)
 
     try {
       await api.clientes.create({
@@ -99,18 +190,22 @@ export default function Clientes() {
       })
       setShowModal(false)
       resetForm()
+      addToast('success', 'Cliente cadastrado com sucesso!')
       loadClientes()
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao salvar cliente no banco de dados.')
     }
   }
 
   const handleDeleteCliente = async (id: string) => {
     try {
       await api.clientes.delete(id)
+      addToast('info', 'Cliente removido.')
       loadClientes()
     } catch (e) {
       console.error(e)
+      addToast('error', 'Erro ao remover cliente.')
     }
   }
 
@@ -273,23 +368,71 @@ export default function Clientes() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>NOME COMPLETO OU RAZÃO SOCIAL</label>
-                  <input required type="text" placeholder="Ex: Fernanda Oliveira" value={nome} onChange={e => setNome(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
+                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.nome ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>NOME COMPLETO OU RAZÃO SOCIAL *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Fernanda Oliveira"
+                    value={nome}
+                    onChange={e => {
+                      setNome(e.target.value)
+                      if (errors.nome) setErrors(prev => ({ ...prev, nome: '' }))
+                    }}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      border: errors.nome ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
+                      borderRadius: 6, fontSize: 13, background: 'var(--color-surface)'
+                    }}
+                  />
+                  {errors.nome && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.nome}</span>}
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>{tipo === 'PF' ? 'CPF' : 'CNPJ'}</label>
-                  <input type="text" placeholder={tipo === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'} value={cpfCnpj} onChange={e => setCpfCnpj(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)' }} />
+                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.cpfCnpj ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>{tipo === 'PF' ? 'CPF *' : 'CNPJ *'}</label>
+                  <input
+                    type="text"
+                    placeholder={tipo === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'}
+                    value={cpfCnpj}
+                    onChange={e => {
+                      setCpfCnpj(maskCpfCnpj(e.target.value, tipo))
+                      if (errors.cpfCnpj) setErrors(prev => ({ ...prev, cpfCnpj: '' }))
+                    }}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      border: errors.cpfCnpj ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
+                      borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)', background: 'var(--color-surface)'
+                    }}
+                  />
+                  {errors.cpfCnpj && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.cpfCnpj}</span>}
                 </div>
 
                 <div>
                   <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>TELEFONE / WHATSAPP</label>
-                  <input type="text" placeholder="(11) 98877-6655" value={telefone} onChange={e => setTelefone(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
+                  <input
+                    type="text"
+                    placeholder="(11) 98877-6655"
+                    value={telefone}
+                    onChange={e => setTelefone(maskPhone(e.target.value))}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }}
+                  />
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>EMAIL</label>
-                  <input type="email" placeholder="cliente@email.com" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }} />
+                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.email ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>EMAIL INSTITUCIONAL</label>
+                  <input
+                    type="email"
+                    placeholder="cliente@email.com"
+                    value={email}
+                    onChange={e => {
+                      setEmail(e.target.value)
+                      if (errors.email) setErrors(prev => ({ ...prev, email: '' }))
+                    }}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      border: errors.email ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
+                      borderRadius: 6, fontSize: 13
+                    }}
+                  />
+                  {errors.email && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.email}</span>}
                 </div>
               </div>
 
@@ -338,6 +481,9 @@ export default function Clientes() {
           </div>
         </div>
       )}
+
+      {/* Componente Toast de Mensageria Flutuante */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

@@ -14,7 +14,7 @@ const tiposPorArea: Record<string, string[]> = {
   'Consumerista': ['Petição Inicial CDC', 'Ação de Danos Morais', 'Ação de Obrigação de Fazer'],
 }
 
-const API_BASE = 'http://localhost:5433/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export default function GeradorPecas() {
   const [step, setStep] = useState<Step>('tipo')
@@ -35,9 +35,13 @@ export default function GeradorPecas() {
     if (step === 'gerando') {
       const run = async () => {
         try {
+          const token = localStorage.getItem('smartjuris_token');
           const response = await fetch(`${API_BASE}/rag/generate`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({ tipo, area, dadosCaso })
           });
 

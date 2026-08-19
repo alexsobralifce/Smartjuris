@@ -9,7 +9,10 @@ const authFetch = (url: string, options: RequestInit = {}) => {
     headers['Content-Type'] = 'application/json';
   }
 
-  return fetch(url, { ...options, headers }).then(async r => {
+  const baseUrl = import.meta.env.VITE_API_URL || '';
+  const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+
+  return fetch(fullUrl, { ...options, headers }).then(async r => {
     if (r.status === 401) {
       localStorage.removeItem('smartjuris_token');
       localStorage.removeItem('smartjuris_user');

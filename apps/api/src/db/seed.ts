@@ -141,22 +141,52 @@ em face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e 
   // Insert Documentos
   await db.insert(documentos).values([
     {
-      nome: 'CLT_Compilada_2024.pdf',
+      nome: 'Lei_8213_1991_Beneficios_Previdenciarios.pdf',
+      colecao: 'Legislação Previdenciária',
+      tamanho: '1.8 MB',
+      chunks: 920
+    },
+    {
+      nome: 'Lei_8212_1991_Custeio_Seguridade_Social.pdf',
+      colecao: 'Legislação Previdenciária',
+      tamanho: '1.4 MB',
+      chunks: 640
+    },
+    {
+      nome: 'Decreto_3048_1999_Regulamento_Previdencia_RPS.pdf',
+      colecao: 'Legislação Previdenciária',
+      tamanho: '3.2 MB',
+      chunks: 1480
+    },
+    {
+      nome: 'IN_128_2022_INSS_Processo_Administrativo.pdf',
+      colecao: 'Legislação Previdenciária',
+      tamanho: '4.1 MB',
+      chunks: 2100
+    },
+    {
+      nome: 'Sumulas_TNU_e_CRPS_Previdenciario.pdf',
+      colecao: 'Jurisprudência Previdenciária',
+      tamanho: '1.2 MB',
+      chunks: 530
+    },
+    {
+      nome: 'CPC_Lei_13105_2015_Compilado.pdf',
+      colecao: 'Legislação Federal',
+      tamanho: '3.5 MB',
+      chunks: 1420
+    },
+    {
+      nome: 'CLT_Compilada_Atualizada_2026.pdf',
       colecao: 'Legislação Federal',
       tamanho: '2.4 MB',
-      chunks: 845
+      chunks: 1150
     },
     {
-      nome: 'Súmulas_TST_Atualizadas.pdf',
+      nome: 'Súmulas_TST_STF_STJ_Atualizadas.pdf',
       colecao: 'Jurisprudência',
       tamanho: '1.1 MB',
-      chunks: 312
-    },
-    {
-      nome: 'Jurisprudencia_Danos_Morais_Aereo.pdf',
-      colecao: 'Jurisprudência',
-      tamanho: '850 KB',
-      chunks: 95
+      chunks: 680
     }
   ]);
 

@@ -3,8 +3,9 @@ import { api } from '../api/client'
 import type { Documento } from '@lexia/shared'
 
 const colecoes = [
+  { id: 'previdenciario', nome: 'Legislação Previdenciária', lastSync: '19/08/2026 14:15', status: 'ok', desc: 'Lei 8.213/91, Lei 8.212/91, Decreto 3.048/99 (RPS), IN 128/22 INSS, Súmulas TNU e CRPS' },
   { id: 'legislacao',    nome: 'Legislação Federal Compilada', lastSync: '19/08/2026 14:00', status: 'ok', desc: 'CPC/2015, CLT, Código Civil, CDC, CF/88, CTN — BGE-M3 (1024d)' },
-  { id: 'jurisprudencia', nome: 'Jurisprudência Oficial & Súmulas', lastSync: '19/08/2026 12:00', status: 'ok', desc: 'Súmulas Vinculantes STF, Súmulas STJ, TST e TJs estaduais' },
+  { id: 'jurisprudencia', nome: 'Jurisprudência Oficial & Súmulas', lastSync: '19/08/2026 12:00', status: 'ok', desc: 'Súmulas Vinculantes STF, Súmulas STJ, TST, TNU e TJs' },
   { id: 'interno',       nome: 'Peças & Modelos do Escritório', lastSync: '18/08/2026 16:30', status: 'ok', desc: 'Peças aprovadas e protocoladas — estilo e teses proprietárias' },
   { id: 'clausulas',     nome: 'Banco de Cláusulas Contratuais', lastSync: '15/08/2026 10:00', status: 'ok', desc: 'Playbooks de minutas contratuais por ramo e tipo de risco' },
 ]

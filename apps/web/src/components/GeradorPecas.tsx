@@ -52,6 +52,23 @@ const tesesPlaybook: Record<string, { label: string; texto: string; tipo: string
       tipo: 'Contestação',
       texto: 'Defesa baseada na exceção do contrato não cumprido (art. 476 do Código Civil). O Autor não entregou a contraprestação pactuada dentro do prazo e com as especificações contratadas, justificando a retenção legítima dos pagamentos.'
     }
+  ],
+  'Previdenciário': [
+    {
+      label: '⚡ Aposentadoria Especial / Conversão PPP (Lei 8.213/91)',
+      tipo: 'Ação de Concessão de Benefício',
+      texto: 'O Segurado trabalhou por mais de 25 anos exposto de forma habitual e permanente a agentes nocivos (ruído acima de 85 dB e hidrocarbonetos), conforme comprovado por Perfil Profissiográfico Previdenciário (PPP) e LTCAT. Requer o reconhecimento do tempo especial, a conversão do período e a imediata concessão da Aposentadoria Especial com pagamento das parcelas vencidas desde a DER (Lei 8.213/91, art. 57).'
+    },
+    {
+      label: '⚡ Restabelecimento de Auxílio-Incapacidade / Perícia Judicial',
+      tipo: 'Ação de Concessão de Benefício',
+      texto: 'Cessação indevida de benefício por incapacidade temporária (antigo auxílio-doença) pelo INSS sem a efetiva recuperação da capacidade laboral do Segurado. Requer a realização de perícia médica judicial por perito ortopedista/especialista e o restabelecimento imediato do benefício com tutela provisória de urgência.'
+    },
+    {
+      label: '⚡ Revisão de Benefício Previdenciário / RMI',
+      tipo: 'Revisão de Benefício',
+      texto: 'O cálculo da Renda Mensal Inicial (RMI) pelo INSS não computou corretamente os salários de contribuição e verbas reconhecidas em reclamação trabalhista transitada em julgado. Requer a revisão do valor do benefício mantido, a retificação do CNIS e o pagamento das diferenças retroativas respeitada a prescrição quinquenal.'
+    }
   ]
 }
 

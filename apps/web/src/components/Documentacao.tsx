@@ -330,6 +330,10 @@ export default function Documentacao() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[
+                  { lei: 'Lei de Benefícios da Previdência Social (LBPS / Lei 8.213/1991)', status: '🟢 Indexado & Atualizado', chunks: '920 chunks vetoriais' },
+                  { lei: 'Regulamento da Previdência Social (RPS / Decreto 3.048/1999)', status: '🟢 Indexado & Atualizado', chunks: '1.480 chunks vetoriais' },
+                  { lei: 'Instrução Normativa PRES/INSS nº 128/2022 (Processo Administrativo)', status: '🟢 Indexado & Atualizado', chunks: '2.100 chunks vetoriais' },
+                  { lei: 'Súmulas da TNU e Conselho de Recursos da Previdência (CRPS)', status: '🟢 Indexado & Atualizado', chunks: '530 chunks vetoriais' },
                   { lei: 'Código de Processo Civil (CPC / Lei 13.105/2015)', status: '🟢 Indexado & Atualizado', chunks: '1.420 chunks vetoriais' },
                   { lei: 'Consolidação das Leis do Trabalho (CLT)', status: '🟢 Indexado & Atualizado', chunks: '1.150 chunks vetoriais' },
                   { lei: 'Código Civil (Lei 10.406/2002)', status: '🟢 Indexado & Atualizado', chunks: '1.890 chunks vetoriais' },

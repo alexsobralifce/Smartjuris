@@ -43,7 +43,11 @@ export const api = {
       return authFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     },
     logout: () => authFetch('/api/auth/logout', { method: 'POST' }),
-    me: () => authFetch('/api/auth/me'),
+    me: () => {
+      // Sondagem de sessão: NÃO deve disparar reload em 401 (visitante sem cookie é normal).
+      const baseUrl = getApiBaseUrl();
+      return fetch(`${baseUrl}/api/auth/me`, { credentials: 'include' });
+    },
   },
   processos: {
     list: () => authFetch('/api/processos').then(r => r.json()),

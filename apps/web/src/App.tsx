@@ -246,7 +246,7 @@ export default function App() {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {nav.filter(item => {
             if (!user) return false
             if (user.role === 'admin' || user.role === 'root') return true // admin e root veem todos os módulos
@@ -302,71 +302,8 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Suporte Técnico */}
-        <div style={{ padding: '12px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          {sidebarOpen ? (
-            <div style={{
-              padding: '10px',
-              borderRadius: 6,
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.06)'
-            }}>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Suporte Técnico</div>
-              <a
-                href="https://wa.me/5588993573809"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  color: 'var(--color-accent)',
-                  textDecoration: 'none',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  transition: 'opacity 0.15s'
-                }}
-                onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-              >
-                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.733-1.455L0 24zm6.59-4.846c1.66.986 3.292 1.503 5.343 1.504 5.518 0 10.005-4.486 10.008-10.004.002-2.673-1.04-5.184-2.937-7.082C17.16 1.671 14.654.626 12.012.626 6.495.626 2.006 5.111 2.003 10.63c-.001 2.083.548 4.115 1.591 5.922L2.557 20.3l3.96-1.036c.057.031.114.062.17.09z" />
-                </svg>
-                <span>(88) 99357-3809</span>
-              </a>
-            </div>
-          ) : (
-            <a
-              href="https://wa.me/5588993573809"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Suporte Técnico (WhatsApp): (88) 99357-3809"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 36,
-                height: 36,
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                color: 'var(--color-accent)',
-                textDecoration: 'none',
-                margin: '0 auto',
-                transition: 'background 0.15s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-            >
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.733-1.455L0 24zm6.59-4.846c1.66.986 3.292 1.503 5.343 1.504 5.518 0 10.005-4.486 10.008-10.004.002-2.673-1.04-5.184-2.937-7.082C17.16 1.671 14.654.626 12.012.626 6.495.626 2.006 5.111 2.003 10.63c-.001 2.083.548 4.115 1.591 5.922L2.557 20.3l3.96-1.036c.057.031.114.062.17.09z" />
-              </svg>
-            </a>
-          )}
-        </div>
-
         {/* Toggle + User */}
-        <div style={{ padding: '12px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ flexShrink: 0, padding: '12px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <button
             onClick={() => setSidebarOpen(v => !v)}
             style={{

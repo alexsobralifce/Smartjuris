@@ -34,7 +34,7 @@ router.post('/', async (req, res) => {
     }
     const data = parsed.data;
     const [nova] = await db.insert(pecas).values({
-      processoId: data.processoId ?? null,
+      processoId: (data.processoId && data.processoId.trim() !== '') ? data.processoId : null,
       tipo: data.tipo,
       area: data.area,
       cliente: data.cliente,

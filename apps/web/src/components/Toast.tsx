@@ -66,7 +66,7 @@ export default function Toast({ toasts, onDismiss }: ToastProps) {
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span style={{ fontSize: FONT.xl }}>{icon}</span>
               <div>
-                <strong>{toast.type === 'error' ? 'Atenção / Campo Pendente' : toast.type === 'success' ? 'Sucesso' : 'Aviso'}</strong>
+                <strong>{toast.type === 'error' ? 'Erro' : toast.type === 'success' ? 'Sucesso' : toast.type === 'warning' ? 'Atenção' : 'Aviso'}</strong>
                 <div style={{ marginTop: 2, fontSize: FONT.base }}>{toast.text}</div>
               </div>
             </div>

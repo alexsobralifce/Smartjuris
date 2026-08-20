@@ -292,7 +292,7 @@ export default function GeradorPecas() {
                   
                   // Salva a peça no banco
                   const res = await api.pecas.create({
-                    processoId: processoSelecionadoId || '',
+                    processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
                     tipo: tipo || 'Petição',
                     area,
                     cliente: nomeCliente || 'Cliente SmartJuris',
@@ -740,8 +740,8 @@ export default function GeradorPecas() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {fontesRecuperadas.map((f, i) => (
                     <div key={i} style={{ padding: 8, background: 'var(--color-background)', borderRadius: RADIUS.chip, fontSize: FONT.sm }}>
-                      <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{f.nome || `Fonte #${i+1}`}</div>
-                      <div style={{ color: 'var(--color-muted)', marginTop: 2 }}>{f.colecao || 'Legislação & Jurisprudência'}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{f.fonte || f.nome || `Fonte #${i+1}`}</div>
+                      <div style={{ color: 'var(--color-muted)', marginTop: 2 }}>{f.trecho || f.colecao || 'Legislação & Jurisprudência'}</div>
                     </div>
                   ))}
                 </div>

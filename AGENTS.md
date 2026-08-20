@@ -2,6 +2,13 @@
 
 React + Vite + Tailwind CSS v4 + Express + Drizzle ORM + PostgreSQL (pgvector).
 
+## Diretrizes Obrigatórias para Agentes de IA
+
+> [!IMPORTANT]
+> **Leitura Prévia de Skills**: Antes de iniciar o planejamento ou a implementação de qualquer tarefa ou funcionalidade no sistema, o agente de IA **DEVE SEMPRE** verificar e ler atentamente as instruções das **skills do sistema** disponíveis (`view_file` nas skills relevantes em `.gemini/antigravity-ide/builtin/skills/` ou `.agents/skills/`) para garantir conformidade rigorosa com os fluxos, arquitetura e convenções estabelecidas.
+
+---
+
 ## Development Server
 
 O servidor Vite e o backend Express rodam no monorepo via `pnpm`:
@@ -28,6 +35,7 @@ O servidor Vite e o backend Express rodam no monorepo via `pnpm`:
 | Financeiro | `financeiro` | `src/components/Financeiro.tsx` | Controle de honorários fixos e de êxito (ad exitum) + Cronômetro de Timesheet faturável (billable hours) |
 | Contratos | `contratos` | `src/components/Contratos.tsx` | Scanner autônomo de minutas contratuais para detecção de riscos e sugestão de redações do playbook |
 | CRM & Funil | `crm` | `src/components/Crm.tsx` | Pipeline Kanban de atração e conversão de clientes em 4 fases (Lead → Diagnóstico → Proposta → Contrato) |
+| Decisões & Tribunais | `decisoes` | `src/components/Decisoes.tsx` | Consulta ao vivo de jurisprudência em 16 tribunais e conselhos federais via Jurisprudências.ai Live API |
 | Base RAG | `base` | `src/components/Base.tsx` | Gerenciamento de coleções vetoriais indexadas e busca semântica em julgados |
 | Documentação | `documentacao` | `src/components/Documentacao.tsx` | Central de ajuda, manual de operação em 3 passos, arquitetura em 4 camadas, diretrizes LGPD e FAQ |
 

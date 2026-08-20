@@ -223,7 +223,7 @@ export default function GeradorPecas() {
                     area,
                     cliente: nomeCliente || 'Cliente SmartJuris',
                     status: 'revisao',
-                    prazo: 'Em análise',
+                    prazo: new Date().toISOString().slice(0, 10),
                     modelo: 'DeepSeek Chat (RAG BGE-M3)',
                     fontes: data.fontes?.length || 3,
                     conteudo: data.conteudo,

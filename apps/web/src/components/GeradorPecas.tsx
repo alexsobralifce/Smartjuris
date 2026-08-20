@@ -4,6 +4,7 @@ import { getApiBaseUrl } from '../api/config'
 import Toast, { ToastMessage } from './Toast'
 import Decisoes from './Decisoes'
 import EditorRico, { plainToHtml } from './EditorRico'
+import { Button, FONT, Field, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, useIsMobile } from '../ui'
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
 
@@ -76,6 +77,7 @@ const tesesPlaybook: Record<string, { label: string; texto: string; tipo: string
 }
 
 export default function GeradorPecas() {
+  const isMobile = useIsMobile()
   const [step, setStep] = useState<Step>('tipo')
   const [area, setArea] = useState('Trabalhista')
   const [tipo, setTipo] = useState('')
@@ -325,29 +327,29 @@ export default function GeradorPecas() {
   }, [step, tipo, area])
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1100 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Gerar Peça Processual</div>
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>Motor RAG jurídico · BGE-M3 · DeepSeek Chat · Validação Auditável</div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        eyebrow="GERAÇÃO DE PEÇAS COM IA"
+        title="Gerar Peça Processual"
+        description="Motor RAG jurídico · BGE-M3 · DeepSeek Chat · Validação Auditável"
+      />
 
       {/* Stepper */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 36, gap: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 36, gap: 0, flexWrap: 'wrap' }}>
         {etapas.map((e, i) => (
           <div key={e} style={{ display: 'flex', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
                 width: 28, height: 28, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 700,
+                fontSize: FONT.sm, fontWeight: 700,
                 background: i < etapaIndex ? 'var(--color-success)' : i === etapaIndex ? 'var(--color-primary)' : 'var(--color-surface-2)',
-                color: i <= etapaIndex ? '#fff' : 'var(--color-muted)',
+                color: i <= etapaIndex ? 'var(--color-on-primary)' : 'var(--color-muted)',
                 border: i === etapaIndex ? '2px solid var(--color-primary)' : '2px solid transparent',
               }}>
                 {i < etapaIndex ? '✓' : i + 1}
               </div>
-              <span style={{ fontSize: 12, fontWeight: i === etapaIndex ? 600 : 400, color: i === etapaIndex ? 'var(--color-foreground)' : 'var(--color-muted)' }}>{e}</span>
+              <span style={{ fontSize: FONT.base, fontWeight: i === etapaIndex ? 600 : 400, color: i === etapaIndex ? 'var(--color-foreground)' : 'var(--color-muted)' }}>{e}</span>
             </div>
             {i < etapas.length - 1 && (
               <div style={{ width: 48, height: 1, background: i < etapaIndex ? 'var(--color-success)' : 'var(--color-border)', margin: '0 12px' }}/>
@@ -358,24 +360,21 @@ export default function GeradorPecas() {
 
       {/* Step 1: Tipo */}
       {step === 'tipo' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.xxl }}>
           {/* Seletor Rápido de Processo Vinculado */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SPACE.lg, flexWrap: isMobile ? 'wrap' : undefined }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-primary)' }}>
+              <div style={{ fontSize: FONT.base, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-primary)' }}>
                 ⚡ Automação: Vincular a um Processo Cadastrado
               </div>
-              <div style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 2 }}>
+              <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginTop: 2 }}>
                 Preenche automaticamente partes, juízo e comarca em 1 clique.
               </div>
             </div>
             <select
               value={processoSelecionadoId}
               onChange={e => handleSelectProcesso(e.target.value)}
-              style={{
-                padding: '8px 12px', borderRadius: 6, border: '1px solid var(--color-border)',
-                background: 'var(--color-background)', fontSize: 13, fontFamily: 'var(--font-sans)', outline: 'none'
-              }}
+              style={{ ...inputStyle(), width: isMobile ? '100%' : 'auto', minWidth: isMobile ? undefined : 280, background: 'var(--color-background)' }}
             >
               <option value="">-- Selecionar Processo (Opcional) --</option>
               {processosList.map(p => (
@@ -386,52 +385,62 @@ export default function GeradorPecas() {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '240px 1fr', gap: SPACE.xxl }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Área do Direito</div>
+              <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Área do Direito</div>
               {areas.map(a => (
-                <button key={a} onClick={() => { setArea(a); setTipo('') }} style={{
-                  display: 'block', width: '100%', textAlign: 'left',
-                  padding: '9px 14px', marginBottom: 4, borderRadius: 6,
-                  border: '1px solid', cursor: 'pointer',
-                  borderColor: area === a ? 'var(--color-primary)' : 'var(--color-border)',
-                  background: area === a ? 'var(--color-badge-tint)' : 'var(--color-surface)',
-                  color: area === a ? 'var(--color-primary)' : 'var(--color-foreground)',
-                  fontWeight: area === a ? 600 : 400, fontSize: 13,
-                }}>{a}</button>
+                <Button
+                  key={a}
+                  size="md"
+                  variant="secondary"
+                  onClick={() => { setArea(a); setTipo('') }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left', justifyContent: 'flex-start',
+                    padding: '9px 14px', marginBottom: 4,
+                    borderColor: area === a ? 'var(--color-primary)' : 'var(--color-border)',
+                    background: area === a ? 'var(--color-badge-tint)' : 'var(--color-surface)',
+                    color: area === a ? 'var(--color-primary)' : 'var(--color-foreground)',
+                    fontWeight: area === a ? 600 : 400,
+                  }}
+                >{a}</Button>
               ))}
             </div>
 
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Tipo de Peça — {area}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Tipo de Peça — {area}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                 {tiposDaArea.map(t => {
                   const tName = t.tipo ?? t
                   return (
-                    <button key={tName} onClick={() => setTipo(tName)} style={{
-                      padding: '16px 18px', borderRadius: 8, textAlign: 'left',
-                      border: '1px solid', cursor: 'pointer',
-                      borderColor: tipo === tName ? 'var(--color-primary)' : 'var(--color-border)',
-                      background: tipo === tName ? 'var(--color-badge-tint)' : 'var(--color-surface)',
-                      color: tipo === tName ? 'var(--color-primary)' : 'var(--color-foreground)',
-                      fontWeight: tipo === tName ? 600 : 400, fontSize: 13,
-                      transition: 'all 0.12s',
-                    }}>{tName}</button>
+                    <Button
+                      key={tName}
+                      size="md"
+                      variant="secondary"
+                      onClick={() => setTipo(tName)}
+                      style={{
+                        padding: '16px 18px', borderRadius: RADIUS.card, textAlign: 'left', justifyContent: 'flex-start',
+                        borderColor: tipo === tName ? 'var(--color-primary)' : 'var(--color-border)',
+                        background: tipo === tName ? 'var(--color-badge-tint)' : 'var(--color-surface)',
+                        color: tipo === tName ? 'var(--color-primary)' : 'var(--color-foreground)',
+                        fontWeight: tipo === tName ? 600 : 400,
+                        transition: 'all 0.12s',
+                      }}
+                    >{tName}</Button>
                   )
                 })}
               </div>
 
               {/* Prévia da estrutura do modelo selecionado */}
               {modeloSelecionado && (
-                <div style={{ marginTop: 18, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '16px 18px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>
+                <div style={{ marginTop: 18, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '16px 18px' }}>
+                  <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>
                     📚 Estrutura do modelo
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {(modeloSelecionado.secoes || []).map((s: any, idx: number) => (
-                      <div key={idx} style={{ fontSize: 12, lineHeight: 1.5 }}>
+                      <div key={idx} style={{ fontSize: FONT.base, lineHeight: 1.5 }}>
                         <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{s.titulo}</div>
-                        {s.instrucao && <div style={{ color: 'var(--color-muted)', fontSize: 11, marginTop: 2 }}>{s.instrucao}</div>}
+                        {s.instrucao && <div style={{ color: 'var(--color-muted)', fontSize: FONT.sm, marginTop: 2 }}>{s.instrucao}</div>}
                       </div>
                     ))}
                   </div>
@@ -440,41 +449,31 @@ export default function GeradorPecas() {
 
               {/* Playbooks / Teses Rápidas Sugeridas */}
               {tesesPlaybook[area] && tesesPlaybook[area].length > 0 && (
-                <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--color-border)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
+                <div style={{ marginTop: SPACE.xxl, paddingTop: 18, borderTop: '1px solid var(--color-border)' }}>
+                  <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
                     📚 Modelos de Teses Frequentes (Modelos do Escritório)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {tesesPlaybook[area].map((tese, idx) => (
-                      <button
+                      <Button
                         key={idx}
+                        size="sm"
+                        variant="secondary"
                         onClick={() => {
                           handleApplyTese(tese)
                           setStep('dados')
                         }}
-                        style={{
-                          background: 'var(--color-surface)', border: '1px solid var(--color-accent)',
-                          color: 'var(--color-foreground)', padding: '6px 12px', borderRadius: 6,
-                          fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
-                        }}
+                        style={{ borderColor: 'var(--color-accent)', color: 'var(--color-foreground)' }}
                       >
                         {tese.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
               )}
 
-              <div style={{ marginTop: 24 }}>
-                <button
-                  disabled={!tipo}
-                  onClick={() => setStep('dados')}
-                  style={{
-                    background: tipo ? 'var(--color-primary)' : 'var(--color-border)',
-                    color: '#fff', border: 'none',
-                    padding: '11px 28px', borderRadius: 6,
-                    fontSize: 13, fontWeight: 600, cursor: tipo ? 'pointer' : 'not-allowed',
-                  }}>Continuar →</button>
+              <div style={{ marginTop: SPACE.xxl }}>
+                <Button size="md" disabled={!tipo} onClick={() => setStep('dados')}>Continuar →</Button>
               </div>
             </div>
           </div>
@@ -484,128 +483,105 @@ export default function GeradorPecas() {
       {/* Step 2: Dados */}
       {step === 'dados' && (
         <div style={{ maxWidth: 720 }}>
-          <div style={{ background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '12px 16px', marginBottom: 24, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--color-accent-light)', border: '1px solid var(--color-accent)', borderRadius: RADIUS.control, padding: '12px 16px', marginBottom: SPACE.xxl, fontSize: FONT.base, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.sm }}>
             <div>
               <strong>Peça configurada:</strong> {tipo || 'Petição'} · Área {area}
             </div>
             {nomeCliente && (
-              <span style={{ fontSize: 11, background: 'var(--color-surface)', padding: '3px 8px', borderRadius: 4 }}>
+              <span style={{ fontSize: FONT.sm, background: 'var(--color-surface)', padding: '3px 8px', borderRadius: RADIUS.chip }}>
                 Vinculado a: <strong>{nomeCliente}</strong>
               </span>
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Número do Processo</label>
-              <input
-                placeholder="0001234-56.2026.5.02.0001"
-                value={numeroProcesso}
-                onChange={e => setNumeroProcesso(e.target.value)}
-                style={{
-                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
-                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
+              <Field label="Número do Processo">
+                <input
+                  placeholder="0001234-56.2026.5.02.0001"
+                  value={numeroProcesso}
+                  onChange={e => setNumeroProcesso(e.target.value)}
+                  style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }}
+                />
+              </Field>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Vara / Juízo / Tribunal</label>
-              <input
-                placeholder="3ª Vara do Trabalho de São Paulo/SP"
-                value={varaTribunal}
-                onChange={e => setVaraTribunal(e.target.value)}
-                style={{
-                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
-                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
-                }}
-              />
+              <Field label="Vara / Juízo / Tribunal">
+                <input
+                  placeholder="3ª Vara do Trabalho de São Paulo/SP"
+                  value={varaTribunal}
+                  onChange={e => setVaraTribunal(e.target.value)}
+                  style={inputStyle()}
+                />
+              </Field>
             </div>
 
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Nome do Autor / Cliente (Autocomplete)</label>
-              <input
-                list="clientes-datalist"
-                placeholder="Digite o nome ou selecione um cliente..."
-                value={nomeCliente}
-                onChange={e => {
-                  const val = e.target.value
-                  setNomeCliente(val)
-                  const found = clientesList.find(c => c.nome === val)
-                  if (found) {
-                    setCpfCliente(found.cpfCnpj || '')
-                    if (found.qualificacao) {
-                      setDadosCaso(prev => prev ? `${prev}\n\n[QUALIFICAÇÃO DO CLIENTE]: ${found.qualificacao}` : `[QUALIFICAÇÃO DO CLIENTE]: ${found.qualificacao}`)
+              <Field label="Nome do Autor / Cliente (Autocomplete)">
+                <input
+                  list="clientes-datalist"
+                  placeholder="Digite o nome ou selecione um cliente..."
+                  value={nomeCliente}
+                  onChange={e => {
+                    const val = e.target.value
+                    setNomeCliente(val)
+                    const found = clientesList.find(c => c.nome === val)
+                    if (found) {
+                      setCpfCliente(found.cpfCnpj || '')
+                      if (found.qualificacao) {
+                        setDadosCaso(prev => prev ? `${prev}\n\n[QUALIFICAÇÃO DO CLIENTE]: ${found.qualificacao}` : `[QUALIFICAÇÃO DO CLIENTE]: ${found.qualificacao}`)
+                      }
                     }
-                  }
-                }}
-                style={{
-                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
-                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
-                }}
-              />
-              <datalist id="clientes-datalist">
-                {clientesList.map(c => (
-                  <option key={c.id} value={c.nome}>{c.nome} ({c.cpfCnpj})</option>
-                ))}
-              </datalist>
+                  }}
+                  style={inputStyle()}
+                />
+                <datalist id="clientes-datalist">
+                  {clientesList.map(c => (
+                    <option key={c.id} value={c.nome}>{c.nome} ({c.cpfCnpj})</option>
+                  ))}
+                </datalist>
+              </Field>
             </div>
 
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Nome do Réu / Adverso</label>
-              <input
-                placeholder="Empresa XYZ S.A."
-                value={parteAdversa}
-                onChange={e => setParteAdversa(e.target.value)}
-                style={{
-                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
-                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
-                }}
-              />
+              <Field label="Nome do Réu / Adverso">
+                <input
+                  placeholder="Empresa XYZ S.A."
+                  value={parteAdversa}
+                  onChange={e => setParteAdversa(e.target.value)}
+                  style={inputStyle()}
+                />
+              </Field>
             </div>
 
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Valor da Causa</label>
-              <input
-                placeholder="R$ 87.500,00"
-                value={valorCausa}
-                onChange={e => setValorCausa(e.target.value)}
-                style={{
-                  width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
-                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
+              <Field label="Valor da Causa">
+                <input
+                  placeholder="R$ 87.500,00"
+                  value={valorCausa}
+                  onChange={e => setValorCausa(e.target.value)}
+                  style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }}
+                />
+              </Field>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, flexWrap: 'wrap', gap: SPACE.sm }}>
+                <label style={{ fontSize: FONT.sm, fontWeight: 600, color: 'var(--color-muted)' }}>
                   Fatos do Caso e Fundamentação
                 </label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button
-                    type="button"
+                <div style={{ display: 'flex', gap: SPACE.sm, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => setShowDecisoesModal(true)}
-                    style={{
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-accent)',
-                      color: 'var(--color-primary)',
-                      padding: '4px 10px',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
+                    style={{ borderColor: 'var(--color-accent)', color: 'var(--color-primary)' }}
                   >
-                    <span>🏛️ Pesquisar Decisões nos Tribunais</span>
-                  </button>
+                    🏛️ Pesquisar Decisões nos Tribunais
+                  </Button>
                   {tesesPlaybook[area] && (
-                    <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>
+                    <span style={{ fontSize: FONT.sm, color: 'var(--color-accent)', fontWeight: 500 }}>
                       💡 Dica: Modelos disponíveis
                     </span>
                   )}
@@ -616,28 +592,19 @@ export default function GeradorPecas() {
                 onChange={e => setDadosCaso(e.target.value)}
                 placeholder="Descreva os fatos relevantes, pedidos específicos, valores a serem cobrados ou selecione um modelo..." 
                 rows={5} 
-                style={{
-                  width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 6,
-                  fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none',
-                  resize: 'vertical', fontFamily: 'var(--font-sans)', lineHeight: 1.5
-                }}
+                style={{ ...inputStyle(), resize: 'vertical', lineHeight: 1.5 }}
               />
             </div>
           </div>
 
-          <div style={{ marginTop: 24, display: 'flex', gap: 10 }}>
-            <button onClick={() => setStep('tipo')} style={{ padding: '10px 20px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}>← Voltar</button>
-            <button 
-              disabled={!dadosCaso.trim()} 
-              onClick={() => setStep('gerando')} 
-              style={{ 
-                background: dadosCaso.trim() ? 'var(--color-primary)' : 'var(--color-border)', 
-                color: '#fff', border: 'none', padding: '10px 24px', borderRadius: 6, 
-                fontSize: 13, fontWeight: 600, cursor: dadosCaso.trim() ? 'pointer' : 'not-allowed' 
-              }}
+          <div style={{ marginTop: SPACE.xxl, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="secondary" onClick={() => setStep('tipo')}>← Voltar</Button>
+            <Button
+              disabled={!dadosCaso.trim()}
+              onClick={() => setStep('gerando')}
             >
               Gerar Peça com RAG e IA →
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -645,10 +612,10 @@ export default function GeradorPecas() {
       {/* Step 3: Gerando */}
       {step === 'gerando' && (
         <div style={{ maxWidth: 800 }}>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '32px' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 24 }}>Consultando Base RAG & Gerando Minuta...</div>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: 32 }}>
+            <div style={{ fontWeight: 600, fontSize: FONT.lg, marginBottom: SPACE.xxl }}>Consultando Base RAG & Gerando Minuta...</div>
 
-            <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden', marginBottom: SPACE.md }}>
               <div style={{
                 height: '100%', borderRadius: 3,
                 background: 'var(--color-primary)',
@@ -656,17 +623,17 @@ export default function GeradorPecas() {
                 transition: 'width 0.6s ease',
               }}/>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)', marginBottom: 28, display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)', marginBottom: 28, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: SPACE.sm }}>
               <span>{progressoLabel}</span>
               {progresso >= 50 && <span style={{ color: 'var(--color-accent)' }}>Recebendo stream da IA...</span>}
             </div>
 
             {textoEmGeracao && (
               <div style={{
-                marginTop: 20, marginBottom: 20, padding: 20,
-                background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 6,
+                marginTop: SPACE.xl, marginBottom: SPACE.xl, padding: SPACE.xl,
+                background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: RADIUS.control,
                 maxHeight: 300, overflowY: 'auto',
-                fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6, color: 'var(--color-foreground)',
+                fontFamily: 'var(--font-mono)', fontSize: FONT.base, lineHeight: 1.6, color: 'var(--color-foreground)',
                 whiteSpace: 'pre-wrap'
               }}>
                 {textoEmGeracao}
@@ -674,7 +641,7 @@ export default function GeradorPecas() {
               </div>
             )}
 
-            <div style={{ fontSize: 11, color: 'var(--color-muted)', lineHeight: 1.6, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+            <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.6, borderTop: '1px solid var(--color-border)', paddingTop: SPACE.lg }}>
               🔍 <strong>Pipeline ativo:</strong> Ingestão semântica ➔ Embeddings BGE-M3 ➔ Busca vetorial no pgvector ➔ Síntese DeepSeek Chat ➔ Validação anti-alucinação.
             </div>
           </div>
@@ -684,66 +651,55 @@ export default function GeradorPecas() {
       {/* Step 4: Revisão */}
       {step === 'revisao' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACE.lg, flexWrap: 'wrap', gap: SPACE.md }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: FONT.sm, fontWeight: 700, background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '3px 8px', borderRadius: RADIUS.chip, textTransform: 'uppercase' }}>
                 Aguardando Revisão Humana
               </span>
-              <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+              <span style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>
                 {fontesRecuperadas.length} fontes consultadas na base
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button 
+            <div style={{ display: 'flex', gap: SPACE.sm, flexWrap: 'wrap' }}>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => {
                   navigator.clipboard.writeText(pecaConteudo)
                   setCopied(true)
                   setTimeout(() => setCopied(false), 2000)
                 }}
-                style={{
-                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                  padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6
-                }}
               >
                 {copied ? '✓ Copiado!' : '📋 Copiar Texto'}
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => handleBaixar('pdf')}
                 disabled={!pecaSalvaId}
-                style={{
-                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                  padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: pecaSalvaId ? 'pointer' : 'not-allowed',
-                  opacity: pecaSalvaId ? 1 : 0.5
-                }}
               >
                 Baixar PDF
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => handleBaixar('docx')}
                 disabled={!pecaSalvaId}
-                style={{
-                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                  padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: pecaSalvaId ? 'pointer' : 'not-allowed',
-                  opacity: pecaSalvaId ? 1 : 0.5
-                }}
               >
                 Baixar DOCX
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={handleSalvarEdicoes}
                 disabled={!pecaSalvaId || !editJson}
-                style={{
-                  background: 'var(--color-success)', color: '#fff', border: 'none',
-                  padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  cursor: pecaSalvaId && editJson ? 'pointer' : 'not-allowed',
-                  opacity: pecaSalvaId && editJson ? 1 : 0.5
-                }}
+                style={{ background: 'var(--color-success)', color: 'var(--color-on-primary)', borderColor: 'var(--color-success)' }}
               >
                 Salvar edições
-              </button>
-              <button 
+              </Button>
+              <Button
+                size="sm"
                 onClick={() => {
                   setStep('tipo')
                   setDadosCaso('')
@@ -751,18 +707,14 @@ export default function GeradorPecas() {
                   setPecaSalvaId('')
                   setEditJson(null)
                 }}
-                style={{
-                  background: 'var(--color-primary)', color: '#fff', border: 'none',
-                  padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer'
-                }}
               >
                 + Nova Peça
-              </button>
+              </Button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'start' }}>
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: SPACE.xxl, alignItems: 'start' }}>
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.xl }}>
               <EditorRico
                 initialContent={editJson ?? plainToHtml(pecaConteudo)}
                 onChange={setEditJson}
@@ -771,23 +723,23 @@ export default function GeradorPecas() {
             </div>
 
             {/* Painel Lateral: Fontes e Conformidade */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-muted)', marginBottom: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: 18 }}>
+                <div style={{ fontSize: FONT.sm, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-muted)', marginBottom: 10 }}>
                   🛡️ Conformidade & Rastreabilidade
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.5 }}>
                   Minuta registrada na trilha de auditoria e enviada para o módulo de <strong>Validação</strong>.
                 </div>
               </div>
 
-              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-muted)', marginBottom: 10 }}>
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: 18 }}>
+                <div style={{ fontSize: FONT.sm, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-muted)', marginBottom: 10 }}>
                   📚 Precedentes & Súmulas Ancorados
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {fontesRecuperadas.map((f, i) => (
-                    <div key={i} style={{ padding: 8, background: 'var(--color-background)', borderRadius: 4, fontSize: 11 }}>
+                    <div key={i} style={{ padding: 8, background: 'var(--color-background)', borderRadius: RADIUS.chip, fontSize: FONT.sm }}>
                       <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{f.nome || `Fonte #${i+1}`}</div>
                       <div style={{ color: 'var(--color-muted)', marginTop: 2 }}>{f.colecao || 'Legislação & Jurisprudência'}</div>
                     </div>
@@ -798,52 +750,22 @@ export default function GeradorPecas() {
           </div>
         </div>
       )}
-      {/* Modal de Pesquisa de Decisões dos Tribunais */}
-      {showDecisoesModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.65)',
-          zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20,
-          backdropFilter: 'blur(3px)',
-        }}>
-          <div style={{
-            background: 'var(--color-background)',
-            width: '100%', maxWidth: 1050, maxHeight: '90vh',
-            borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-            border: '1px solid var(--color-border)',
-          }}>
-            <div style={{
-              padding: '16px 24px',
-              borderBottom: '1px solid var(--color-border)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: 'var(--color-surface)',
-            }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>Pesquisar Jurisprudência nos Tribunais</div>
-                <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>Busque decisões nos 16 tribunais e clique em "Usar na Peça" para anexar aos fatos</div>
-              </div>
-              <button
-                onClick={() => setShowDecisoesModal(false)}
-                style={{
-                  background: 'var(--color-surface-2)', border: 'none',
-                  width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
-                  fontWeight: 700, fontSize: 14, color: 'var(--color-foreground)',
-                }}
-              >✕</button>
-            </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
-              <Decisoes onSelectForPeca={handleSelectJurisprudenciaParaCaso} />
-            </div>
-          </div>
+      {/* Modal de Pesquisa de Decisões dos Tribunais */}
+      <Modal
+        open={showDecisoesModal}
+        onClose={() => setShowDecisoesModal(false)}
+        title="Pesquisar Jurisprudência nos Tribunais"
+        width={1050}
+      >
+        <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginBottom: SPACE.lg }}>
+          Busque decisões nos 16 tribunais e clique em "Usar na Peça" para anexar aos fatos
         </div>
-      )}
+        <Decisoes onSelectForPeca={handleSelectJurisprudenciaParaCaso} />
+      </Modal>
 
       {/* Componente Toast de Mensageria Flutuante */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
-    </div>
+    </PageContainer>
   )
 }

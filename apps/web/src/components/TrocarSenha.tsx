@@ -1,41 +1,15 @@
 import { useState } from 'react'
 import { api } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
+import { Button, FONT, Field, inputStyle, RADIUS, SPACE, useIsMobile } from '../ui'
 
 interface TrocarSenhaProps {
   user: { name: string; email: string; role: string; [key: string]: any }
   onSuccess: (newUser: any) => void
 }
 
-const labelStyle: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: 'var(--color-muted)',
-  display: 'block',
-  marginBottom: 6,
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '11px 14px',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-background)',
-  fontSize: 13,
-  color: 'var(--color-foreground)',
-  outline: 'none',
-  fontFamily: 'var(--font-sans)',
-}
-
-const fieldErrorStyle: React.CSSProperties = {
-  color: 'var(--color-danger)',
-  fontSize: 11,
-  marginTop: 6,
-}
-
 export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
+  const isMobile = useIsMobile()
   const [senhaAtual, setSenhaAtual] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmar, setConfirmar] = useState('')
@@ -94,7 +68,7 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'radial-gradient(1200px 600px at 50% -10%, rgba(200,168,75,0.10), transparent 60%), var(--color-background)',
+      background: 'var(--color-background)',
       display: 'flex',
       flexDirection: 'column',
       fontFamily: 'var(--font-sans)',
@@ -107,42 +81,41 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        borderBottom: '1px solid var(--color-primary-hover)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm }}>
           <div style={{
-            width: 26, height: 26, borderRadius: 6,
+            width: 26, height: 26, borderRadius: RADIUS.control,
             background: 'var(--color-accent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#18170f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--color-on-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span style={{ fontFamily: 'var(--font-display)', color: '#fff', fontSize: 15, letterSpacing: '-0.02em' }}>
-            SmartJuris <span style={{ color: 'var(--color-accent)', fontSize: 12 }}>LexOS</span>
+          <span style={{ fontFamily: 'var(--font-display)', color: 'var(--color-on-primary)', fontSize: FONT.lg, letterSpacing: '-0.02em' }}>
+            SmartJuris <span style={{ color: 'var(--color-accent)', fontSize: FONT.base }}>LexOS</span>
           </span>
         </div>
       </div>
 
       {/* Card centralizado */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '24px 16px' : '40px 20px' }}>
         <div style={{
           width: '100%',
           maxWidth: 480,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 12,
-          padding: '40px 40px 36px',
-          boxShadow: '0 20px 60px rgba(24,23,15,0.06)',
+          borderRadius: RADIUS.card,
+          padding: isMobile ? '28px 20px' : '40px 40px 36px',
         }}>
           {/* Ícone de segurança */}
           <div style={{
-            width: 40, height: 40, borderRadius: 10,
+            width: 40, height: 40, borderRadius: RADIUS.card,
             background: 'var(--color-badge-tint)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'var(--color-primary)',
-            marginBottom: 18,
+            marginBottom: SPACE.lg,
           }}>
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
@@ -151,7 +124,7 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
 
           <h1 style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 26,
+            fontSize: FONT.pageTitle,
             letterSpacing: '-0.02em',
             margin: '0 0 8px',
             fontWeight: 400,
@@ -160,16 +133,15 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
             Bem-vindo — defina sua nova senha
           </h1>
 
-          <p style={{ color: 'var(--color-muted)', fontSize: 13, margin: '0 0 6px', lineHeight: 1.55 }}>
+          <p style={{ color: 'var(--color-muted)', fontSize: FONT.md, margin: '0 0 6px', lineHeight: 1.55 }}>
             Olá, <strong style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{firstName}</strong>. Por segurança, crie uma nova senha antes de acessar o sistema.
           </p>
-          <div style={{ fontSize: 11, color: 'var(--color-muted)', fontFamily: 'var(--font-mono)', marginBottom: 26 }}>
+          <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', fontFamily: 'var(--font-mono)', marginBottom: SPACE.xxl }}>
             {user?.email}
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={labelStyle}>Senha atual</label>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+            <Field label="Senha atual" error={errors.senhaAtual}>
               <input
                 type="password"
                 value={senhaAtual}
@@ -180,13 +152,11 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
                 placeholder="••••••••"
                 autoComplete="current-password"
                 autoFocus
-                style={{ ...inputStyle, borderColor: errors.senhaAtual ? 'var(--color-danger)' : 'var(--color-border)' }}
+                style={inputStyle(!!errors.senhaAtual)}
               />
-              {errors.senhaAtual && <div style={fieldErrorStyle}>{errors.senhaAtual}</div>}
-            </div>
+            </Field>
 
-            <div>
-              <label style={labelStyle}>Nova senha</label>
+            <Field label="Nova senha" error={errors.novaSenha}>
               <input
                 type="password"
                 value={novaSenha}
@@ -196,13 +166,11 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
                 }}
                 placeholder="Mínimo de 8 caracteres"
                 autoComplete="new-password"
-                style={{ ...inputStyle, borderColor: errors.novaSenha ? 'var(--color-danger)' : 'var(--color-border)' }}
+                style={inputStyle(!!errors.novaSenha)}
               />
-              {errors.novaSenha && <div style={fieldErrorStyle}>{errors.novaSenha}</div>}
-            </div>
+            </Field>
 
-            <div>
-              <label style={labelStyle}>Confirmar nova senha</label>
+            <Field label="Confirmar nova senha" error={errors.confirmar}>
               <input
                 type="password"
                 value={confirmar}
@@ -212,40 +180,24 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
                 }}
                 placeholder="Repita a nova senha"
                 autoComplete="new-password"
-                style={{ ...inputStyle, borderColor: errors.confirmar ? 'var(--color-danger)' : 'var(--color-border)' }}
+                style={inputStyle(!!errors.confirmar)}
               />
-              {errors.confirmar && <div style={fieldErrorStyle}>{errors.confirmar}</div>}
-            </div>
+            </Field>
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
-              style={{
-                background: 'var(--color-primary)',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 6,
-                padding: '13px',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                marginTop: 6,
-                opacity: loading ? 0.75 : 1,
-                transition: 'background 0.2s',
-                fontFamily: 'var(--font-sans)',
-              }}
-              onMouseEnter={e => { if (!loading) e.currentTarget.style.background = 'var(--color-primary-hover)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)' }}
+              style={{ width: '100%', marginTop: SPACE.xs }}
             >
               {loading ? 'Atualizando senha…' : 'Salvar nova senha'}
-            </button>
+            </Button>
           </form>
 
           <div style={{
-            marginTop: 22,
-            paddingTop: 16,
+            marginTop: SPACE.xl,
+            paddingTop: SPACE.lg,
             borderTop: '1px solid var(--color-border)',
-            fontSize: 11,
+            fontSize: FONT.sm,
             color: 'var(--color-muted)',
             lineHeight: 1.55,
           }}>

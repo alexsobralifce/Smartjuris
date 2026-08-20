@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FONT, RADIUS } from '../ui'
 
 export interface PaginationProps {
   page: number
@@ -68,11 +69,11 @@ const btnBase: React.CSSProperties = {
   minWidth: 30,
   height: 30,
   padding: '0 8px',
-  borderRadius: 6,
+  borderRadius: RADIUS.control,
   border: '1px solid var(--color-border)',
   background: 'transparent',
   color: 'var(--color-muted)',
-  fontSize: 12,
+  fontSize: FONT.base,
   fontWeight: 500,
   cursor: 'pointer',
   display: 'inline-flex',
@@ -98,7 +99,7 @@ export default function Pagination({ page, pageCount, total, pageSize, onPageCha
       borderTop: '1px solid var(--color-border)',
       background: 'var(--color-surface)',
     }}>
-      <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+      <div style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>
         Mostrando {start}–{end} de {total}
       </div>
 
@@ -115,7 +116,7 @@ export default function Pagination({ page, pageCount, total, pageSize, onPageCha
 
         {pages.map((p, i) =>
           p === 'gap' ? (
-            <span key={`gap-${i}`} style={{ fontSize: 12, color: 'var(--color-muted)', padding: '0 2px' }}>…</span>
+            <span key={`gap-${i}`} style={{ fontSize: FONT.base, color: 'var(--color-muted)', padding: '0 2px' }}>…</span>
           ) : (
             <button
               key={p}
@@ -126,7 +127,7 @@ export default function Pagination({ page, pageCount, total, pageSize, onPageCha
               style={{
                 ...btnBase,
                 background: p === page ? 'var(--color-primary)' : 'transparent',
-                color: p === page ? '#fff' : 'var(--color-muted)',
+                color: p === page ? 'var(--color-on-primary)' : 'var(--color-muted)',
                 borderColor: p === page ? 'var(--color-primary)' : 'var(--color-border)',
                 fontWeight: p === page ? 600 : 500,
               }}

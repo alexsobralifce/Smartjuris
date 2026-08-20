@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Button, EmptyState, FONT, inputStyle, PageContainer, PageHeader, RADIUS, SPACE, useIsMobile } from '../ui'
 
 export default function Contratos() {
+  const isMobile = useIsMobile()
   const [minutaTexto, setMinutaTexto] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [analiseResult, setAnaliseResult] = useState<any | null>(null)
@@ -67,37 +69,27 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <PageContainer style={{ display: 'flex', flexDirection: 'column', gap: SPACE.xxl }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--color-border)', paddingBottom: 24 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>
-            AGENTE AUTÔNOMO DE REVISÃO DOCUMENTAL
-          </div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, margin: 0, fontWeight: 400, letterSpacing: '-0.02em' }}>
-            Revisão de Contratos & Riscos
-          </h1>
-          <p style={{ color: 'var(--color-muted)', fontSize: 14, marginTop: 4 }}>
-            Detecção automática de cláusulas abusivas, riscos de sucumbência e sugestões de redação alternativa.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="REVISÃO CONTRATUAL"
+        title="Revisão de Contratos & Riscos"
+        description="Detecção automática de cláusulas abusivas, riscos de sucumbência e sugestões de redação alternativa."
+        action={
+          <Button variant="secondary" size="sm" onClick={handlePreencherExemplo}>
+            📄 Carregar Minuta de Exemplo
+          </Button>
+        }
+      />
 
-        <button
-          onClick={handlePreencherExemplo}
-          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-        >
-          📄 Carregar Minuta de Exemplo
-        </button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.xxl, alignItems: 'start' }}>
         {/* Editor da Minuta */}
-        <form onSubmit={handleAnaliseContrato} style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 24 }}>
+        <form onSubmit={handleAnaliseContrato} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.xxl }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', color: 'var(--color-muted)' }}>
+            <label style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.02em', color: 'var(--color-muted)' }}>
               Cole a minuta contratual (PDF / texto)
             </label>
-            <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>{minutaTexto.length} caracteres</span>
+            <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>{minutaTexto.length} caracteres</span>
           </div>
 
           <textarea
@@ -106,44 +98,33 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
             placeholder="Cole aqui o texto do contrato comercial ou prestação de serviços..."
             rows={14}
             style={{
-              width: '100%', padding: '12px', border: '1px solid var(--color-border)', borderRadius: 6,
-              fontSize: 13, background: 'var(--color-background)', color: 'var(--color-foreground)',
-              outline: 'none', resize: 'vertical', fontFamily: 'var(--font-sans)', lineHeight: 1.5
+              ...inputStyle(), background: 'var(--color-background)',
+              resize: 'vertical', fontFamily: 'var(--font-sans)', lineHeight: 1.5
             }}
           />
 
-          <button
-            disabled={analyzing || !minutaTexto.trim()}
-            type="submit"
-            style={{
-              background: minutaTexto.trim() ? 'var(--color-primary)' : 'var(--color-border)',
-              color: '#fff', border: 'none', padding: '12px', borderRadius: 6,
-              fontSize: 13, fontWeight: 600, cursor: minutaTexto.trim() ? 'pointer' : 'not-allowed'
-            }}
-          >
+          <Button type="submit" disabled={analyzing || !minutaTexto.trim()}>
             {analyzing ? '🔍 Agente IA Analisando Cláusulas...' : '🤖 Analisar Cláusulas & Detectar Riscos →'}
-          </button>
+          </Button>
         </form>
 
         {/* Resultado da Análise de Risco */}
         <div>
           {!analiseResult ? (
-            <div style={{ background: 'var(--color-surface)', border: '1px dashed var(--color-border)', borderRadius: 8, padding: 48, textAlign: 'center', color: 'var(--color-muted)' }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>🛡️</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-foreground)', marginBottom: 4 }}>Nenhum contrato analisado ainda</div>
-              <div style={{ fontSize: 12, maxWidth: 320, margin: '0 auto' }}>Cole uma minuta ou clique em "Carregar Minuta de Exemplo" para executar o agente autônomo de risco.</div>
+            <div style={{ background: 'var(--color-surface)', border: '1px dashed var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.xxl }}>
+              <EmptyState icon="🛡️" message="Nenhum contrato analisado ainda. Cole uma minuta ou clique em 'Carregar Minuta de Exemplo' para executar o agente autônomo de risco." />
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
               {/* Card de Score */}
-              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.xl, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)' }}>PARECER DO AGENTE IA</div>
-                  <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2, color: 'var(--color-foreground)' }}>{analiseResult.nivel}</div>
+                  <div style={{ fontSize: FONT.xs, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)' }}>PARECER DO AGENTE IA</div>
+                  <div style={{ fontSize: FONT.xl, fontWeight: 600, marginTop: 2, color: 'var(--color-foreground)' }}>{analiseResult.nivel}</div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 10, color: 'var(--color-muted)' }}>ÍNDICE DE RISCO</div>
+                  <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)' }}>ÍNDICE DE RISCO</div>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--color-warning)' }}>
                     {analiseResult.scoreRisco} / 100
                   </div>
@@ -151,27 +132,27 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
               </div>
 
               {/* Lista de Cláusulas Sinalizadas */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
                 {analiseResult.clausulas.map((c: any, i: number) => (
-                  <div key={i} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 18, borderLeft: `4px solid ${c.cor}` }}>
+                  <div key={i} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.lg, borderLeft: `4px solid ${c.cor}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{c.titulo}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: c.bg, color: c.cor, textTransform: 'uppercase' }}>
+                      <span style={{ fontSize: FONT.md, fontWeight: 600 }}>{c.titulo}</span>
+                      <span style={{ fontSize: FONT.xs, fontWeight: 700, padding: '2px 8px', borderRadius: RADIUS.chip, background: c.bg, color: c.cor, textTransform: 'uppercase' }}>
                         {c.status}
                       </span>
                     </div>
 
                     {c.evidencia && (
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '4px 8px', borderRadius: 4, marginBottom: 8 }}>
+                      <div style={{ fontSize: FONT.sm, fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '4px 8px', borderRadius: RADIUS.chip, marginBottom: SPACE.sm }}>
                         {c.evidencia}
                       </div>
                     )}
 
-                    <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 8, lineHeight: 1.4 }}>
+                    <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginBottom: SPACE.sm, lineHeight: 1.4 }}>
                       <strong>Problema identificado:</strong> {c.problema}
                     </div>
 
-                    <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 4, padding: 10, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                    <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: RADIUS.chip, padding: 10, fontSize: FONT.sm, fontFamily: 'var(--font-mono)' }}>
                       <strong>💡 Sugestão de Redação Padronizada:</strong><br/>
                       {c.sugestao}
                     </div>
@@ -182,6 +163,6 @@ A rescisão imotivada por qualquer das partes sujeitará a parte infratora ao pa
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
+import { Button, EmptyRow, EmptyState, FONT, Field, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
 type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria'
 
@@ -36,7 +37,7 @@ interface CreditoEscritorio {
   usuarios: CreditoUsuario[]
 }
 
-type Modal =
+type ModalState =
   | { kind: 'novoEscritorio' }
   | { kind: 'editar'; esc: Escritorio }
   | { kind: 'desativar'; esc: Escritorio }
@@ -65,50 +66,6 @@ const acaoMeta: Record<string, { label: string; color: string; bg: string }> = {
   PASSWORD_RESET: { label: 'Reset de senha', color: 'var(--color-warning)', bg: 'var(--color-accent-light)' },
   UPDATE_ESCRITORIO: { label: 'Escritório atualizado', color: 'var(--color-muted)', bg: 'var(--color-surface-2)' },
   DEACTIVATE_ESCRITORIO: { label: 'Escritório desativado', color: 'var(--color-danger)', bg: 'var(--color-danger-light)' },
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '9px 12px',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-background)',
-  fontSize: 13,
-  color: 'var(--color-foreground)',
-  outline: 'none',
-  fontFamily: 'var(--font-sans)',
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-muted)',
-  display: 'block',
-  marginBottom: 4,
-}
-
-const primaryBtn: React.CSSProperties = {
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  padding: '8px 16px',
-  borderRadius: 6,
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontFamily: 'var(--font-sans)',
-}
-
-const ghostBtn: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  color: 'var(--color-muted)',
-  border: '1px solid var(--color-border)',
-  padding: '8px 16px',
-  borderRadius: 6,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  fontFamily: 'var(--font-sans)',
 }
 
 const fmtNum = (v: number | string | undefined | null) => {
@@ -146,32 +103,17 @@ async function copiarTexto(text: string): Promise<boolean> {
   }
 }
 
-function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <th style={{ padding: '8px 22px', textAlign: 'left', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', fontFamily: 'var(--font-mono)', ...style }}>{children}</th>
-}
-
 function StatCard({ label, value, sub, subColor }: { label: string; value: string; sub?: string; subColor?: string }) {
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '18px 20px' }}>
-      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>{label}</div>
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '18px 20px' }}>
+      <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: SPACE.sm }}>{label}</div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.03em', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: subColor || 'var(--color-muted)', marginTop: 6 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: FONT.sm, color: subColor || 'var(--color-muted)', marginTop: SPACE.xs }}>{sub}</div>}
     </div>
   )
 }
 
-function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} style={{ padding: '32px 22px', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13 }}>
-        <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.6 }}>🗂️</div>
-        {text}
-      </td>
-    </tr>
-  )
-}
-
-function TempSenhaModal({ titulo, senha, onClose, notify }: { titulo: string; senha: string; onClose: () => void; notify: (t: 'success' | 'error', m: string) => void }) {
+function TempSenhaModal({ open, titulo, senha, onClose, notify }: { open: boolean; titulo: string; senha: string; onClose: () => void; notify: (t: 'success' | 'error', m: string) => void }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = async () => {
     const ok = await copiarTexto(senha)
@@ -185,19 +127,33 @@ function TempSenhaModal({ titulo, senha, onClose, notify }: { titulo: string; se
   }
 
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>{titulo}</div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 18 }}>Senha temporária do administrador inicial.</div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={titulo}
+      width={440}
+      footer={
+        <>
+          <Button onClick={handleCopy} style={copied ? { background: 'var(--color-success)' } : undefined}>
+            {copied ? 'Copiada ✓' : 'Copiar senha'}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Concluir</Button>
+        </>
+      }
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.lg }}>
+        Senha temporária do administrador inicial.
+      </div>
 
       <div style={{
         background: 'var(--color-accent-light)',
         border: '1px solid var(--color-accent)',
-        borderRadius: 6,
+        borderRadius: RADIUS.control,
         padding: '12px 14px',
-        fontSize: 12,
+        fontSize: FONT.base,
         color: 'var(--color-warning)',
         fontWeight: 500,
-        marginBottom: 16,
+        marginBottom: SPACE.lg,
         lineHeight: 1.5,
       }}>
         ⚠️ Anote agora — esta senha não será exibida novamente. Entregue-a ao administrador do escritório por um canal seguro.
@@ -206,80 +162,65 @@ function TempSenhaModal({ titulo, senha, onClose, notify }: { titulo: string; se
       <div style={{
         background: 'var(--color-surface-2)',
         border: '1px dashed var(--color-border)',
-        borderRadius: 6,
+        borderRadius: RADIUS.control,
         padding: '14px 16px',
-        marginBottom: 22,
       }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, letterSpacing: '0.06em', color: 'var(--color-foreground)', wordBreak: 'break-all' }}>{senha}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.cardTitle, letterSpacing: '0.06em', color: 'var(--color-foreground)', wordBreak: 'break-all' }}>{senha}</span>
       </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-        <button onClick={handleCopy} style={{ ...primaryBtn, background: copied ? 'var(--color-success)' : 'var(--color-primary)' }}>
-          {copied ? 'Copiada ✓' : 'Copiar senha'}
-        </button>
-        <button onClick={onClose} style={ghostBtn}>Concluir</button>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
-function ExcluirEscritorioModal({ esc, onCancel, onSubmit }: { esc: Escritorio; onCancel: () => void; onSubmit: () => void }) {
+function ExcluirEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean; esc: Escritorio; onClose: () => void; onSubmit: () => void }) {
   const [confirmText, setConfirmText] = useState('')
   const valid = confirmText.trim() === esc.nome
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4, color: 'var(--color-danger)' }}>
-        Excluir escritório permanentemente
-      </div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Excluir escritório permanentemente"
+      width={440}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="danger" disabled={!valid} onClick={onSubmit}>
+            Excluir permanentemente
+          </Button>
+        </>
+      }
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.lg }}>
         Esta ação <strong style={{ color: 'var(--color-danger)' }}>NÃO pode ser desfeita</strong>. Todos os processos, peças, clientes, andamentos, financeiro, timesheet e usuários do escritório serão removidos para sempre.
       </div>
 
       <div style={{
         background: 'var(--color-danger-light)',
         border: '1px solid var(--color-danger)',
-        borderRadius: 6,
+        borderRadius: RADIUS.control,
         padding: '12px 14px',
-        fontSize: 12,
+        fontSize: FONT.base,
         color: 'var(--color-danger)',
         fontWeight: 500,
-        marginBottom: 18,
+        marginBottom: SPACE.lg,
         lineHeight: 1.5,
       }}>
         ⚠️ Você está prestes a excluir <strong>{esc.nome}</strong> e <strong>todos os seus dados</strong>.
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <label style={labelStyle}>Para confirmar, digite o nome do escritório exatamente:</label>
+      <Field label="Para confirmar, digite o nome do escritório exatamente:" error={confirmText && !valid ? `O texto não confere com "${esc.nome}".` : undefined}>
         <input
           value={confirmText}
           onChange={e => setConfirmText(e.target.value)}
-          style={{ ...inputStyle, borderColor: valid ? 'var(--color-success)' : (confirmText ? 'var(--color-danger)' : 'var(--color-border)'), fontFamily: 'var(--font-mono)' }}
+          style={{ ...inputStyle(), borderColor: valid ? 'var(--color-success)' : (confirmText ? 'var(--color-danger)' : 'var(--color-border)'), fontFamily: 'var(--font-mono)' }}
           placeholder={esc.nome}
           autoFocus
         />
-        {confirmText && !valid && (
-          <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>
-            O texto não confere com "{esc.nome}".
-          </div>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-        <button onClick={onCancel} style={ghostBtn}>Cancelar</button>
-        <button
-          disabled={!valid}
-          onClick={onSubmit}
-          style={{ ...primaryBtn, background: 'var(--color-danger)', opacity: valid ? 1 : 0.5, cursor: valid ? 'pointer' : 'not-allowed' }}
-        >
-          Excluir permanentemente
-        </button>
-      </div>
-    </div>
+      </Field>
+    </Modal>
   )
 }
 
-function AddCreditosModal({ alvo, onCancel, onSubmit }: { alvo: { tipo: 'escritorio' | 'usuario'; id: string; nome: string }; onCancel: () => void; onSubmit: (quantidade: number) => void }) {
+function AddCreditosModal({ open, alvo, onClose, onSubmit }: { open: boolean; alvo: { tipo: 'escritorio' | 'usuario'; id: string; nome: string }; onClose: () => void; onSubmit: (quantidade: number) => void }) {
   const [quantidade, setQuantidade] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [submitting, setSubmitting] = useState(false)
@@ -300,38 +241,42 @@ function AddCreditosModal({ alvo, onCancel, onSubmit }: { alvo: { tipo: 'escrito
   const rotulo = alvo.tipo === 'escritorio' ? 'Adicionar créditos ao escritório' : 'Adicionar tokens ao usuário'
 
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>{rotulo}</div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={rotulo}
+      width={440}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!valid || submitting} onClick={submit}>
+            {submitting ? 'Adicionando…' : 'Adicionar créditos'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>
         <strong style={{ color: 'var(--color-foreground)' }}>{alvo.nome}</strong> · 1 crédito = 1 token. O saldo é somado ao valor atual e vale para o mês corrente.
       </div>
 
-      <div>
-        <label style={labelStyle}>Quantidade de créditos</label>
+      <Field label="Quantidade de créditos" error={error}>
         <input
           value={quantidade}
           onChange={e => { setQuantidade(e.target.value); if (error) setError(undefined) }}
-          style={{ ...inputStyle, borderColor: error ? 'var(--color-danger)' : 'var(--color-border)' }}
+          style={{ ...inputStyle(), borderColor: error ? 'var(--color-danger)' : 'var(--color-border)' }}
           type="number"
           min={1}
           step={1}
           placeholder="Ex.: 50000"
           autoFocus
         />
-        {error && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{error}</div>}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-        <button onClick={onCancel} style={ghostBtn}>Cancelar</button>
-        <button disabled={!valid || submitting} onClick={submit} style={{ ...primaryBtn, opacity: valid && !submitting ? 1 : 0.5, cursor: valid && !submitting ? 'pointer' : 'not-allowed' }}>
-          {submitting ? 'Adicionando…' : 'Adicionar créditos'}
-        </button>
-      </div>
-    </div>
+      </Field>
+    </Modal>
   )
 }
 
 export default function RootPainel() {
+  const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<Tab>('escritorios')
 
   const [escritorios, setEscritorios] = useState<Escritorio[]>([])
@@ -341,7 +286,7 @@ export default function RootPainel() {
   const [loadingCreditos, setLoadingCreditos] = useState(false)
   const [expandedEsc, setExpandedEsc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState<Modal>(null)
+  const [modal, setModal] = useState<ModalState>(null)
 
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const addToast = useCallback((type: 'error' | 'success' | 'warning' | 'info', text: string) => {
@@ -489,26 +434,23 @@ export default function RootPainel() {
   })
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1200 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>
-          Administração da Plataforma
-        </div>
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>
-          SmartJuris Operações · escritórios, consumo e auditoria
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        eyebrow="OPERAÇÕES DA PLATAFORMA"
+        title="Painel Root"
+        description="SmartJuris Operações · escritórios, consumo e auditoria"
+      />
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28 }}>
+      <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28, overflowX: 'auto' }}>
         {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 2px',
             border: 'none',
             background: 'transparent',
             cursor: 'pointer',
-            fontSize: 13,
+            fontSize: FONT.md,
+            whiteSpace: 'nowrap',
             fontWeight: activeTab === t ? 600 : 500,
             color: activeTab === t ? 'var(--color-foreground)' : 'var(--color-muted)',
             borderBottom: `2px solid ${activeTab === t ? 'var(--color-accent)' : 'transparent'}`,
@@ -523,59 +465,56 @@ export default function RootPainel() {
       {/* ===== TAB: ESCRITÓRIOS ===== */}
       {activeTab === 'escritorios' && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>{escritorios.length} {escritorios.length === 1 ? 'escritório' : 'escritórios'} na plataforma</div>
-            <button onClick={() => setModal({ kind: 'novoEscritorio' })} style={primaryBtn}>+ Novo escritório</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SPACE.lg, marginBottom: SPACE.xl, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>{escritorios.length} {escritorios.length === 1 ? 'escritório' : 'escritórios'} na plataforma</div>
+            <Button onClick={() => setModal({ kind: 'novoEscritorio' })}>+ Novo escritório</Button>
           </div>
 
           {loading ? (
-            <div style={{ color: 'var(--color-muted)', fontSize: 13, padding: '24px 0' }}>Carregando…</div>
+            <Loading message="Carregando…" />
           ) : (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <TableShell>
+              <Table>
                 <thead>
-                  <tr style={{ background: 'var(--color-surface-2)' }}>
+                  <THeadRow>
                     <Th>Escritório</Th><Th>Plano</Th><Th>Limite de usuários</Th><Th>Usuários ativos</Th><Th>Tokens (30d)</Th><Th>Status</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
-                  </tr>
+                  </THeadRow>
                 </thead>
                 <tbody>
                   {escritorios.map(esc => {
                     const pm = planoMeta[esc.plano] || { label: esc.plano, color: 'var(--color-muted)', bg: 'var(--color-surface-2)' }
                     return (
-                      <tr key={esc.id} style={{ borderTop: '1px solid var(--color-border)' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)'}
-                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>{esc.nome}</td>
-                        <td style={{ padding: '12px 22px' }}>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: 4 }}>{pm.label}</span>
-                        </td>
-                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtNum(esc.limiteUsuarios)}</td>
-                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtNum(esc.usuariosAtivos)}</td>
-                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtNum(esc.tokens30d)}</td>
-                        <td style={{ padding: '12px 22px' }}>
+                      <Tr key={esc.id}>
+                        <Td style={{ fontSize: FONT.md, fontWeight: 500 }}>{esc.nome}</Td>
+                        <Td>
+                          <span style={{ fontSize: FONT.xs, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{pm.label}</span>
+                        </Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(esc.limiteUsuarios)}</Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(esc.usuariosAtivos)}</Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(esc.tokens30d)}</Td>
+                        <Td>
                           <span style={{
-                            fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
+                            fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip,
                             color: esc.status === 'ativo' ? 'var(--color-success)' : 'var(--color-muted)',
                             background: esc.status === 'ativo' ? 'var(--color-success-light)' : 'var(--color-surface-2)',
                           }}>{esc.status === 'ativo' ? 'Ativo' : 'Inativo'}</span>
-                        </td>
-                        <td style={{ padding: '12px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <button onClick={() => setModal({ kind: 'editar', esc })} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, marginRight: 6 }}>Editar</button>
-                          <button onClick={() => setModal({ kind: 'desativar', esc })} disabled={esc.status !== 'ativo'} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, color: 'var(--color-danger)', borderColor: 'var(--color-danger)', opacity: esc.status === 'ativo' ? 1 : 0.4, cursor: esc.status === 'ativo' ? 'pointer' : 'not-allowed' }}>
+                        </Td>
+                        <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
+                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={esc.status !== 'ativo'} onClick={() => setModal({ kind: 'desativar', esc })}>
                             Desativar
-                          </button>
-                          <button onClick={() => setModal({ kind: 'excluir', esc })} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, color: 'var(--color-danger)', borderColor: 'var(--color-danger)', marginLeft: 6 }} title="Excluir permanentemente (irreversível)">
+                          </Button>
+                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)', marginLeft: 6 }} title="Excluir permanentemente (irreversível)" onClick={() => setModal({ kind: 'excluir', esc })}>
                             Excluir
-                          </button>
-                        </td>
-                      </tr>
+                          </Button>
+                        </Td>
+                      </Tr>
                     )
                   })}
-                  {escritorios.length === 0 && <EmptyRow colSpan={7} text="Nenhum escritório cadastrado. Clique em “Novo escritório” para começar." />}
+                  {escritorios.length === 0 && <EmptyRow colSpan={7} message="Nenhum escritório cadastrado. Clique em “Novo escritório” para começar." />}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </TableShell>
           )}
         </>
       )}
@@ -583,21 +522,21 @@ export default function RootPainel() {
       {/* ===== TAB: CRÉDITOS ===== */}
       {activeTab === 'creditos' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14, marginBottom: SPACE.xxl }}>
             <StatCard label="Escritórios com saldo" value={fmtNum(creditos.filter(c => c.creditosDisponiveis != null).length)} />
             <StatCard label="Créditos consumidos (mês)" value={fmtNum(creditos.reduce((a, c) => a + (Number(c.consumidosMes) || 0), 0))} />
             <StatCard label="Créditos restantes" value={fmtNum(creditos.reduce((a, c) => a + (Number(c.restantes) || 0), 0))} />
           </div>
 
           {loadingCreditos ? (
-            <div style={{ color: 'var(--color-muted)', fontSize: 13, padding: '24px 0' }}>Carregando…</div>
+            <Loading message="Carregando…" />
           ) : (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <TableShell>
+              <Table>
                 <thead>
-                  <tr style={{ background: 'var(--color-surface-2)' }}>
+                  <THeadRow>
                     <Th>Escritório</Th><Th>Plano</Th><Th>Disponível</Th><Th>Consumidos (mês)</Th><Th>Restantes</Th><Th style={{ width: 140 }}>Uso</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
-                  </tr>
+                  </THeadRow>
                 </thead>
                 <tbody>
                   {creditos.map(c => {
@@ -606,82 +545,79 @@ export default function RootPainel() {
                     const usoColor = pct > 85 ? 'var(--color-danger)' : pct > 60 ? 'var(--color-warning)' : 'var(--color-success)'
                     const pm = planoMeta[c.plano] || { label: c.plano, color: 'var(--color-muted)', bg: 'var(--color-surface-2)' }
                     return (
-                      <tr key={c.id} style={{ borderTop: '1px solid var(--color-border)', verticalAlign: 'top' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)'}
-                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>
+                      <Tr key={c.id} style={{ verticalAlign: 'top' }}>
+                        <Td style={{ fontSize: FONT.md, fontWeight: 500 }}>
                           {c.nome}
-                          {c.isDemo && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-accent)', marginLeft: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>demo</span>}
-                        </td>
-                        <td style={{ padding: '12px 22px' }}>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: 4 }}>{pm.label}</span>
-                        </td>
-                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{disp != null ? fmtNum(disp) : 'Ilimitado'}</td>
-                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtNum(c.consumidosMes)}</td>
-                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.restantes != null ? fmtNum(c.restantes) : '—'}</td>
-                        <td style={{ padding: '12px 22px' }}>
+                          {c.isDemo && <span style={{ fontSize: FONT.xs, fontWeight: 700, color: 'var(--color-accent)', marginLeft: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>demo</span>}
+                        </Td>
+                        <Td>
+                          <span style={{ fontSize: FONT.xs, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{pm.label}</span>
+                        </Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{disp != null ? fmtNum(disp) : 'Ilimitado'}</Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(c.consumidosMes)}</Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{c.restantes != null ? fmtNum(c.restantes) : '—'}</Td>
+                        <Td>
                           {disp != null && disp > 0 ? (
                             <div>
                               <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
                                 <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: usoColor, borderRadius: 3 }} />
                               </div>
-                              <div style={{ fontSize: 10, color: usoColor, fontWeight: 600, marginTop: 4 }}>{pct}%</div>
+                              <div style={{ fontSize: FONT.xs, color: usoColor, fontWeight: 600, marginTop: 4 }}>{pct}%</div>
                             </div>
-                          ) : <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>—</span>}
-                        </td>
-                        <td style={{ padding: '12px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          ) : <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>—</span>}
+                        </Td>
+                        <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           {c.isDemo && (
-                            <button onClick={() => setExpandedEsc(expandedEsc === c.id ? null : c.id)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, marginRight: 6 }}>
+                            <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setExpandedEsc(expandedEsc === c.id ? null : c.id)}>
                               {expandedEsc === c.id ? 'Ocultar usuários' : 'Ver usuários'}
-                            </button>
+                            </Button>
                           )}
-                          <button onClick={() => setModal({ kind: 'addCreditos', alvo: { tipo: 'escritorio', id: c.id, nome: c.nome } })} style={{ ...primaryBtn, padding: '5px 12px', fontSize: 11 }}>
+                          <Button size="sm" style={{ padding: '5px 12px', fontSize: FONT.sm }} onClick={() => setModal({ kind: 'addCreditos', alvo: { tipo: 'escritorio', id: c.id, nome: c.nome } })}>
                             + Créditos
-                          </button>
-                        </td>
-                      </tr>
+                          </Button>
+                        </Td>
+                      </Tr>
                     )
                   })}
-                  {creditos.length === 0 && <EmptyRow colSpan={7} text="Nenhum escritório cadastrado." />}
+                  {creditos.length === 0 && <EmptyRow colSpan={7} message="Nenhum escritório cadastrado." />}
                 </tbody>
-              </table>
+              </Table>
 
               {/* Usuários demo expandidos */}
               {creditos.filter(c => c.isDemo && expandedEsc === c.id).map(c => (
                 <div key={`users-${c.id}`} style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface-2)' }}>
-                  <div style={{ padding: '12px 22px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)' }}>
+                  <div style={{ padding: '12px 22px', fontSize: FONT.sm, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)' }}>
                     Usuários de {c.nome} (créditos individuais)
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <Table>
                     <tbody>
                       {c.usuarios.map(u => {
                         const dispU = u.creditosDisponiveis
                         const pctU = dispU != null && dispU > 0 ? Math.round((u.consumidosMes / dispU) * 100) : 0
                         const usoColorU = pctU > 85 ? 'var(--color-danger)' : pctU > 60 ? 'var(--color-warning)' : 'var(--color-success)'
                         return (
-                          <tr key={u.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                            <td style={{ padding: '10px 22px', fontSize: 13 }}>
+                          <Tr key={u.id}>
+                            <Td style={{ padding: '10px 22px', fontSize: FONT.md }}>
                               <div style={{ fontWeight: 500 }}>{u.nome}</div>
-                              <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>{u.email}</div>
-                            </td>
-                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Disp: {dispU != null ? fmtNum(dispU) : 'herda esc.'}</td>
-                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Consumidos: {fmtNum(u.consumidosMes)}</td>
-                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: 12, color: usoColorU, fontWeight: 600 }}>Restantes: {u.restantes != null ? fmtNum(u.restantes) : '—'}</td>
-                            <td style={{ padding: '10px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <button onClick={() => setModal({ kind: 'addCreditos', alvo: { tipo: 'usuario', id: u.id, nome: u.nome } })} style={{ ...primaryBtn, padding: '5px 12px', fontSize: 11 }}>
+                              <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>{u.email}</div>
+                            </Td>
+                            <Td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>Disp: {dispU != null ? fmtNum(dispU) : 'herda esc.'}</Td>
+                            <Td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>Consumidos: {fmtNum(u.consumidosMes)}</Td>
+                            <Td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: FONT.base, color: usoColorU, fontWeight: 600 }}>Restantes: {u.restantes != null ? fmtNum(u.restantes) : '—'}</Td>
+                            <Td style={{ padding: '10px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <Button size="sm" style={{ padding: '5px 12px', fontSize: FONT.sm }} onClick={() => setModal({ kind: 'addCreditos', alvo: { tipo: 'usuario', id: u.id, nome: u.nome } })}>
                                 + Tokens
-                              </button>
-                            </td>
-                          </tr>
+                              </Button>
+                            </Td>
+                          </Tr>
                         )
                       })}
-                      {c.usuarios.length === 0 && <tr><td colSpan={5} style={{ padding: '16px 22px', color: 'var(--color-muted)', fontSize: 12 }}>Nenhum usuário.</td></tr>}
+                      {c.usuarios.length === 0 && <EmptyRow colSpan={5} message="Nenhum usuário." />}
                     </tbody>
-                  </table>
+                  </Table>
                 </div>
               ))}
-            </div>
+            </TableShell>
           )}
         </>
       )}
@@ -689,22 +625,22 @@ export default function RootPainel() {
       {/* ===== TAB: MÉTRICAS AGREGADAS ===== */}
       {activeTab === 'metricas' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14, marginBottom: SPACE.xxl }}>
             <StatCard label="Escritórios" value={fmtNum(escritorios.length)} sub={`${fmtNum(escritorios.filter(e => e.status === 'ativo').length)} ativos`} />
             <StatCard label="Tokens totais (30d)" value={fmtNum(totalTokens)} />
             <StatCard label="Usuários ativos" value={fmtNum(totalUsuarios)} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14, marginBottom: 28 }}>
             {metricas.map(m => {
               const uso = m?.usoPercentual != null ? Number(m.usoPercentual) : 0
               const usoColor = uso > 85 ? 'var(--color-danger)' : uso > 60 ? 'var(--color-warning)' : 'var(--color-success)'
               return (
-                <div key={m.id} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '18px 20px' }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{m.nome}</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, letterSpacing: '-0.02em', margin: '10px 0 2px' }}>{fmtNum(m.tokens30d)}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>tokens (30d)</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-muted)', margin: '10px 0 6px' }}>
+                <div key={m.id} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '18px 20px' }}>
+                  <div style={{ fontWeight: 600, fontSize: FONT.md, marginBottom: 2 }}>{m.nome}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.cardTitle, letterSpacing: '-0.02em', margin: '10px 0 2px' }}>{fmtNum(m.tokens30d)}</div>
+                  <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>tokens (30d)</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: FONT.sm, color: 'var(--color-muted)', margin: '10px 0 6px' }}>
                     <span>{fmtNum(m.usuariosAtivos)} usuários ativos</span>
                     <span style={{ color: usoColor, fontWeight: 600 }}>{uso}%</span>
                   </div>
@@ -715,30 +651,30 @@ export default function RootPainel() {
               )
             })}
             {metricas.length === 0 && (
-              <div style={{ gridColumn: '1 / -1', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '40px', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13 }}>
-                Sem métricas agregadas disponíveis.
+              <div style={{ gridColumn: '1 / -1', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card }}>
+                <EmptyState message="Sem métricas agregadas disponíveis." />
               </div>
             )}
           </div>
 
           {ranking.length > 0 && (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, fontSize: 13 }}>Ranking por uso do limite</div>
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, overflow: 'hidden' }}>
+              <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, fontSize: FONT.md }}>Ranking por uso do limite</div>
               {ranking.map((m, i) => {
                 const uso = m?.usoPercentual != null ? Number(m.usoPercentual) : 0
                 const usoColor = uso > 85 ? 'var(--color-danger)' : uso > 60 ? 'var(--color-warning)' : 'var(--color-success)'
                 return (
                   <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 22px', borderBottom: '1px solid var(--color-border)' }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: i === 0 ? 'var(--color-accent)' : 'var(--color-surface-2)', color: i === 0 ? '#18170f' : 'var(--color-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: i === 0 ? 'var(--color-accent)' : 'var(--color-surface-2)', color: i === 0 ? 'var(--color-on-accent)' : 'var(--color-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: FONT.sm, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                     <div style={{ width: 180, flexShrink: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{m.nome}</div>
+                      <div style={{ fontSize: FONT.md, fontWeight: 500 }}>{m.nome}</div>
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
                         <div style={{ width: `${Math.min(uso, 100)}%`, height: '100%', background: usoColor, borderRadius: 3 }} />
                       </div>
                     </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: usoColor, fontWeight: 600, width: 48, textAlign: 'right', flexShrink: 0 }}>{uso}%</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, color: usoColor, fontWeight: 600, width: 48, textAlign: 'right', flexShrink: 0 }}>{uso}%</div>
                   </div>
                 )
               })}
@@ -749,75 +685,75 @@ export default function RootPainel() {
 
       {/* ===== TAB: AUDITORIA ===== */}
       {activeTab === 'auditoria' && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <TableShell>
+          <Table>
             <thead>
-              <tr style={{ background: 'var(--color-surface-2)' }}>
+              <THeadRow>
                 <Th>Data</Th><Th>Ação</Th><Th>Autor</Th><Th>Detalhes</Th><Th>IP</Th>
-              </tr>
+              </THeadRow>
             </thead>
             <tbody>
               {auditoria.map(l => {
                 const am = acaoMeta[l.acao] || { label: l.acao, color: 'var(--color-primary)', bg: 'var(--color-badge-tint)' }
                 return (
-                  <tr key={l.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                    <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{fmtDate(l.createdAt)}</td>
-                    <td style={{ padding: '12px 22px' }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: am.color, background: am.bg, padding: '3px 8px', borderRadius: 4 }}>{am.label}</span>
-                    </td>
-                    <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>{l.actorNome || '—'}</td>
-                    <td style={{ padding: '12px 22px', fontSize: 12, color: 'var(--color-muted)' }}>{l.detalhes || '—'}</td>
-                    <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{l.ipAddress || '—'}</td>
-                  </tr>
+                  <Tr key={l.id}>
+                    <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)' }}>{fmtDate(l.createdAt)}</Td>
+                    <Td>
+                      <span style={{ fontSize: FONT.xs, fontWeight: 600, color: am.color, background: am.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{am.label}</span>
+                    </Td>
+                    <Td style={{ fontSize: FONT.md, fontWeight: 500 }}>{l.actorNome || '—'}</Td>
+                    <Td style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>{l.detalhes || '—'}</Td>
+                    <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)' }}>{l.ipAddress || '—'}</Td>
+                  </Tr>
                 )
               })}
-              {auditoria.length === 0 && <EmptyRow colSpan={5} text="Nenhuma entrada de auditoria disponível." />}
+              {auditoria.length === 0 && <EmptyRow colSpan={5} message="Nenhuma entrada de auditoria disponível." />}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </TableShell>
       )}
 
-      {/* ===== MODALS ===== */}
-      {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(24,23,15,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }} onClick={() => setModal(null)}>
-          <div style={{ background: 'var(--color-surface)', borderRadius: 10, padding: 28, width: 440, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
-            {modal.kind === 'novoEscritorio' && (
-              <NovoEscritorioModal onCancel={() => setModal(null)} onSubmit={handleCriarEscritorio} />
-            )}
-            {modal.kind === 'editar' && (
-              <EditarEscritorioModal esc={modal.esc} onCancel={() => setModal(null)} onSubmit={handleEditar} />
-            )}
-            {modal.kind === 'desativar' && (
-              <div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>Desativar escritório</div>
-                <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>
-                  Desativar <strong style={{ color: 'var(--color-foreground)' }}>{modal.esc.nome}</strong>? Todos os usuários do escritório perderão o acesso. A ação é reversível (soft delete).
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button onClick={() => setModal(null)} style={ghostBtn}>Cancelar</button>
-                  <button onClick={() => handleDesativar(modal.esc)} style={{ ...primaryBtn, background: 'var(--color-danger)' }}>Desativar escritório</button>
-                </div>
-              </div>
-            )}
-            {modal.kind === 'excluir' && (
-              <ExcluirEscritorioModal esc={modal.esc} onCancel={() => setModal(null)} onSubmit={() => handleExcluir(modal.esc)} />
-            )}
-            {modal.kind === 'addCreditos' && (
-              <AddCreditosModal alvo={modal.alvo} onCancel={() => setModal(null)} onSubmit={(q) => handleAddCreditos(modal.alvo.tipo, modal.alvo.id, q)} />
-            )}
-            {modal.kind === 'tempSenha' && (
-              <TempSenhaModal titulo={modal.titulo} senha={modal.senha} onClose={() => setModal(null)} notify={(t, m) => addToast(t, m)} />
-            )}
+      {/* ===== MODAIS ===== */}
+      {modal?.kind === 'novoEscritorio' && (
+        <NovoEscritorioModal open onClose={() => setModal(null)} onSubmit={handleCriarEscritorio} />
+      )}
+      {modal?.kind === 'editar' && (
+        <EditarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={handleEditar} />
+      )}
+      {modal?.kind === 'desativar' && (
+        <Modal
+          open
+          onClose={() => setModal(null)}
+          title="Desativar escritório"
+          width={440}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
+              <Button variant="danger" onClick={() => handleDesativar(modal.esc)}>Desativar escritório</Button>
+            </>
+          }
+        >
+          <div style={{ color: 'var(--color-muted)', fontSize: FONT.base }}>
+            Desativar <strong style={{ color: 'var(--color-foreground)' }}>{modal.esc.nome}</strong>? Todos os usuários do escritório perderão o acesso. A ação é reversível (soft delete).
           </div>
-        </div>
+        </Modal>
+      )}
+      {modal?.kind === 'excluir' && (
+        <ExcluirEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={() => handleExcluir(modal.esc)} />
+      )}
+      {modal?.kind === 'addCreditos' && (
+        <AddCreditosModal open alvo={modal.alvo} onClose={() => setModal(null)} onSubmit={(q) => handleAddCreditos(modal.alvo.tipo, modal.alvo.id, q)} />
+      )}
+      {modal?.kind === 'tempSenha' && (
+        <TempSenhaModal open titulo={modal.titulo} senha={modal.senha} onClose={() => setModal(null)} notify={(t, m) => addToast(t, m)} />
       )}
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
-    </div>
+    </PageContainer>
   )
 }
 
-function NovoEscritorioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (data: { nome: string; adminNome: string; adminEmail: string }) => void }) {
+function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClose: () => void; onSubmit: (data: { nome: string; adminNome: string; adminEmail: string }) => void }) {
   const [nome, setNome] = useState('')
   const [adminNome, setAdminNome] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
@@ -841,39 +777,40 @@ function NovoEscritorioModal({ onCancel, onSubmit }: { onCancel: () => void; onS
   }
 
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>Novo escritório</div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>Crie um novo escritório e o administrador inicial responsável por ele.</div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div>
-          <label style={labelStyle}>Nome do escritório</label>
-          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle, borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Silva & Advogados Associados" autoFocus />
-          {errors.nome && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{errors.nome}</div>}
-        </div>
-        <div>
-          <label style={labelStyle}>Nome do admin inicial</label>
-          <input value={adminNome} onChange={e => { setAdminNome(e.target.value); if (errors.adminNome) setErrors(p => ({ ...p, adminNome: undefined })) }} style={{ ...inputStyle, borderColor: errors.adminNome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" />
-          {errors.adminNome && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{errors.adminNome}</div>}
-        </div>
-        <div>
-          <label style={labelStyle}>E-mail do admin inicial</label>
-          <input value={adminEmail} onChange={e => { setAdminEmail(e.target.value); if (errors.adminEmail) setErrors(p => ({ ...p, adminEmail: undefined })) }} style={{ ...inputStyle, borderColor: errors.adminEmail ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="admin@escritorio.com" />
-          {errors.adminEmail && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{errors.adminEmail}</div>}
-        </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Novo escritório"
+      width={440}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!valid || submitting} onClick={submit}>
+            {submitting ? 'Criando…' : 'Criar escritório'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>
+        Crie um novo escritório e o administrador inicial responsável por ele.
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-        <button onClick={onCancel} style={ghostBtn}>Cancelar</button>
-        <button disabled={!valid || submitting} onClick={submit} style={{ ...primaryBtn, opacity: valid && !submitting ? 1 : 0.5, cursor: valid && !submitting ? 'pointer' : 'not-allowed' }}>
-          {submitting ? 'Criando…' : 'Criar escritório'}
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <Field label="Nome do escritório" error={errors.nome}>
+          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Silva & Advogados Associados" autoFocus />
+        </Field>
+        <Field label="Nome do admin inicial" error={errors.adminNome}>
+          <input value={adminNome} onChange={e => { setAdminNome(e.target.value); if (errors.adminNome) setErrors(p => ({ ...p, adminNome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminNome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" />
+        </Field>
+        <Field label="E-mail do admin inicial" error={errors.adminEmail}>
+          <input value={adminEmail} onChange={e => { setAdminEmail(e.target.value); if (errors.adminEmail) setErrors(p => ({ ...p, adminEmail: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminEmail ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="admin@escritorio.com" />
+        </Field>
       </div>
-    </div>
+    </Modal>
   )
 }
 
-function EditarEscritorioModal({ esc, onCancel, onSubmit }: { esc: Escritorio; onCancel: () => void; onSubmit: (id: string, patch: { plano: string; limiteUsuarios: number; limiteTokensMes?: number }) => void }) {
+function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean; esc: Escritorio; onClose: () => void; onSubmit: (id: string, patch: { plano: string; limiteUsuarios: number; limiteTokensMes?: number }) => void }) {
   const [plano, setPlano] = useState(esc.plano || 'starter')
   const [limiteUsuarios, setLimiteUsuarios] = useState(String(esc.limiteUsuarios ?? 10))
   const [limiteTokensMes, setLimiteTokensMes] = useState(String(esc.limiteTokensMes ?? 1000000))
@@ -888,33 +825,35 @@ function EditarEscritorioModal({ esc, onCancel, onSubmit }: { esc: Escritorio; o
   }
 
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>Editar escritório</div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>{esc.nome}</div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Editar escritório"
+      width={440}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!valid || submitting} onClick={submit}>
+            {submitting ? 'Salvando…' : 'Salvar alterações'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>{esc.nome}</div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div>
-          <label style={labelStyle}>Plano</label>
-          <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <Field label="Plano">
+          <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle()}>
             {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Limite de usuários</label>
-          <input value={limiteUsuarios} onChange={e => setLimiteUsuarios(e.target.value)} style={inputStyle} type="number" min={1} />
-        </div>
-        <div>
-          <label style={labelStyle}>Limite de tokens (mensal)</label>
-          <input value={limiteTokensMes} onChange={e => setLimiteTokensMes(e.target.value)} style={inputStyle} type="number" min={0} />
-        </div>
+        </Field>
+        <Field label="Limite de usuários">
+          <input value={limiteUsuarios} onChange={e => setLimiteUsuarios(e.target.value)} style={inputStyle()} type="number" min={1} />
+        </Field>
+        <Field label="Limite de tokens (mensal)">
+          <input value={limiteTokensMes} onChange={e => setLimiteTokensMes(e.target.value)} style={inputStyle()} type="number" min={0} />
+        </Field>
       </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-        <button onClick={onCancel} style={ghostBtn}>Cancelar</button>
-        <button disabled={!valid || submitting} onClick={submit} style={{ ...primaryBtn, opacity: valid && !submitting ? 1 : 0.5, cursor: valid && !submitting ? 'pointer' : 'not-allowed' }}>
-          {submitting ? 'Salvando…' : 'Salvar alterações'}
-        </button>
-      </div>
-    </div>
+    </Modal>
   )
 }

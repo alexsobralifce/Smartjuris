@@ -3,6 +3,7 @@ import { useEditor, EditorContent, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle, FontSize } from '@tiptap/extension-text-style'
+import { FONT, RADIUS, SPACE } from '../ui'
 
 interface EditorRicoProps {
   initialContent: any;          // JSON do TipTap (objeto) OU string HTML/plain
@@ -93,11 +94,11 @@ export default function EditorRico({ initialContent, onChange, readOnly = false,
 
   const toolBtn = (active: boolean): CSSProperties => ({
     padding: '6px 10px',
-    borderRadius: 6,
+    borderRadius: RADIUS.control,
     border: '1px solid var(--color-border)',
     background: active ? 'var(--color-primary)' : 'var(--color-surface)',
-    color: active ? '#fff' : 'var(--color-foreground)',
-    fontSize: 12,
+    color: active ? 'var(--color-on-primary)' : 'var(--color-foreground)',
+    fontSize: FONT.base,
     fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'var(--font-sans)',
@@ -106,11 +107,11 @@ export default function EditorRico({ initialContent, onChange, readOnly = false,
 
   const toolSelect: CSSProperties = {
     padding: '5px 6px',
-    borderRadius: 6,
+    borderRadius: RADIUS.control,
     border: '1px solid var(--color-border)',
     background: 'var(--color-surface)',
     color: 'var(--color-foreground)',
-    fontSize: 12,
+    fontSize: FONT.base,
     outline: 'none',
     fontFamily: 'var(--font-sans)',
     cursor: 'pointer',
@@ -121,7 +122,7 @@ export default function EditorRico({ initialContent, onChange, readOnly = false,
   return (
     <div>
       {!readOnly && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-surface)', padding: 8, marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: SPACE.sm, alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: RADIUS.control, background: 'var(--color-surface)', padding: SPACE.sm, marginBottom: SPACE.sm }}>
           <button type="button" title="Negrito" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} style={toolBtn(state.bold)}>
             <strong>B</strong>
           </button>
@@ -179,7 +180,7 @@ export default function EditorRico({ initialContent, onChange, readOnly = false,
         </div>
       )}
 
-      <div style={{ border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-surface)', minHeight, padding: 12 }}>
+      <div style={{ border: '1px solid var(--color-border)', borderRadius: RADIUS.control, background: 'var(--color-surface)', minHeight, padding: SPACE.md }}>
         <EditorContent editor={editor} style={{ minHeight }} />
       </div>
     </div>

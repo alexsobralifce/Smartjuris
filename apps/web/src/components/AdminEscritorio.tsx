@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
+import {
+  Button, EmptyRow, EmptyState, Field, FONT, inputStyle, Loading, Modal,
+  PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile,
+} from '../ui'
 
 type Tab = 'usuarios' | 'permissoes' | 'metricas' | 'identidade'
 
@@ -42,50 +46,6 @@ const roleMeta: Record<string, { label: string; color: string; bg: string }> = {
   user: { label: 'Usuário', color: 'var(--color-warning)', bg: 'var(--color-accent-light)' },
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '9px 12px',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-background)',
-  fontSize: 13,
-  color: 'var(--color-foreground)',
-  outline: 'none',
-  fontFamily: 'var(--font-sans)',
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-muted)',
-  display: 'block',
-  marginBottom: 4,
-}
-
-const primaryBtn: React.CSSProperties = {
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  padding: '8px 16px',
-  borderRadius: 6,
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontFamily: 'var(--font-sans)',
-}
-
-const ghostBtn: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  color: 'var(--color-muted)',
-  border: '1px solid var(--color-border)',
-  padding: '8px 16px',
-  borderRadius: 6,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  fontFamily: 'var(--font-sans)',
-}
-
 const fmtNum = (v: number | string | undefined | null) => {
   if (v === undefined || v === null) return '—'
   const n = typeof v === 'string' ? parseFloat(v) : v
@@ -121,28 +81,13 @@ async function copiarTexto(text: string): Promise<boolean> {
   }
 }
 
-function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <th style={{ padding: '8px 22px', textAlign: 'left', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', fontFamily: 'var(--font-mono)', ...style }}>{children}</th>
-}
-
 function StatCard({ label, value, sub, subColor }: { label: string; value: string; sub?: string; subColor?: string }) {
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '18px 20px' }}>
-      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>{label}</div>
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '18px 20px' }}>
+      <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>{label}</div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.03em', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: subColor || 'var(--color-muted)', marginTop: 6 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: FONT.sm, color: subColor || 'var(--color-muted)', marginTop: 6 }}>{sub}</div>}
     </div>
-  )
-}
-
-function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} style={{ padding: '32px 22px', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13 }}>
-        <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.6 }}>🗂️</div>
-        {text}
-      </td>
-    </tr>
   )
 }
 
@@ -160,7 +105,7 @@ function ModuleCheckboxGrid({ selected, onChange }: { selected: string[]; onChan
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '10px 12px',
             border: `1px solid ${checked ? 'var(--color-primary)' : 'var(--color-border)'}`,
-            borderRadius: 6,
+            borderRadius: RADIUS.control,
             cursor: 'pointer',
             background: checked ? 'var(--color-badge-tint)' : 'var(--color-surface)',
             transition: 'border-color 0.15s, background 0.15s',
@@ -171,7 +116,7 @@ function ModuleCheckboxGrid({ selected, onChange }: { selected: string[]; onChan
               onChange={() => toggle(m.id)}
               style={{ accentColor: 'var(--color-primary)', width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }}
             />
-            <span style={{ fontSize: 12.5, fontWeight: 500, color: checked ? 'var(--color-foreground)' : 'var(--color-muted)' }}>{m.label}</span>
+            <span style={{ fontSize: FONT.md, fontWeight: 500, color: checked ? 'var(--color-foreground)' : 'var(--color-muted)' }}>{m.label}</span>
           </label>
         )
       })}
@@ -194,46 +139,57 @@ function TempSenhaModal({ titulo, senha, onClose, notify }: { titulo: string; se
   }
 
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>{titulo}</div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 18 }}>Senha temporária gerada pelo sistema.</div>
+    <Modal
+      open
+      onClose={onClose}
+      title={titulo}
+      width={440}
+      footer={(
+        <>
+          <Button
+            onClick={handleCopy}
+            variant={copied ? 'danger' : 'primary'}
+            style={copied ? { background: 'var(--color-success)' } : undefined}
+          >
+            {copied ? 'Copiada ✓' : 'Copiar senha'}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Concluir</Button>
+        </>
+      )}
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.lg }}>
+        Senha temporária gerada pelo sistema.
+      </div>
 
       <div style={{
         background: 'var(--color-accent-light)',
         border: '1px solid var(--color-accent)',
-        borderRadius: 6,
+        borderRadius: RADIUS.control,
         padding: '12px 14px',
-        fontSize: 12,
+        fontSize: FONT.base,
         color: 'var(--color-warning)',
         fontWeight: 500,
-        marginBottom: 16,
+        marginBottom: SPACE.lg,
         lineHeight: 1.5,
       }}>
         ⚠️ Anote agora — esta senha não será exibida novamente. Entregue-a ao usuário por um canal seguro.
       </div>
 
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md,
         background: 'var(--color-surface-2)',
         border: '1px dashed var(--color-border)',
-        borderRadius: 6,
+        borderRadius: RADIUS.control,
         padding: '14px 16px',
-        marginBottom: 22,
       }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, letterSpacing: '0.06em', color: 'var(--color-foreground)', wordBreak: 'break-all' }}>{senha}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.cardTitle, letterSpacing: '0.06em', color: 'var(--color-foreground)', wordBreak: 'break-all' }}>{senha}</span>
       </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-        <button onClick={handleCopy} style={{ ...primaryBtn, background: copied ? 'var(--color-success)' : 'var(--color-primary)' }}>
-          {copied ? 'Copiada ✓' : 'Copiar senha'}
-        </button>
-        <button onClick={onClose} style={ghostBtn}>Concluir</button>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
 export default function AdminEscritorio() {
+  const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<Tab>('usuarios')
 
   const me = JSON.parse(localStorage.getItem('smartjuris_user') || '{}')
@@ -433,338 +389,349 @@ export default function AdminEscritorio() {
   const selectedUser = users.find(u => u.id === selectedUserId)
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1200 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>
-          {info?.nome || 'Administração do Escritório'}
+    <PageContainer>
+      <PageHeader
+        eyebrow="ADMINISTRAÇÃO DO ESCRITÓRIO"
+        title={info?.nome || 'Administração do Escritório'}
+        description="Gestão de usuários, permissões e consumo do seu escritório"
+      />
+
+      <div style={{ marginTop: SPACE.xxl }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: SPACE.xxl, borderBottom: '1px solid var(--color-border)', marginBottom: 28 }}>
+          {([['usuarios', 'Usuários'], ['permissoes', 'Permissões'], ['metricas', 'Métricas'], ['identidade', 'Identidade / Papel Timbrado']] as [Tab, string][]).map(([t, label]) => (
+            <button key={t} onClick={() => setActiveTab(t)} style={{
+              padding: '10px 2px',
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontSize: FONT.md,
+              fontWeight: activeTab === t ? 600 : 500,
+              color: activeTab === t ? 'var(--color-foreground)' : 'var(--color-muted)',
+              borderBottom: `2px solid ${activeTab === t ? 'var(--color-accent)' : 'transparent'}`,
+              marginBottom: -1,
+              transition: 'color 0.15s',
+            }}>
+              {label}
+            </button>
+          ))}
         </div>
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>
-          Gestão de usuários, permissões e consumo do seu escritório
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28 }}>
-        {([['usuarios', 'Usuários'], ['permissoes', 'Permissões'], ['metricas', 'Métricas'], ['identidade', 'Identidade / Papel Timbrado']] as [Tab, string][]).map(([t, label]) => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            padding: '10px 2px',
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: activeTab === t ? 600 : 500,
-            color: activeTab === t ? 'var(--color-foreground)' : 'var(--color-muted)',
-            borderBottom: `2px solid ${activeTab === t ? 'var(--color-accent)' : 'transparent'}`,
-            marginBottom: -1,
-            transition: 'color 0.15s',
-          }}>
-            {label}
-          </button>
-        ))}
-      </div>
+        {loading && activeTab === 'usuarios' && <Loading message="Carregando…" />}
 
-      {loading && activeTab === 'usuarios' && (
-        <div style={{ color: 'var(--color-muted)', fontSize: 13, padding: '24px 0' }}>Carregando…</div>
-      )}
+        {/* ===== TAB: USUÁRIOS ===== */}
+        {activeTab === 'usuarios' && !loading && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SPACE.lg, marginBottom: SPACE.xl }}>
+              <div style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>{users.length} {users.length === 1 ? 'usuário' : 'usuários'} no escritório</div>
+              <Button onClick={() => setModal({ kind: 'novoUsuario' })}>+ Novo usuário</Button>
+            </div>
 
-      {/* ===== TAB: USUÁRIOS ===== */}
-      {activeTab === 'usuarios' && !loading && (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>{users.length} {users.length === 1 ? 'usuário' : 'usuários'} no escritório</div>
-            <button onClick={() => setModal({ kind: 'novoUsuario' })} style={primaryBtn}>+ Novo usuário</button>
-          </div>
-
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--color-surface-2)' }}>
+            <TableShell>
+              <Table>
+                <THeadRow>
                   <Th>Nome</Th><Th>E-mail</Th><Th>Perfil</Th><Th>Último login</Th><Th>Status</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(u => {
-                  const rm = roleMeta[u.role] || roleMeta.user
-                  return (
-                    <tr key={u.id} style={{ borderTop: '1px solid var(--color-border)' }}
-                      onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)'}
-                      onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
-                    >
-                      <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>{u.nome}</td>
-                      <td style={{ padding: '12px 22px', fontSize: 12, color: 'var(--color-muted)' }}>{u.email}</td>
-                      <td style={{ padding: '12px 22px' }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: rm.color, background: rm.bg, padding: '3px 8px', borderRadius: 4 }}>{rm.label}</span>
-                      </td>
-                      <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>{fmtDate(u.ultimoLogin)}</td>
-                      <td style={{ padding: '12px 22px' }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
-                          color: u.ativo ? 'var(--color-success)' : 'var(--color-muted)',
-                          background: u.ativo ? 'var(--color-success-light)' : 'var(--color-surface-2)',
-                        }}>{u.ativo ? 'Ativo' : 'Inativo'}</span>
-                      </td>
-                      <td style={{ padding: '12px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => setModal({ kind: 'resetSenha', user: u })} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, marginRight: 6 }}>Resetar senha</button>
-                        <button onClick={() => setModal({ kind: 'desativar', user: u })} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, color: u.ativo ? 'var(--color-danger)' : 'var(--color-success)', borderColor: u.ativo ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                          {u.ativo ? 'Desativar' : 'Reativar'}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {users.length === 0 && <EmptyRow colSpan={6} text="Nenhum usuário cadastrado. Clique em “Novo usuário” para começar." />}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+                </THeadRow>
+                <tbody>
+                  {users.map(u => {
+                    const rm = roleMeta[u.role] || roleMeta.user
+                    return (
+                      <Tr key={u.id}>
+                        <Td style={{ fontWeight: 500 }}>{u.nome}</Td>
+                        <Td style={{ color: 'var(--color-muted)' }}>{u.email}</Td>
+                        <Td>
+                          <span style={{ fontSize: FONT.xs, fontWeight: 600, color: rm.color, background: rm.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{rm.label}</span>
+                        </Td>
+                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)' }}>{fmtDate(u.ultimoLogin)}</Td>
+                        <Td>
+                          <span style={{
+                            fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip,
+                            color: u.ativo ? 'var(--color-success)' : 'var(--color-muted)',
+                            background: u.ativo ? 'var(--color-success-light)' : 'var(--color-surface-2)',
+                          }}>{u.ativo ? 'Ativo' : 'Inativo'}</span>
+                        </Td>
+                        <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <Button size="sm" variant="secondary" onClick={() => setModal({ kind: 'resetSenha', user: u })} style={{ marginRight: 6 }}>Resetar senha</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setModal({ kind: 'desativar', user: u })} style={{ color: u.ativo ? 'var(--color-danger)' : 'var(--color-success)', borderColor: u.ativo ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                            {u.ativo ? 'Desativar' : 'Reativar'}
+                          </Button>
+                        </Td>
+                      </Tr>
+                    )
+                  })}
+                  {users.length === 0 && <EmptyRow colSpan={6} message="Nenhum usuário cadastrado. Clique em “Novo usuário” para começar." />}
+                </tbody>
+              </Table>
+            </TableShell>
+          </>
+        )}
 
-      {/* ===== TAB: PERMISSÕES ===== */}
-      {activeTab === 'permissoes' && (
-        <>
+        {/* ===== TAB: PERMISSÕES ===== */}
+        {activeTab === 'permissoes' && (
           <div style={{ maxWidth: 560 }}>
-            <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Selecione o usuário</label>
-              <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} style={inputStyle}>
-                <option value="">— Escolha um usuário —</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.nome} · {u.email}</option>
-                ))}
-              </select>
+            <div style={{ marginBottom: SPACE.xl }}>
+              <Field label="Selecione o usuário">
+                <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} style={inputStyle()}>
+                  <option value="">— Escolha um usuário —</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.nome} · {u.email}</option>
+                  ))}
+                </select>
+              </Field>
             </div>
 
             {selectedUser && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>Módulos de acesso de</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedUser.nome}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: SPACE.md }}>
+                  <span style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>Módulos de acesso de</span>
+                  <span style={{ fontSize: FONT.md, fontWeight: 600 }}>{selectedUser.nome}</span>
                 </div>
                 <ModuleCheckboxGrid selected={permissoesSelecionadas} onChange={setPermissoesSelecionadas} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
-                  <button
+                <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.md, marginTop: SPACE.xl }}>
+                  <Button
                     onClick={handleSalvarPermissoes}
                     disabled={savingPermissoes || !permissoesDirty}
-                    style={{ ...primaryBtn, opacity: savingPermissoes || !permissoesDirty ? 0.5 : 1, cursor: savingPermissoes || !permissoesDirty ? 'not-allowed' : 'pointer' }}
                   >
                     {savingPermissoes ? 'Salvando…' : 'Salvar permissões'}
-                  </button>
-                  {!permissoesDirty && <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>Nenhuma alteração pendente</span>}
+                  </Button>
+                  {!permissoesDirty && <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>Nenhuma alteração pendente</span>}
                 </div>
               </>
             )}
 
             {!selectedUser && (
-              <div style={{ padding: '48px 22px', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
-                <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.6 }}>🔑</div>
-                Selecione um usuário acima para editar os módulos que ele pode acessar.
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card }}>
+                <EmptyState icon="🔑" message="Selecione um usuário acima para editar os módulos que ele pode acessar." />
               </div>
             )}
           </div>
-        </>
-      )}
+        )}
 
-      {/* ===== TAB: MÉTRICAS ===== */}
-      {activeTab === 'metricas' && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
-            <StatCard label="Processos" value={fmtNum(metricas?.totalProcessos)} sub={`${fmtNum(metricas?.processosAtivos)} ativos`} />
-            <StatCard label="Peças no mês" value={fmtNum(metricas?.pecasMes)} />
-            <StatCard label="Tokens no mês" value={fmtNum(metricas?.tokensMes)} sub={hasLimite ? `Limite mensal: ${fmtNum(limiteTokensMes)}` : undefined} />
-            <StatCard label="Usuários ativos" value={fmtNum(metricas?.usuariosAtivos)} sub={`${users.length} no total`} />
-          </div>
+        {/* ===== TAB: MÉTRICAS ===== */}
+        {activeTab === 'metricas' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: 14, marginBottom: SPACE.lg }}>
+              <StatCard label="Processos" value={fmtNum(metricas?.totalProcessos)} sub={`${fmtNum(metricas?.processosAtivos)} ativos`} />
+              <StatCard label="Peças no mês" value={fmtNum(metricas?.pecasMes)} />
+              <StatCard label="Tokens no mês" value={fmtNum(metricas?.tokensMes)} sub={hasLimite ? `Limite mensal: ${fmtNum(limiteTokensMes)}` : undefined} />
+              <StatCard label="Usuários ativos" value={fmtNum(metricas?.usuariosAtivos)} sub={`${users.length} no total`} />
+            </div>
 
-          {hasLimite ? (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '20px 22px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>Uso do limite de tokens</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: usoColor, fontWeight: 600 }}>{usoPercentual}%</div>
-              </div>
-              <div style={{ height: 8, background: 'var(--color-surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${Math.min(usoPercentual, 100)}%`, height: '100%', background: usoColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 10 }}>
-                🔋 {fmtNum(tokensMes)} de {fmtNum(limiteTokensMes)} tokens consumidos neste mês · Limite mensal: {fmtNum(limiteTokensMes)}
-              </div>
-            </div>
-          ) : (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '20px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>Consumo de tokens do mês</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: '-0.03em', marginTop: 8 }}>{fmtNum(tokensMes)}</div>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>Sem limite de demonstração definido.</div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ===== TAB: IDENTIDADE ===== */}
-      {activeTab === 'identidade' && (
-        <div style={{ maxWidth: 760 }}>
-          {/* Bloco 1: Dados do Escritório */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '22px 24px', marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 16 }}>
-              Dados do Escritório (Papel Timbrado)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Razão Social</label>
-                <input value={razaoSocial} onChange={e => setRazaoSocial(e.target.value)} style={inputStyle} placeholder="Escritório de Advocacia Ltda." />
-              </div>
-              <div>
-                <label style={labelStyle}>CNPJ</label>
-                <input value={cnpj} onChange={e => setCnpj(e.target.value)} style={inputStyle} placeholder="00.000.000/0001-00" />
-              </div>
-              <div>
-                <label style={labelStyle}>Inscrição OAB do escritório</label>
-                <input value={inscricaoOab} onChange={e => setInscricaoOab(e.target.value)} style={inputStyle} placeholder="OAB/UF 1234" />
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Endereço</label>
-                <input value={endereco} onChange={e => setEndereco(e.target.value)} style={inputStyle} placeholder="Rua dos Advogados, 100 — sala 12" />
-              </div>
-              <div>
-                <label style={labelStyle}>Número</label>
-                <input value={numero} onChange={e => setNumero(e.target.value)} style={inputStyle} placeholder="100" />
-              </div>
-              <div>
-                <label style={labelStyle}>Bairro</label>
-                <input value={bairro} onChange={e => setBairro(e.target.value)} style={inputStyle} placeholder="Centro" />
-              </div>
-              <div>
-                <label style={labelStyle}>Cidade</label>
-                <input value={cidade} onChange={e => setCidade(e.target.value)} style={inputStyle} placeholder="São Paulo" />
-              </div>
-              <div>
-                <label style={labelStyle}>UF</label>
-                <input value={uf} onChange={e => setUf(e.target.value)} style={inputStyle} placeholder="SP" maxLength={2} />
-              </div>
-              <div>
-                <label style={labelStyle}>CEP</label>
-                <input value={cep} onChange={e => setCep(e.target.value)} style={inputStyle} placeholder="00000-000" />
-              </div>
-              <div>
-                <label style={labelStyle}>Telefone</label>
-                <input value={telefone} onChange={e => setTelefone(e.target.value)} style={inputStyle} placeholder="(11) 0000-0000" />
-              </div>
-              <div>
-                <label style={labelStyle}>E-mail</label>
-                <input value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} placeholder="contato@escritorio.com.br" />
-              </div>
-              <div>
-                <label style={labelStyle}>Site</label>
-                <input value={site} onChange={e => setSite(e.target.value)} style={inputStyle} placeholder="www.escritorio.com.br" />
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Logo do escritório</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={e => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    const reader = new FileReader()
-                    reader.onload = () => setLogoUrl(typeof reader.result === 'string' ? reader.result : '')
-                    reader.readAsDataURL(file)
-                  }}
-                  style={inputStyle}
-                />
-                {logoUrl && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-                    <img src={logoUrl} alt="Logo do escritório" style={{ maxHeight: 80, border: '1px solid var(--color-border)', borderRadius: 6 }} />
-                    <button onClick={() => setLogoUrl('')} style={ghostBtn}>Remover logo</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Bloco 2: Assinatura do Advogado */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '22px 24px', marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 16 }}>
-              Assinatura do Advogado (você)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Nome</label>
-                <input value={me.name || ''} readOnly style={{ ...inputStyle, color: 'var(--color-muted)', cursor: 'not-allowed' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>OAB</label>
-                <input value={oab} onChange={e => setOab(e.target.value)} style={inputStyle} placeholder="OAB nº 123.456" />
-              </div>
-              <div>
-                <label style={labelStyle}>UF da OAB</label>
-                <input value={oabUf} onChange={e => setOabUf(e.target.value)} style={inputStyle} placeholder="SP" maxLength={2} />
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              onClick={handleSalvarIdentidade}
-              disabled={savingIdentity}
-              style={{ ...primaryBtn, opacity: savingIdentity ? 0.5 : 1, cursor: savingIdentity ? 'not-allowed' : 'pointer' }}
-            >
-              {savingIdentity ? 'Salvando…' : 'Salvar identidade'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ===== MODALS ===== */}
-      {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(24,23,15,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }} onClick={() => setModal(null)}>
-          <div style={{ background: 'var(--color-surface)', borderRadius: 10, padding: 28, width: 440, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
-            {modal.kind === 'novoUsuario' && (
-              <NovoUsuarioModal
-                onCancel={() => setModal(null)}
-                onSubmit={handleCriarUsuario}
-              />
-            )}
-            {modal.kind === 'resetSenha' && (
-              <div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>Resetar senha</div>
-                <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 18 }}>
-                  Gerar uma nova senha temporária para <strong style={{ color: 'var(--color-foreground)' }}>{modal.user.nome}</strong> ({modal.user.email})?
+            {hasLimite ? (
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '20px 22px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: SPACE.md }}>
+                  <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>Uso do limite de tokens</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, color: usoColor, fontWeight: 600 }}>{usoPercentual}%</div>
                 </div>
-                <div style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: 'var(--color-muted)', marginBottom: 20 }}>
-                  A senha atual será invalidada. O sistema gerará uma temporária para você entregar ao usuário.
+                <div style={{ height: 8, background: 'var(--color-surface-2)', borderRadius: RADIUS.chip, overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(usoPercentual, 100)}%`, height: '100%', background: usoColor, borderRadius: RADIUS.chip, transition: 'width 0.4s ease' }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button onClick={() => setModal(null)} style={ghostBtn}>Cancelar</button>
-                  <button onClick={() => handleResetSenha(modal.user)} style={primaryBtn}>Gerar nova senha</button>
+                <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: 10 }}>
+                  🔋 {fmtNum(tokensMes)} de {fmtNum(limiteTokensMes)} tokens consumidos neste mês · Limite mensal: {fmtNum(limiteTokensMes)}
                 </div>
+              </div>
+            ) : (
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '20px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.lg }}>
+                <div>
+                  <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>Consumo de tokens do mês</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: '-0.03em', marginTop: 8 }}>{fmtNum(tokensMes)}</div>
+                </div>
+                <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>Sem limite de demonstração definido.</div>
               </div>
             )}
-            {modal.kind === 'desativar' && (
-              <div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>
-                  {modal.user.ativo ? 'Desativar usuário' : 'Reativar usuário'}
+          </>
+        )}
+
+        {/* ===== TAB: IDENTIDADE ===== */}
+        {activeTab === 'identidade' && (
+          <div style={{ maxWidth: 760 }}>
+            {/* Bloco 1: Dados do Escritório */}
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '22px 24px', marginBottom: SPACE.xl }}>
+              <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: SPACE.lg }}>
+                Dados do Escritório (Papel Timbrado)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Razão Social">
+                    <input value={razaoSocial} onChange={e => setRazaoSocial(e.target.value)} style={inputStyle()} placeholder="Escritório de Advocacia Ltda." />
+                  </Field>
                 </div>
-                <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>
-                  {modal.user.ativo
-                    ? <>O usuário <strong style={{ color: 'var(--color-foreground)' }}>{modal.user.nome}</strong> perderá o acesso imediato ao sistema. Esta ação pode ser revertida.</>
-                    : <>O usuário <strong style={{ color: 'var(--color-foreground)' }}>{modal.user.nome}</strong> voltará a ter acesso ao sistema.</>}
+                <div>
+                  <Field label="CNPJ">
+                    <input value={cnpj} onChange={e => setCnpj(e.target.value)} style={inputStyle()} placeholder="00.000.000/0001-00" />
+                  </Field>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button onClick={() => setModal(null)} style={ghostBtn}>Cancelar</button>
-                  <button onClick={() => handleDesativar(modal.user)} style={{ ...primaryBtn, background: modal.user.ativo ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                    {modal.user.ativo ? 'Desativar' : 'Reativar'}
-                  </button>
+                <div>
+                  <Field label="Inscrição OAB do escritório">
+                    <input value={inscricaoOab} onChange={e => setInscricaoOab(e.target.value)} style={inputStyle()} placeholder="OAB/UF 1234" />
+                  </Field>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Endereço">
+                    <input value={endereco} onChange={e => setEndereco(e.target.value)} style={inputStyle()} placeholder="Rua dos Advogados, 100 — sala 12" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="Número">
+                    <input value={numero} onChange={e => setNumero(e.target.value)} style={inputStyle()} placeholder="100" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="Bairro">
+                    <input value={bairro} onChange={e => setBairro(e.target.value)} style={inputStyle()} placeholder="Centro" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="Cidade">
+                    <input value={cidade} onChange={e => setCidade(e.target.value)} style={inputStyle()} placeholder="São Paulo" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="UF">
+                    <input value={uf} onChange={e => setUf(e.target.value)} style={inputStyle()} placeholder="SP" maxLength={2} />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="CEP">
+                    <input value={cep} onChange={e => setCep(e.target.value)} style={inputStyle()} placeholder="00000-000" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="Telefone">
+                    <input value={telefone} onChange={e => setTelefone(e.target.value)} style={inputStyle()} placeholder="(11) 0000-0000" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="E-mail">
+                    <input value={email} onChange={e => setEmail(e.target.value)} style={inputStyle()} placeholder="contato@escritorio.com.br" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="Site">
+                    <input value={site} onChange={e => setSite(e.target.value)} style={inputStyle()} placeholder="www.escritorio.com.br" />
+                  </Field>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Logo do escritório">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = () => setLogoUrl(typeof reader.result === 'string' ? reader.result : '')
+                        reader.readAsDataURL(file)
+                      }}
+                      style={inputStyle()}
+                    />
+                  </Field>
+                  {logoUrl && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.md, marginTop: 10 }}>
+                      <img src={logoUrl} alt="Logo do escritório" style={{ maxHeight: 80, border: '1px solid var(--color-border)', borderRadius: RADIUS.control }} />
+                      <Button variant="secondary" onClick={() => setLogoUrl('')}>Remover logo</Button>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-            {modal.kind === 'tempSenha' && (
-              <TempSenhaModal titulo={modal.titulo} senha={modal.senha} onClose={() => setModal(null)} notify={(t, m) => addToast(t, m)} />
-            )}
-          </div>
-        </div>
-      )}
+            </div>
 
-      <Toast toasts={toasts} onDismiss={dismissToast} />
-    </div>
+            {/* Bloco 2: Assinatura do Advogado */}
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: '22px 24px', marginBottom: SPACE.xl }}>
+              <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: SPACE.lg }}>
+                Assinatura do Advogado (você)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Nome">
+                    <input value={me.name || ''} readOnly style={{ ...inputStyle(), color: 'var(--color-muted)', cursor: 'not-allowed' }} />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="OAB">
+                    <input value={oab} onChange={e => setOab(e.target.value)} style={inputStyle()} placeholder="OAB nº 123.456" />
+                  </Field>
+                </div>
+                <div>
+                  <Field label="UF da OAB">
+                    <input value={oabUf} onChange={e => setOabUf(e.target.value)} style={inputStyle()} placeholder="SP" maxLength={2} />
+                  </Field>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Button
+                onClick={handleSalvarIdentidade}
+                disabled={savingIdentity}
+              >
+                {savingIdentity ? 'Salvando…' : 'Salvar identidade'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ===== MODALS ===== */}
+        {modal?.kind === 'novoUsuario' && (
+          <NovoUsuarioModal
+            onCancel={() => setModal(null)}
+            onSubmit={handleCriarUsuario}
+          />
+        )}
+        {modal?.kind === 'resetSenha' && (
+          <Modal
+            open
+            onClose={() => setModal(null)}
+            title="Resetar senha"
+            width={440}
+            footer={(
+              <>
+                <Button variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
+                <Button onClick={() => handleResetSenha(modal.user)}>Gerar nova senha</Button>
+              </>
+            )}
+          >
+            <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.lg }}>
+              Gerar uma nova senha temporária para <strong style={{ color: 'var(--color-foreground)' }}>{modal.user.nome}</strong> ({modal.user.email})?
+            </div>
+            <div style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: RADIUS.control, padding: '10px 14px', fontSize: FONT.base, color: 'var(--color-muted)' }}>
+              A senha atual será invalidada. O sistema gerará uma temporária para você entregar ao usuário.
+            </div>
+          </Modal>
+        )}
+        {modal?.kind === 'desativar' && (
+          <Modal
+            open
+            onClose={() => setModal(null)}
+            title={modal.user.ativo ? 'Desativar usuário' : 'Reativar usuário'}
+            width={440}
+            footer={(
+              <>
+                <Button variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
+                <Button
+                  onClick={() => handleDesativar(modal.user)}
+                  variant="danger"
+                  style={modal.user.ativo ? undefined : { background: 'var(--color-success)' }}
+                >
+                  {modal.user.ativo ? 'Desativar' : 'Reativar'}
+                </Button>
+              </>
+            )}
+          >
+            <div style={{ color: 'var(--color-muted)', fontSize: FONT.base }}>
+              {modal.user.ativo
+                ? <>O usuário <strong style={{ color: 'var(--color-foreground)' }}>{modal.user.nome}</strong> perderá o acesso imediato ao sistema. Esta ação pode ser revertida.</>
+                : <>O usuário <strong style={{ color: 'var(--color-foreground)' }}>{modal.user.nome}</strong> voltará a ter acesso ao sistema.</>}
+            </div>
+          </Modal>
+        )}
+        {modal?.kind === 'tempSenha' && (
+          <TempSenhaModal titulo={modal.titulo} senha={modal.senha} onClose={() => setModal(null)} notify={(t, m) => addToast(t, m)} />
+        )}
+
+        <Toast toasts={toasts} onDismiss={dismissToast} />
+      </div>
+    </PageContainer>
   )
 }
 
@@ -791,37 +758,41 @@ function NovoUsuarioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubm
   }
 
   return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>Novo usuário</div>
-      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>Cadastre um membro da equipe e defina seus módulos de acesso.</div>
+    <Modal
+      open
+      onClose={onCancel}
+      title="Novo usuário"
+      width={440}
+      footer={(
+        <>
+          <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
+          <Button disabled={!valid || submitting} onClick={submit}>
+            {submitting ? 'Criando…' : 'Criar usuário'}
+          </Button>
+        </>
+      )}
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>
+        Cadastre um membro da equipe e defina seus módulos de acesso.
+      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div>
-          <label style={labelStyle}>Nome</label>
-          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle, borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Nome completo" autoFocus />
-          {errors.nome && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{errors.nome}</div>}
-        </div>
-        <div>
-          <label style={labelStyle}>E-mail</label>
-          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle, borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="usuario@escritorio.com" />
-          {errors.email && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{errors.email}</div>}
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+        <Field label="Nome" error={errors.nome} required>
+          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={inputStyle(!!errors.nome)} placeholder="Nome completo" autoFocus />
+        </Field>
+        <Field label="E-mail" error={errors.email} required>
+          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={inputStyle(!!errors.email)} type="email" placeholder="usuario@escritorio.com" />
+        </Field>
 
         <div>
-          <label style={labelStyle}>Módulos de acesso</label>
-          <ModuleCheckboxGrid selected={permissoes} onChange={setPermissoes} />
-          <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8 }}>
+          <Field label="Módulos de acesso">
+            <ModuleCheckboxGrid selected={permissoes} onChange={setPermissoes} />
+          </Field>
+          <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: SPACE.sm }}>
             Documentação vem marcada por padrão. A senha temporária será gerada automaticamente ao criar.
           </div>
         </div>
       </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-        <button onClick={onCancel} style={ghostBtn}>Cancelar</button>
-        <button disabled={!valid || submitting} onClick={submit} style={{ ...primaryBtn, opacity: valid && !submitting ? 1 : 0.5, cursor: valid && !submitting ? 'pointer' : 'not-allowed' }}>
-          {submitting ? 'Criando…' : 'Criar usuário'}
-        </button>
-      </div>
-    </div>
+    </Modal>
   )
 }

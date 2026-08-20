@@ -14,7 +14,9 @@
   --color-muted: #7a7870;
   --color-primary: #1a2744;
   --color-primary-hover: #243560;
+  --color-on-primary: #ffffff;
   --color-accent: #c8a84b;
+  --color-on-accent: #18170f;
   --color-accent-light: #f5edd6;
   --color-success: #2d6a4f;
   --color-success-light: #d8ede4;
@@ -27,6 +29,9 @@
   --color-sidebar: #18170f;
 
   --color-badge-tint: #e8eaf0;
+  --color-overlay: rgba(0, 0, 0, 0.5);
+
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 /* Dark theme — "elegant dim ink" */
@@ -39,7 +44,9 @@
   --color-muted: #9aa0a6;
   --color-primary: #4f6cb0;
   --color-primary-hover: #5d7ac2;
+  --color-on-primary: #ffffff;
   --color-accent: #d4b35a;
+  --color-on-accent: #18170f;
   --color-accent-light: #3a3320;
   --color-success: #4ea878;
   --color-success-light: #1e2a23;
@@ -51,6 +58,8 @@
   --color-danger-light: #3a1e1e;
   --color-sidebar: #0c0b08;
   --color-badge-tint: #232b3e;
+
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 * {

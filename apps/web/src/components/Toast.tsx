@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { FONT, RADIUS, Z } from '../ui'
 
 export interface ToastMessage {
   id: string
@@ -19,7 +20,7 @@ export default function Toast({ toasts, onDismiss }: ToastProps) {
       position: 'fixed',
       bottom: 24,
       right: 24,
-      zIndex: 9999,
+      zIndex: Z.toast,
       display: 'flex',
       flexDirection: 'column',
       gap: 10,
@@ -49,30 +50,30 @@ export default function Toast({ toasts, onDismiss }: ToastProps) {
               background: bg,
               color: color,
               border: `1px solid ${color}`,
-              borderRadius: 8,
+              borderRadius: RADIUS.card,
               padding: '12px 16px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+              boxShadow: 'var(--shadow-soft)',
               display: 'flex',
               alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: 12,
-              fontSize: 13,
+              fontSize: FONT.md,
               fontFamily: 'var(--font-sans)',
               lineHeight: 1.4,
               animation: 'slideIn 0.2s ease-out'
             }}
           >
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <span style={{ fontSize: 16 }}>{icon}</span>
+              <span style={{ fontSize: FONT.xl }}>{icon}</span>
               <div>
                 <strong>{toast.type === 'error' ? 'Atenção / Campo Pendente' : toast.type === 'success' ? 'Sucesso' : 'Aviso'}</strong>
-                <div style={{ marginTop: 2, fontSize: 12 }}>{toast.text}</div>
+                <div style={{ marginTop: 2, fontSize: FONT.base }}>{toast.text}</div>
               </div>
             </div>
 
             <button
               onClick={() => onDismiss(toast.id)}
-              style={{ border: 'none', background: 'transparent', color: color, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+              style={{ border: 'none', background: 'transparent', color: color, cursor: 'pointer', fontSize: FONT.xl, lineHeight: 1 }}
             >
               ×
             </button>

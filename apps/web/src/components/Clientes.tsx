@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import { maskCpfCnpj, maskCEP, maskPhone, isValidEmail } from '../utils/masks'
 import Toast, { ToastMessage } from './Toast'
 import Pagination, { usePagination } from './Pagination'
+import { Button, EmptyRow, Field, FONT, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
 const initialClientes = [
   {
@@ -63,6 +64,7 @@ const initialClientes = [
 ]
 
 export default function Clientes() {
+  const isMobile = useIsMobile()
   const [clientes, setClientes] = useState<any[]>(initialClientes)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -104,6 +106,8 @@ export default function Clientes() {
   // Estado de consulta do ViaCEP
   const [buscandoCep, setBuscandoCep] = useState(false)
   const [cepMsg, setCepMsg] = useState('')
+
+  const formRef = useRef<HTMLFormElement>(null)
 
   const loadClientes = async () => {
     setLoading(true)
@@ -252,278 +256,233 @@ export default function Clientes() {
   const clientesPagination = usePagination(filtered, 10)
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1150, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <PageContainer style={{ display: 'flex', flexDirection: 'column', gap: SPACE.xxl }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--color-border)', paddingBottom: 24 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>
-            CADASTRO E PRONTUÁRIO DE CLIENTES
-          </div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, margin: 0, fontWeight: 400, letterSpacing: '-0.02em' }}>
-            Gestão de Clientes
-          </h1>
-          <p style={{ color: 'var(--color-muted)', fontSize: 14, marginTop: 4 }}>
-            Cadastro unificado de pessoas físicas e jurídicas com consulta automática de CEP via ViaCEP.
-          </p>
-        </div>
-
-        <button
-          onClick={() => { resetForm(); setShowModal(true); }}
-          style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '9px 18px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          + Novo Cliente
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="CADASTRO E PRONTUÁRIO DE CLIENTES"
+        title="Gestão de Clientes"
+        description="Cadastro unificado de pessoas físicas e jurídicas com consulta automática de CEP via ViaCEP."
+        action={
+          <Button onClick={() => { resetForm(); setShowModal(true); }}>+ Novo Cliente</Button>
+        }
+      />
 
       {/* Barra de Filtros */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div style={{ display: 'flex', gap: SPACE.md, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 220px' }}>
           <input
             type="text"
             placeholder="Buscar por nome, CPF ou CNPJ..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '9px 14px 9px 36px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', outline: 'none' }}
+            style={{ ...inputStyle(), paddingLeft: 36 }}
           />
-          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13 }}>🔍</span>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: FONT.md }}>🔍</span>
         </div>
 
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: SPACE.xs, flexWrap: 'wrap' }}>
           {(['Todos', 'PF', 'PJ'] as const).map(t => (
-            <button
+            <Button
               key={t}
+              size="sm"
+              variant={tipoFilter === t ? 'primary' : 'secondary'}
               onClick={() => setTipoFilter(t)}
-              style={{
-                padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                border: '1px solid var(--color-border)', cursor: 'pointer',
-                background: tipoFilter === t ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: tipoFilter === t ? '#fff' : 'var(--color-muted)'
-              }}
+              style={tipoFilter === t ? undefined : { color: 'var(--color-muted)' }}
             >
               {t === 'Todos' ? 'Todos os Clientes' : t === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
       {/* Tabela de Clientes */}
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: 'var(--color-surface-2)' }}>
-              {['Tipo', 'Nome do Cliente', 'CPF / CNPJ', 'Contato / Email', 'Endereço (Cidade/UF)', 'Ações'].map(h => (
-                <th key={h} style={{ padding: '12px 18px', textAlign: 'left', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
+      <TableShell>
+        <Table>
+          <THeadRow>
+            {['Tipo', 'Nome do Cliente', 'CPF / CNPJ', 'Contato / Email', 'Endereço (Cidade/UF)', 'Ações'].map(h => (
+              <Th key={h}>{h}</Th>
+            ))}
+          </THeadRow>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-muted)' }}>Carregando clientes...</td></tr>
+              <EmptyRow colSpan={6} message="Carregando clientes..." />
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-muted)' }}>Nenhum cliente cadastrado.</td></tr>
+              <EmptyRow colSpan={6} message="Nenhum cliente cadastrado." />
             ) : (
               clientesPagination.pageItems.map(c => (
-                <tr key={c.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '14px 18px' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: '#fff' }}>
+                <Tr key={c.id}>
+                  <Td>
+                    <span style={{ fontSize: FONT.xs, fontWeight: 700, padding: '3px 8px', borderRadius: RADIUS.chip, background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: 'var(--color-on-primary)' }}>
                       {c.tipo}
                     </span>
-                  </td>
-                  <td style={{ padding: '14px 18px' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{c.nome}</div>
-                    {c.qualificacao && <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 2, maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.qualificacao}</div>}
-                  </td>
-                  <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.cpfCnpj}</td>
-                  <td style={{ padding: '14px 18px' }}>
-                    <div style={{ fontSize: 12 }}>{c.email}</div>
-                    <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>{c.telefone}</div>
-                  </td>
-                  <td style={{ padding: '14px 18px', fontSize: 12 }}>
+                  </Td>
+                  <Td>
+                    <div style={{ fontSize: FONT.md, fontWeight: 600 }}>{c.nome}</div>
+                    {c.qualificacao && <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: 2, maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.qualificacao}</div>}
+                  </Td>
+                  <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{c.cpfCnpj}</Td>
+                  <Td>
+                    <div style={{ fontSize: FONT.base }}>{c.email}</div>
+                    <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>{c.telefone}</div>
+                  </Td>
+                  <Td style={{ fontSize: FONT.base }}>
                     {c.cidade ? `${c.cidade}/${c.uf}` : '—'}
-                  </td>
-                  <td style={{ padding: '14px 18px' }}>
-                    <button
-                      onClick={() => handleDeleteCliente(c.id)}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--color-muted)', cursor: 'pointer', fontSize: 14 }}
+                  </Td>
+                  <Td>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      ariaLabel="Excluir cliente"
                       title="Excluir cliente"
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
+                      onClick={() => handleDeleteCliente(c.id)}
+                    >×</Button>
+                  </Td>
+                </Tr>
               ))
             )}
           </tbody>
-        </table>
+        </Table>
         <Pagination {...clientesPagination} onPageChange={clientesPagination.setPage} />
-      </div>
+      </TableShell>
 
       {/* Modal de Novo Cliente com ViaCEP */}
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: 32, width: 560, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-display)' }}>Cadastrar Novo Cliente</h3>
-              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--color-muted)' }}>×</button>
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title="Cadastrar Novo Cliente"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
+            <Button onClick={() => formRef.current?.requestSubmit()}>Salvar Cliente</Button>
+          </>
+        }
+      >
+        <form ref={formRef} onSubmit={handleSaveCliente} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+          {/* Tipo PF ou PJ */}
+          <div style={{ display: 'flex', gap: SPACE.md }}>
+            <Button
+              type="button"
+              variant={tipo === 'PF' ? 'primary' : 'secondary'}
+              onClick={() => setTipo('PF')}
+              style={{ flex: 1 }}
+            >
+              👤 Pessoa Física (PF)
+            </Button>
+            <Button
+              type="button"
+              variant={tipo === 'PJ' ? 'primary' : 'secondary'}
+              onClick={() => setTipo('PJ')}
+              style={{ flex: 1 }}
+            >
+              🏢 Pessoa Jurídica (PJ)
+            </Button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Field label="Nome completo ou razão social" required error={errors.nome}>
+                <input
+                  type="text"
+                  placeholder="Ex: Fernanda Oliveira"
+                  value={nome}
+                  onChange={e => {
+                    setNome(e.target.value)
+                    if (errors.nome) setErrors(prev => ({ ...prev, nome: '' }))
+                  }}
+                  style={inputStyle(!!errors.nome)}
+                />
+              </Field>
             </div>
 
-            <form onSubmit={handleSaveCliente} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Tipo PF ou PJ */}
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => setTipo('PF')}
-                  style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid var(--color-border)', background: tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-surface)', color: tipo === 'PF' ? '#fff' : 'var(--color-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  👤 Pessoa Física (PF)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTipo('PJ')}
-                  style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid var(--color-border)', background: tipo === 'PJ' ? 'var(--color-primary)' : 'var(--color-surface)', color: tipo === 'PJ' ? '#fff' : 'var(--color-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  🏢 Pessoa Jurídica (PJ)
-                </button>
-              </div>
+            <Field label={tipo === 'PF' ? 'CPF' : 'CNPJ'} required error={errors.cpfCnpj}>
+              <input
+                type="text"
+                placeholder={tipo === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'}
+                value={cpfCnpj}
+                onChange={e => {
+                  setCpfCnpj(maskCpfCnpj(e.target.value, tipo))
+                  if (errors.cpfCnpj) setErrors(prev => ({ ...prev, cpfCnpj: '' }))
+                }}
+                style={{ ...inputStyle(!!errors.cpfCnpj), fontFamily: 'var(--font-mono)' }}
+              />
+            </Field>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.nome ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Nome completo ou razão social *</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Fernanda Oliveira"
-                    value={nome}
-                    onChange={e => {
-                      setNome(e.target.value)
-                      if (errors.nome) setErrors(prev => ({ ...prev, nome: '' }))
-                    }}
-                    style={{
-                      width: '100%', padding: '9px 12px',
-                      border: errors.nome ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
-                      borderRadius: 6, fontSize: 13, background: 'var(--color-surface)'
-                    }}
-                  />
-                  {errors.nome && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.nome}</span>}
-                </div>
+            <Field label="Telefone / WhatsApp">
+              <input
+                type="text"
+                placeholder="(11) 98877-6655"
+                value={telefone}
+                onChange={e => setTelefone(maskPhone(e.target.value))}
+                style={inputStyle()}
+              />
+            </Field>
 
-                <div>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.cpfCnpj ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>{tipo === 'PF' ? 'CPF *' : 'CNPJ *'}</label>
-                  <input
-                    type="text"
-                    placeholder={tipo === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'}
-                    value={cpfCnpj}
-                    onChange={e => {
-                      setCpfCnpj(maskCpfCnpj(e.target.value, tipo))
-                      if (errors.cpfCnpj) setErrors(prev => ({ ...prev, cpfCnpj: '' }))
-                    }}
-                    style={{
-                      width: '100%', padding: '9px 12px',
-                      border: errors.cpfCnpj ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
-                      borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-mono)', background: 'var(--color-surface)'
-                    }}
-                  />
-                  {errors.cpfCnpj && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.cpfCnpj}</span>}
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Telefone / WhatsApp</label>
-                  <input
-                    type="text"
-                    placeholder="(11) 98877-6655"
-                    value={telefone}
-                    onChange={e => setTelefone(maskPhone(e.target.value))}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13 }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: errors.email ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>E-mail institucional</label>
-                  <input
-                    type="email"
-                    placeholder="cliente@email.com"
-                    value={email}
-                    onChange={e => {
-                      setEmail(e.target.value)
-                      if (errors.email) setErrors(prev => ({ ...prev, email: '' }))
-                    }}
-                    style={{
-                      width: '100%', padding: '9px 12px',
-                      border: errors.email ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
-                      borderRadius: 6, fontSize: 13
-                    }}
-                  />
-                  {errors.email && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.email}</span>}
-                </div>
-
-                {tipo === 'PF' && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: 10, fontWeight: 600, color: errors.dataNascimento ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Data de Nascimento</label>
-                    <input
-                      type="date"
-                      value={dataNascimento}
-                      onChange={e => {
-                        setDataNascimento(e.target.value)
-                        if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
-                      }}
-                      style={{
-                        width: '100%', padding: '9px 12px',
-                        border: errors.dataNascimento ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
-                        borderRadius: 6, fontSize: 13, background: 'var(--color-surface)'
-                      }}
-                    />
-                    {errors.dataNascimento && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.dataNascimento}</span>}
-                  </div>
-                )}
-              </div>
-
-              {/* Seção Endereço com Busca por CEP via ViaCEP */}
-              <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', padding: 14, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.05em' }}>📍 ENDEREÇO (CONSULTA VIA VIACEP)</label>
-                  {cepMsg && <span style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 500 }}>{cepMsg}</span>}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 90px', gap: 10 }}>
-                  <div>
-                    <input type="text" placeholder="CEP (00000-000)" value={cep} onChange={e => handleBuscarCep(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)' }} />
-                  </div>
-                  <div>
-                    <input type="text" placeholder="Rua / Avenida / Logradouro" value={logradouro} onChange={e => setLogradouro(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 12 }} />
-                  </div>
-                  <div>
-                    <input type="text" placeholder="Número" value={numero} onChange={e => setNumero(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 12 }} />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 60px', gap: 10 }}>
-                  <input type="text" placeholder="Bairro" value={bairro} onChange={e => setBairro(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 12 }} />
-                  <input type="text" placeholder="Cidade / Município" value={cidade} onChange={e => setCidade(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 12 }} />
-                  <input type="text" placeholder="UF" value={uf} onChange={e => setUf(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 12, textTransform: 'uppercase' }} />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Qualificação jurídica completa para petições (autopreenchida)</label>
-                <textarea
-                  value={qualificacao}
-                  onChange={e => setQualificacao(e.target.value)}
-                  placeholder="Ex: brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 000.000.000-00..."
-                  rows={2}
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 11, outline: 'none', resize: 'vertical' }}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Field label="E-mail institucional" error={errors.email}>
+                <input
+                  type="email"
+                  placeholder="cliente@email.com"
+                  value={email}
+                  onChange={e => {
+                    setEmail(e.target.value)
+                    if (errors.email) setErrors(prev => ({ ...prev, email: '' }))
+                  }}
+                  style={inputStyle(!!errors.email)}
                 />
-              </div>
+              </Field>
+            </div>
 
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button type="button" onClick={() => setShowModal(false)} style={{ padding: '8px 16px', border: '1px solid var(--color-border)', background: 'transparent', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
-                <button type="submit" style={{ padding: '8px 20px', border: 'none', background: 'var(--color-primary)', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Salvar Cliente</button>
+            {tipo === 'PF' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <Field label="Data de Nascimento" error={errors.dataNascimento}>
+                  <input
+                    type="date"
+                    value={dataNascimento}
+                    onChange={e => {
+                      setDataNascimento(e.target.value)
+                      if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
+                    }}
+                    style={inputStyle(!!errors.dataNascimento)}
+                  />
+                </Field>
               </div>
-            </form>
+            )}
           </div>
-        </div>
-      )}
+
+          {/* Seção Endereço com Busca por CEP via ViaCEP */}
+          <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', padding: SPACE.lg, borderRadius: RADIUS.control, display: 'flex', flexDirection: 'column', gap: SPACE.sm }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: FONT.sm, fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.05em' }}>📍 ENDEREÇO (CONSULTA VIA VIACEP)</label>
+              {cepMsg && <span style={{ fontSize: FONT.sm, color: 'var(--color-primary)', fontWeight: 500 }}>{cepMsg}</span>}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '140px 1fr 90px', gap: SPACE.sm }}>
+              <input type="text" placeholder="CEP (00000-000)" value={cep} onChange={e => handleBuscarCep(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
+              <input type="text" placeholder="Rua / Avenida / Logradouro" value={logradouro} onChange={e => setLogradouro(e.target.value)} style={inputStyle()} />
+              <input type="text" placeholder="Número" value={numero} onChange={e => setNumero(e.target.value)} style={inputStyle()} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 60px', gap: SPACE.sm }}>
+              <input type="text" placeholder="Bairro" value={bairro} onChange={e => setBairro(e.target.value)} style={inputStyle()} />
+              <input type="text" placeholder="Cidade / Município" value={cidade} onChange={e => setCidade(e.target.value)} style={inputStyle()} />
+              <input type="text" placeholder="UF" value={uf} onChange={e => setUf(e.target.value)} style={{ ...inputStyle(), textTransform: 'uppercase' }} />
+            </div>
+          </div>
+
+          <Field label="Qualificação jurídica completa para petições (autopreenchida)">
+            <textarea
+              value={qualificacao}
+              onChange={e => setQualificacao(e.target.value)}
+              placeholder="Ex: brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 000.000.000-00..."
+              rows={2}
+              style={{ ...inputStyle(), fontSize: FONT.sm, resize: 'vertical' }}
+            />
+          </Field>
+        </form>
+      </Modal>
 
       {/* Componente Toast de Mensageria Flutuante */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
-    </div>
+    </PageContainer>
   )
 }

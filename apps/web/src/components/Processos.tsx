@@ -3,6 +3,7 @@ import { api, getErrorMessage } from '../api/client'
 import type { Processo, StatusProcesso } from '@lexia/shared'
 import Pagination, { usePagination } from './Pagination'
 import Toast, { ToastMessage } from './Toast'
+import { Button, EmptyRow, Field, FONT, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
 const statusConfig: Record<StatusProcesso, { label: string; color: string; bg: string }> = {
   ativo:     { label: 'Ativo',     color: 'var(--color-success)', bg: 'var(--color-success-light)' },
@@ -17,7 +18,20 @@ const emptyForm: Omit<Processo, 'id'> = {
   status: 'ativo', valor: '', prazo: '', advogado: '',
 }
 
+const formFields: { key: string; label: string; placeholder: string; full?: boolean }[] = [
+  { key: 'tipo', label: 'Tipo de Ação', placeholder: 'Reclamação Trabalhista', full: true },
+  { key: 'cliente', label: 'Cliente', placeholder: 'Nome completo' },
+  { key: 'adverso', label: 'Parte Adversa', placeholder: 'Empresa Ltda.' },
+  { key: 'vara', label: 'Vara / Tribunal', placeholder: '3ª Vara do Trabalho de SP', full: true },
+  { key: 'valor', label: 'Valor da Causa', placeholder: 'R$ 0,00' },
+  { key: 'prazo', label: 'Próximo Prazo', placeholder: 'dd/mm/aaaa' },
+  { key: 'advogado', label: 'Advogado Responsável', placeholder: 'Dr. Nome' },
+]
+
+const areasNovoProcesso = ['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista']
+
 export default function Processos() {
+  const isMobile = useIsMobile()
   const [processos, setProcessos] = useState<Processo[]>([])
   const [search, setSearch] = useState('')
   const [areaFilter, setAreaFilter] = useState('Todas')
@@ -148,178 +162,196 @@ export default function Processos() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      height: isMobile ? 'auto' : '100vh',
+      overflow: isMobile ? 'visible' : 'hidden',
+    }}>
       {/* List pane */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '32px 36px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Gestão de Processos</div>
-            <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>{filtered.length} processos cadastrados</div>
-          </div>
-          <button onClick={() => setShowForm(true)} style={{
-            background: 'var(--color-primary)', color: '#fff', border: 'none',
-            padding: '9px 18px', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-          }}>+ Novo Processo</button>
-        </div>
+      <div style={{
+        flex: 1,
+        overflow: 'auto',
+        ...(isMobile ? { maxHeight: '45vh', borderBottom: '1px solid var(--color-border)' } : {}),
+      }}>
+        <PageContainer>
+          <PageHeader
+            eyebrow="GESTÃO PROCESSUAL"
+            title="Processos"
+            description={`${filtered.length} processos cadastrados`}
+            action={<Button onClick={() => setShowForm(true)}>+ Novo Processo</Button>}
+          />
 
-        {/* Filters */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} width="14" height="14" fill="none" viewBox="0 0 24 24">
-              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="var(--color-muted)" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por número, cliente ou tipo..."
-              style={{ width: '100%', padding: '9px 12px 9px 36px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none' }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {areas.map(a => (
-              <button key={a} onClick={() => setAreaFilter(a)} style={{
-                padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                border: '1px solid var(--color-border)', cursor: 'pointer',
-                background: areaFilter === a ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: areaFilter === a ? '#fff' : 'var(--color-muted)',
-                transition: 'all 0.15s',
-              }}>{a}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Table */}
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-surface-2)' }}>
-                {['Nº do Processo', 'Tipo / Cliente', 'Área', 'Advogado', 'Valor da Causa', 'Próximo Prazo', 'Status', ''].map(h => (
-                  <th key={h} style={{ padding: '10px 18px', textAlign: 'left', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {processosPagination.pageItems.map(p => {
-                const s = statusConfig[p.status]
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: SPACE.md, marginBottom: SPACE.xl, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 220px' }}>
+              <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="var(--color-muted)" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por número, cliente ou tipo..."
+                style={{ ...inputStyle(), paddingLeft: 36 }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {areas.map(a => {
+                const active = areaFilter === a
                 return (
-                  <tr key={p.id}
-                    onClick={() => setSelected(selected?.id === p.id ? null : p)}
-                    style={{ borderTop: '1px solid var(--color-border)', cursor: 'pointer', background: selected?.id === p.id ? 'var(--color-badge-tint)' : 'transparent', transition: 'background 0.1s' }}
-                    onMouseEnter={e => { if (selected?.id !== p.id) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)' }}
-                    onMouseLeave={e => { if (selected?.id !== p.id) (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
+                  <Button
+                    key={a}
+                    size="sm"
+                    variant={active ? 'primary' : 'secondary'}
+                    onClick={() => setAreaFilter(a)}
+                    style={active ? undefined : { color: 'var(--color-muted)' }}
                   >
-                    <td style={{ padding: '13px 18px' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>{p.id.slice(0, 16)}...</div>
-                    </td>
-                    <td style={{ padding: '13px 18px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{p.tipo}</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 1 }}>{p.cliente}</div>
-                    </td>
-                    <td style={{ padding: '13px 18px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 8px', borderRadius: 4 }}>{p.area}</span>
-                    </td>
-                    <td style={{ padding: '13px 18px', fontSize: 12, color: 'var(--color-muted)' }}>{p.advogado}</td>
-                    <td style={{ padding: '13px 18px', fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500 }}>{p.valor}</td>
-                    <td style={{ padding: '13px 18px', fontFamily: 'var(--font-mono)', fontSize: 11, color: p.prazo === '—' ? 'var(--color-muted)' : 'var(--color-foreground)' }}>{p.prazo}</td>
-                    <td style={{ padding: '13px 18px' }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: s.color, background: s.bg, padding: '3px 8px', borderRadius: 4 }}>{s.label}</span>
-                    </td>
-                    <td style={{ padding: '13px 18px' }}>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDelete(p.id) }}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 14, padding: '2px 6px', borderRadius: 4 }}
-                        title="Excluir processo"
-                      >×</button>
-                    </td>
-                  </tr>
+                    {a}
+                  </Button>
                 )
               })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13 }}>Nenhum processo encontrado.</td></tr>
-              )}
-            </tbody>
-          </table>
-          <Pagination {...processosPagination} onPageChange={processosPagination.setPage} />
-        </div>
+            </div>
+          </div>
+
+          {/* Table */}
+          <TableShell>
+            <Table>
+              <THeadRow>
+                {['Nº do Processo', 'Tipo / Cliente', 'Área', 'Advogado', 'Valor da Causa', 'Próximo Prazo', 'Status', ''].map(h => (
+                  <Th key={h}>{h}</Th>
+                ))}
+              </THeadRow>
+              <tbody>
+                {processosPagination.pageItems.map(p => {
+                  const s = statusConfig[p.status]
+                  const rowSelected = selected?.id === p.id
+                  return (
+                    <Tr
+                      key={p.id}
+                      selected={rowSelected}
+                      onClick={() => setSelected(rowSelected ? null : p)}
+                    >
+                      <Td>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs, color: 'var(--color-muted)' }}>{p.id.slice(0, 16)}...</div>
+                      </Td>
+                      <Td>
+                        <div style={{ fontSize: FONT.md, fontWeight: 500 }}>{p.tipo}</div>
+                        <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: 1 }}>{p.cliente}</div>
+                      </Td>
+                      <Td>
+                        <span style={{ fontSize: FONT.sm, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 8px', borderRadius: RADIUS.chip }}>{p.area}</span>
+                      </Td>
+                      <Td><span style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>{p.advogado}</span></Td>
+                      <Td><span style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, fontWeight: 500 }}>{p.valor}</span></Td>
+                      <Td><span style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: p.prazo === '—' ? 'var(--color-muted)' : 'var(--color-foreground)' }}>{p.prazo}</span></Td>
+                      <Td>
+                        <span style={{ fontSize: FONT.xs, fontWeight: 600, color: s.color, background: s.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{s.label}</span>
+                      </Td>
+                      <Td>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          ariaLabel="Excluir processo"
+                          title="Excluir processo"
+                          onClick={e => { e.stopPropagation(); handleDelete(p.id) }}
+                          >×</Button>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+                {filtered.length === 0 && <EmptyRow colSpan={8} message="Nenhum processo encontrado." />}
+              </tbody>
+            </Table>
+            <Pagination {...processosPagination} onPageChange={processosPagination.setPage} />
+          </TableShell>
+        </PageContainer>
       </div>
 
       {/* Detail & Painel do Processo Pane */}
       {selected && (
-        <div style={{ width: 420, borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)', padding: '24px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{
+          width: isMobile ? '100%' : 420,
+          borderLeft: isMobile ? 'none' : '1px solid var(--color-border)',
+          borderTop: isMobile ? '1px solid var(--color-border)' : 'none',
+          background: 'var(--color-surface)',
+          padding: isMobile ? `${SPACE.xxl}px ${SPACE.lg}px` : '24px 20px',
+          overflowY: isMobile ? 'visible' : 'auto',
+          display: 'flex', flexDirection: 'column', gap: SPACE.xl,
+        }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
+            <div style={{ fontSize: FONT.sm, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
               PAINEL DO PROCESSO & LINHA DO TEMPO
             </div>
-            <button onClick={() => setSelected(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 20, lineHeight: 1 }}>×</button>
+            <Button variant="ghost" size="sm" ariaLabel="Fechar painel" onClick={() => setSelected(null)}>×</Button>
           </div>
 
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 2 }}>{selected.tipo}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>ID: {selected.id}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, letterSpacing: '-0.02em', marginBottom: 2 }}>{selected.tipo}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs, color: 'var(--color-muted)' }}>ID: {selected.id}</div>
           </div>
 
           {/* Ficha rápida */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--color-background)', padding: 14, borderRadius: 6, border: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--color-background)', padding: 14, borderRadius: RADIUS.control, border: '1px solid var(--color-border)' }}>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>AUTOR / CLIENTE</div>
-              <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>{selected.cliente}</div>
+              <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>AUTOR / CLIENTE</div>
+              <div style={{ fontSize: FONT.base, fontWeight: 600, marginTop: 2 }}>{selected.cliente}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>RÉU / ADVERSO</div>
-              <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>{selected.adverso}</div>
+              <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>RÉU / ADVERSO</div>
+              <div style={{ fontSize: FONT.base, fontWeight: 600, marginTop: 2 }}>{selected.adverso}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>JUÍZO / VARA</div>
-              <div style={{ fontSize: 11, marginTop: 2 }}>{selected.vara}</div>
+              <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>JUÍZO / VARA</div>
+              <div style={{ fontSize: FONT.sm, marginTop: 2 }}>{selected.vara}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--color-muted)', fontWeight: 600 }}>VALOR CAUSA</div>
-              <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, marginTop: 2 }}>{selected.valor}</div>
+              <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>VALOR CAUSA</div>
+              <div style={{ fontSize: FONT.sm, fontFamily: 'var(--font-mono)', fontWeight: 600, marginTop: 2 }}>{selected.valor}</div>
             </div>
           </div>
 
           {/* Seção Linha do Tempo */}
-          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: SPACE.lg }}>
+            <div style={{ fontSize: FONT.base, fontWeight: 600, marginBottom: SPACE.md, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>📜 Linha do Tempo & Intimações</span>
-              <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>Resumo IA Nativo</span>
+              <span style={{ fontSize: FONT.sm, color: 'var(--color-accent)', fontWeight: 500 }}>Resumo IA Nativo</span>
             </div>
 
             {/* Cadastro de novo andamento */}
-            <form onSubmit={handleAddAndamento} style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--color-background)', padding: 12, borderRadius: 6, border: '1px solid var(--color-border)', marginBottom: 16 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <select value={novoTipoAndamento} onChange={e => setNovoTipoAndamento(e.target.value)} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 11 }}>
+            <form onSubmit={handleAddAndamento} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.sm, background: 'var(--color-background)', padding: SPACE.md, borderRadius: RADIUS.control, border: '1px solid var(--color-border)', marginBottom: SPACE.lg }}>
+              <div style={{ display: 'flex', gap: SPACE.sm, flexWrap: 'wrap' }}>
+                <select value={novoTipoAndamento} onChange={e => setNovoTipoAndamento(e.target.value)} style={{ ...inputStyle(), width: 'auto', padding: '6px 8px', fontSize: FONT.sm }}>
                   <option value="Intimação">Intimação (DJEN)</option>
                   <option value="Despacho">Despacho</option>
                   <option value="Sentença">Sentença</option>
                   <option value="Audiência">Audiência</option>
                 </select>
-                <input type="text" placeholder="Prazo fatal (dd/mm/aaaa)" value={novoPrazoAndamento} onChange={e => setNovoPrazoAndamento(e.target.value)} style={{ flex: 1, padding: '6px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+                <input type="text" placeholder="Prazo fatal (dd/mm/aaaa)" value={novoPrazoAndamento} onChange={e => setNovoPrazoAndamento(e.target.value)} style={{ ...inputStyle(), flex: 1, minWidth: 140, padding: '6px 8px', fontSize: FONT.sm, fontFamily: 'var(--font-mono)' }} />
               </div>
-              <textarea placeholder="Cole o texto da intimação para a IA resumir..." value={novaDescricaoAndamento} onChange={e => setNovaDescricaoAndamento(e.target.value)} rows={2} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 11, outline: 'none', resize: 'vertical' }} />
-              <button disabled={addingAndamento} type="submit" style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end' }}>
+              <textarea placeholder="Cole o texto da intimação para a IA resumir..." value={novaDescricaoAndamento} onChange={e => setNovaDescricaoAndamento(e.target.value)} rows={2} style={{ ...inputStyle(), padding: '6px 8px', fontSize: FONT.sm, resize: 'vertical' }} />
+              <Button size="sm" type="submit" disabled={addingAndamento} style={{ alignSelf: 'flex-end' }}>
                 {addingAndamento ? 'IA Resumindo...' : '+ Adicionar & Resumir via IA'}
-              </button>
+              </Button>
             </form>
 
             {/* Lista de Andamentos */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
               {loadingAndamentos ? (
-                <div style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: 12 }}>Carregando linha do tempo...</div>
+                <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', textAlign: 'center', padding: SPACE.md }}>Carregando linha do tempo...</div>
               ) : andamentosList.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: 12 }}>Nenhum andamento cadastrado ainda.</div>
+                <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', textAlign: 'center', padding: SPACE.md }}>Nenhum andamento cadastrado ainda.</div>
               ) : (
                 andamentosList.map(item => (
-                  <div key={item.id} style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div key={item.id} style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: SPACE.md, display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-primary)' }}>{item.tipo}</span>
+                      <span style={{ fontSize: FONT.sm, fontWeight: 700, color: 'var(--color-primary)' }}>{item.tipo}</span>
                       {item.prazoFatal && (
-                        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '1px 6px', borderRadius: 4 }}>
+                        <span style={{ fontSize: FONT.xs, fontFamily: 'var(--font-mono)', background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '1px 6px', borderRadius: RADIUS.chip }}>
                           Prazo: {item.prazoFatal}
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--color-foreground)', lineHeight: 1.4 }}>{item.descricao}</div>
+                    <div style={{ fontSize: FONT.base, color: 'var(--color-foreground)', lineHeight: 1.4 }}>{item.descricao}</div>
                     {item.resumoIA && (
-                      <div style={{ background: 'var(--color-accent-light)', border: '1px dashed var(--color-accent)', padding: '6px 8px', borderRadius: 4, fontSize: 11, color: 'var(--color-foreground)', marginTop: 2 }}>
+                      <div style={{ background: 'var(--color-accent-light)', border: '1px dashed var(--color-accent)', padding: '6px 8px', borderRadius: RADIUS.chip, fontSize: FONT.sm, color: 'var(--color-foreground)', marginTop: 2 }}>
                         {item.resumoIA}
                       </div>
                     )}
@@ -332,60 +364,47 @@ export default function Processos() {
       )}
 
       {/* New processo modal */}
-      {showForm && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
-        }} onClick={() => setShowForm(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: 'var(--color-surface)', borderRadius: 10, padding: '32px',
-            width: 560, maxHeight: '90vh', overflow: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-          }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 24, letterSpacing: '-0.02em' }}>Novo Processo</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {[
-                { key: 'tipo', label: 'Tipo de Ação', placeholder: 'Reclamação Trabalhista', full: true },
-                { key: 'cliente', label: 'Cliente', placeholder: 'Nome completo' },
-                { key: 'adverso', label: 'Parte Adversa', placeholder: 'Empresa Ltda.' },
-                { key: 'vara', label: 'Vara / Tribunal', placeholder: '3ª Vara do Trabalho de SP', full: true },
-                { key: 'valor', label: 'Valor da Causa', placeholder: 'R$ 0,00' },
-                { key: 'prazo', label: 'Próximo Prazo', placeholder: 'dd/mm/aaaa' },
-                { key: 'advogado', label: 'Advogado Responsável', placeholder: 'Dr. Nome' },
-              ].map(f => (
-                <div key={f.key} style={{ gridColumn: f.full ? '1 / -1' : undefined }}>
-                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>{f.label}</label>
-                  <input
-                    list={f.key === 'cliente' ? 'clientes-processo-datalist' : undefined}
-                    value={(form as Record<string, string>)[f.key] || ''}
-                    onChange={e => setForm(v => ({ ...v, [f.key]: e.target.value }))}
-                    placeholder={f.placeholder}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none' }}
-                  />
-                  {f.key === 'cliente' && (
-                    <datalist id="clientes-processo-datalist">
-                      {clientesList.map(c => (
-                        <option key={c.id} value={c.nome}>{c.nome} ({c.cpfCnpj})</option>
-                      ))}
-                    </datalist>
-                  )}
-                </div>
-              ))}
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)', display: 'block', marginBottom: 5 }}>Área</label>
-                <select value={form.area} onChange={e => setForm(v => ({ ...v, area: e.target.value }))}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-foreground)', outline: 'none' }}>
-                  {['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista'].map(a => <option key={a}>{a}</option>)}
-                </select>
-              </div>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title="Novo Processo"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button onClick={handleAdd}>Salvar</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
+          {formFields.map(f => (
+            <div key={f.key} style={{ gridColumn: f.full ? '1 / -1' : undefined }}>
+              <Field label={f.label}>
+                <input
+                  list={f.key === 'cliente' ? 'clientes-processo-datalist' : undefined}
+                  value={(form as Record<string, string>)[f.key] || ''}
+                  onChange={e => setForm(v => ({ ...v, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  style={inputStyle()}
+                />
+                {f.key === 'cliente' && (
+                  <datalist id="clientes-processo-datalist">
+                    {clientesList.map(c => (
+                      <option key={c.id} value={c.nome}>{c.nome} ({c.cpfCnpj})</option>
+                    ))}
+                  </datalist>
+                )}
+              </Field>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-              <button onClick={() => setShowForm(false)} style={{ padding: '9px 20px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleAdd} style={{ padding: '9px 24px', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
-            </div>
+          ))}
+          <div>
+            <Field label="Área">
+              <select value={form.area} onChange={e => setForm(v => ({ ...v, area: e.target.value }))} style={inputStyle()}>
+                {areasNovoProcesso.map(a => <option key={a}>{a}</option>)}
+              </select>
+            </Field>
           </div>
         </div>
-      )}
+      </Modal>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>

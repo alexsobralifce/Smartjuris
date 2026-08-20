@@ -1,6 +1,7 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { api, getErrorMessage, type AgendaItem } from '../api/client'
 import Toast, { type ToastMessage } from './Toast'
+import { Button, EmptyState, Field, FONT, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, useIsMobile } from '../ui'
 
 // ---------------------------------------------------------------------------
 // Constantes de domínio (tipos de evento, legendas, nomes de meses/semana)
@@ -130,47 +131,6 @@ function formFromItem(item: AgendaItem): FormState {
 }
 
 // ---------------------------------------------------------------------------
-// Detecção de mobile (touch) via matchMedia — sem CSS externo
-// ---------------------------------------------------------------------------
-
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 640px)')
-    const update = () => setIsMobile(mq.matches)
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
-  return isMobile
-}
-
-// ---------------------------------------------------------------------------
-// Estilos compartilhados
-// ---------------------------------------------------------------------------
-
-const inputBase = (hasError: boolean) => ({
-  width: '100%', padding: '10px 12px', minHeight: 44,
-  border: hasError ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
-  borderRadius: 6, fontSize: 13, background: 'var(--color-surface)',
-  color: 'var(--color-foreground)', outline: 'none', boxSizing: 'border-box' as const,
-})
-
-const labelStyle = (hasError: boolean) => ({
-  fontSize: 10, fontWeight: 600,
-  color: hasError ? 'var(--color-danger)' : 'var(--color-muted)',
-  display: 'block', marginBottom: 4,
-})
-
-const fieldErrorStyle = { fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' as const }
-
-const iconButtonStyle = {
-  width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  border: 'none', background: 'transparent', cursor: 'pointer',
-  color: 'var(--color-muted)', fontSize: 18, borderRadius: 6, flexShrink: 0,
-}
-
-// ---------------------------------------------------------------------------
 // Sub-componentes
 // ---------------------------------------------------------------------------
 
@@ -185,28 +145,28 @@ function EventRow({ item, onEdit, onDelete }: {
   const timeLabel = item.diaInteiro ? '' : formatTime(parseInicio(item.inicio))
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '8px 10px', borderRadius: 6,
+      display: 'flex', alignItems: 'center', gap: SPACE.sm,
+      padding: '8px 10px', borderRadius: RADIUS.control,
       background: 'var(--color-surface)', border: '1px solid var(--color-border)',
       borderLeft: `3px solid var(--color-${item.cor})`,
     }}>
-      <span style={{ fontSize: 15, flexShrink: 0 }} aria-hidden>{emoji}</span>
+      <span style={{ fontSize: FONT.lg, flexShrink: 0 }} aria-hidden>{emoji}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: FONT.md, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {item.titulo}
         </div>
-        {item.cliente && <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 1 }}>{item.cliente}</div>}
+        {item.cliente && <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: 1 }}>{item.cliente}</div>}
       </div>
       {timeLabel && (
-        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-muted)', flexShrink: 0 }}>
+        <span style={{ fontSize: FONT.sm, fontFamily: 'var(--font-mono)', color: 'var(--color-muted)', flexShrink: 0 }}>
           {timeLabel}
         </span>
       )}
       {isManual && onEdit && (
-        <button type="button" onClick={onEdit} aria-label="Editar evento" title="Editar evento" style={iconButtonStyle}>✎</button>
+        <Button type="button" variant="ghost" size="sm" ariaLabel="Editar evento" title="Editar evento" onClick={onEdit}>✎</Button>
       )}
       {isManual && onDelete && (
-        <button type="button" onClick={onDelete} aria-label="Excluir evento" title="Excluir evento" style={iconButtonStyle}>×</button>
+        <Button type="button" variant="ghost" size="sm" ariaLabel="Excluir evento" title="Excluir evento" onClick={onDelete}>×</Button>
       )}
     </div>
   )
@@ -218,7 +178,7 @@ function MonthChip({ item }: { item: AgendaItem }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 4,
-      padding: '2px 5px', borderRadius: 4, fontSize: 10,
+      padding: '2px 5px', borderRadius: RADIUS.chip, fontSize: FONT.xs,
       background: 'var(--color-surface-2)',
       borderLeft: `2px solid var(--color-${item.cor})`,
       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -249,6 +209,7 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [submitted, setSubmitted] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const setField = (key: keyof FormState, value: string | boolean) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -328,186 +289,149 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
 
   if (!modal) return null
 
-  const overlayStyle = {
-    position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: isMobile ? 0 : 16,
-  }
-
-  const cardStyle = {
-    background: 'var(--color-surface)',
-    border: isMobile ? 'none' : '1px solid var(--color-border)',
-    borderRadius: isMobile ? 0 : 10,
-    padding: isMobile ? 20 : 32,
-    width: isMobile ? '100%' : 560,
-    height: isMobile ? '100%' : 'auto',
-    maxHeight: isMobile ? '100%' : '92vh',
-    overflowY: 'auto' as const,
-    boxShadow: isMobile ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',
-  }
+  const dataGridCols = form.diaInteiro || isMobile ? '1fr' : '1fr 1fr'
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={cardStyle} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-display)', fontWeight: 400 }}>
-            {isEdit ? 'Editar Evento' : 'Novo Evento'}
-          </h3>
-          <button type="button" onClick={onClose} aria-label="Fechar" style={{ ...iconButtonStyle, width: 40, height: 40 }}>×</button>
+    <Modal
+      open={modal !== null}
+      onClose={onClose}
+      title={isEdit ? 'Editar Evento' : 'Novo Evento'}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          {isEdit ? (
+            <Button type="button" variant="secondary" onClick={handleDelete} style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}>
+              Excluir
+            </Button>
+          ) : <span />}
+          <div style={{ display: 'flex', gap: SPACE.sm }}>
+            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+            <Button type="button" onClick={() => formRef.current?.requestSubmit()}>
+              {isEdit ? 'Salvar Alterações' : 'Salvar Evento'}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+        <Field label="Título" required error={showError('titulo') ? errors.titulo : undefined}>
+          <input
+            type="text"
+            value={form.titulo}
+            maxLength={200}
+            placeholder="Ex: Audiência de conciliação"
+            onChange={e => setField('titulo', e.target.value)}
+            onBlur={() => markTouched('titulo')}
+            style={inputStyle(!!showError('titulo'))}
+          />
+        </Field>
+
+        <Field label="Tipo">
+          <select
+            value={form.tipo}
+            onChange={e => setField('tipo', e.target.value)}
+            style={inputStyle()}
+          >
+            {TIPOS_EVENTO.map(t => (
+              <option key={t} value={t}>
+                {t === 'audiencia' ? 'Audiência' : t === 'reuniao' ? 'Reunião' : t === 'prazo' ? 'Prazo' : t === 'diligencia' ? 'Diligência' : 'Outro'}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: dataGridCols, gap: SPACE.md }}>
+          <Field label="Data Início" required error={showError('dataInicio') ? errors.dataInicio : undefined}>
+            <input
+              type="date"
+              value={form.dataInicio}
+              onChange={e => setField('dataInicio', e.target.value)}
+              onBlur={() => markTouched('dataInicio')}
+              style={inputStyle(!!showError('dataInicio'))}
+            />
+          </Field>
+          {!form.diaInteiro && (
+            <Field label="Hora início">
+              <input
+                type="time"
+                value={form.horaInicio}
+                onChange={e => setField('horaInicio', e.target.value)}
+                style={inputStyle()}
+              />
+            </Field>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={labelStyle(!!showError('titulo'))}>Título *</label>
-            <input
-              type="text"
-              value={form.titulo}
-              maxLength={200}
-              placeholder="Ex: Audiência de conciliação"
-              onChange={e => setField('titulo', e.target.value)}
-              onBlur={() => markTouched('titulo')}
-              style={inputBase(!!showError('titulo'))}
-            />
-            {showError('titulo') && <span style={fieldErrorStyle}>⚠️ {errors.titulo}</span>}
-          </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', minHeight: 44 }}>
+          <input
+            type="checkbox"
+            checked={form.diaInteiro}
+            onChange={e => setField('diaInteiro', e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }}
+          />
+          <span style={{ fontSize: FONT.md, fontWeight: 500 }}>Dia inteiro</span>
+        </label>
 
-          <div>
-            <label style={labelStyle(false)}>Tipo</label>
+        <div style={{ display: 'grid', gridTemplateColumns: dataGridCols, gap: SPACE.md }}>
+          <Field label="Data Fim (opcional)">
+            <input
+              type="date"
+              value={form.dataFim}
+              onChange={e => setField('dataFim', e.target.value)}
+              style={inputStyle()}
+            />
+          </Field>
+          {!form.diaInteiro && (
+            <Field label="Hora fim (opcional)">
+              <input
+                type="time"
+                value={form.horaFim}
+                onChange={e => setField('horaFim', e.target.value)}
+                style={inputStyle()}
+              />
+            </Field>
+          )}
+        </div>
+
+        <Field label="Descrição (opcional)">
+          <textarea
+            value={form.descricao}
+            onChange={e => setField('descricao', e.target.value)}
+            rows={3}
+            placeholder="Observações do compromisso..."
+            style={{ ...inputStyle(), resize: 'vertical', minHeight: 70 }}
+          />
+        </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
+          <Field label="Processo vinculado">
             <select
-              value={form.tipo}
-              onChange={e => setField('tipo', e.target.value)}
-              style={inputBase(false)}
+              value={form.processoId}
+              onChange={e => setField('processoId', e.target.value)}
+              style={inputStyle()}
             >
-              {TIPOS_EVENTO.map(t => (
-                <option key={t} value={t}>
-                  {t === 'audiencia' ? 'Audiência' : t === 'reuniao' ? 'Reunião' : t === 'prazo' ? 'Prazo' : t === 'diligencia' ? 'Diligência' : 'Outro'}
+              <option value="">Nenhum</option>
+              {processos.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.id.slice(0, 8)} • {p.cliente ?? ''} ({p.tipo ?? ''})
                 </option>
               ))}
             </select>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: form.diaInteiro ? '1fr' : '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle(!!showError('dataInicio'))}>Data Início *</label>
-              <input
-                type="date"
-                value={form.dataInicio}
-                onChange={e => setField('dataInicio', e.target.value)}
-                onBlur={() => markTouched('dataInicio')}
-                style={inputBase(!!showError('dataInicio'))}
-              />
-              {showError('dataInicio') && <span style={fieldErrorStyle}>⚠️ {errors.dataInicio}</span>}
-            </div>
-            {!form.diaInteiro && (
-              <div>
-                <label style={labelStyle(false)}>Hora início</label>
-                <input
-                  type="time"
-                  value={form.horaInicio}
-                  onChange={e => setField('horaInicio', e.target.value)}
-                  style={inputBase(false)}
-                />
-              </div>
-            )}
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', minHeight: 44 }}>
-            <input
-              type="checkbox"
-              checked={form.diaInteiro}
-              onChange={e => setField('diaInteiro', e.target.checked)}
-              style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }}
-            />
-            <span style={{ fontSize: 13, fontWeight: 500 }}>Dia inteiro</span>
-          </label>
-
-          <div style={{ display: 'grid', gridTemplateColumns: form.diaInteiro ? '1fr' : '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle(false)}>Data Fim (opcional)</label>
-              <input
-                type="date"
-                value={form.dataFim}
-                onChange={e => setField('dataFim', e.target.value)}
-                style={inputBase(false)}
-              />
-            </div>
-            {!form.diaInteiro && (
-              <div>
-                <label style={labelStyle(false)}>Hora fim (opcional)</label>
-                <input
-                  type="time"
-                  value={form.horaFim}
-                  onChange={e => setField('horaFim', e.target.value)}
-                  style={inputBase(false)}
-                />
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label style={labelStyle(false)}>Descrição (opcional)</label>
-            <textarea
-              value={form.descricao}
-              onChange={e => setField('descricao', e.target.value)}
-              rows={3}
-              placeholder="Observações do compromisso..."
-              style={{ ...inputBase(false), resize: 'vertical' as const, minHeight: 70 }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle(false)}>Processo vinculado</label>
-              <select
-                value={form.processoId}
-                onChange={e => setField('processoId', e.target.value)}
-                style={inputBase(false)}
-              >
-                <option value="">Nenhum</option>
-                {processos.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.id.slice(0, 8)} • {p.cliente ?? ''} ({p.tipo ?? ''})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle(false)}>Cliente vinculado</label>
-              <select
-                value={form.clienteId}
-                onChange={e => setField('clienteId', e.target.value)}
-                style={inputBase(false)}
-              >
-                <option value="">Nenhum</option>
-                {clientes.map(c => (
-                  <option key={c.id} value={c.id}>{c.nome ?? ''}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 8 }}>
-            <div>
-              {isEdit && (
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  style={{ padding: '10px 16px', minHeight: 44, borderRadius: 6, border: '1px solid var(--color-danger)', background: 'transparent', color: 'var(--color-danger)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Excluir
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={onClose} style={{ padding: '10px 16px', minHeight: 44, border: '1px solid var(--color-border)', background: 'transparent', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: 'var(--color-foreground)' }}>Cancelar</button>
-              <button type="submit" style={{ padding: '10px 20px', minHeight: 44, border: 'none', background: 'var(--color-primary)', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                {isEdit ? 'Salvar Alterações' : 'Salvar Evento'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+          </Field>
+          <Field label="Cliente vinculado">
+            <select
+              value={form.clienteId}
+              onChange={e => setField('clienteId', e.target.value)}
+              style={inputStyle()}
+            >
+              <option value="">Nenhum</option>
+              {clientes.map(c => (
+                <option key={c.id} value={c.id}>{c.nome ?? ''}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -628,16 +552,9 @@ export default function Agenda() {
     })
   }
 
-  const navButtonStyle = {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    gap: 6, minHeight: 44, padding: '8px 14px', borderRadius: 6,
-    border: '1px solid var(--color-border)', background: 'var(--color-surface)',
-    color: 'var(--color-foreground)', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-  }
-
   const renderContent = () => {
     if (loading) {
-      return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13 }}>Carregando agenda...</div>
+      return <Loading message="Carregando agenda..." />
     }
 
     // ---------- MÊS ----------
@@ -645,37 +562,37 @@ export default function Agenda() {
       if (isMobile) {
         const daysOfMonth = Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1))
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.sm }}>
             {daysOfMonth.map(day => {
               const key = dateKey(day)
               const dayItems = itemsForDay(day)
               const isExpanded = expandedDays.has(key)
               const isToday = sameDay(day, today)
               return (
-                <div key={key} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+                <div key={key} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, overflow: 'hidden' }}>
                   <button
                     type="button"
                     onClick={() => toggleDay(key)}
                     aria-expanded={isExpanded}
                     style={{
                       width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      gap: 10, padding: '10px 14px', border: 'none', cursor: 'pointer',
+                      gap: SPACE.sm, padding: '10px 14px', border: 'none', cursor: 'pointer',
                       background: isToday ? 'var(--color-accent-light)' : 'transparent', color: 'var(--color-foreground)',
                     }}
                   >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm }}>
                       <span style={{
                         width: 26, height: 26, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        background: isToday ? 'var(--color-primary)' : 'transparent', color: isToday ? '#fff' : 'var(--color-foreground)',
-                        fontSize: 12, fontWeight: 600,
+                        background: isToday ? 'var(--color-primary)' : 'transparent', color: isToday ? 'var(--color-on-primary)' : 'var(--color-foreground)',
+                        fontSize: FONT.base, fontWeight: 600,
                       }}>{day.getDate()}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500, textTransform: 'capitalize' }}>
+                      <span style={{ fontSize: FONT.base, fontWeight: 500, textTransform: 'capitalize' }}>
                         {day.toLocaleDateString('pt-BR', { weekday: 'long' })}
                       </span>
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm }}>
                       {dayItems.length > 0 && (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-muted)', background: 'var(--color-surface-2)', borderRadius: 10, padding: '1px 8px' }}>{dayItems.length}</span>
+                        <span style={{ fontSize: FONT.sm, fontWeight: 600, color: 'var(--color-muted)', background: 'var(--color-surface-2)', borderRadius: 10, padding: '1px 8px' }}>{dayItems.length}</span>
                       )}
                       <span style={{ color: 'var(--color-muted)', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>›</span>
                     </span>
@@ -683,7 +600,7 @@ export default function Agenda() {
                   {isExpanded && (
                     <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {dayItems.length === 0 ? (
-                        <div style={{ fontSize: 12, color: 'var(--color-muted)', padding: '8px 0' }}>Sem eventos.</div>
+                        <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', padding: '8px 0' }}>Sem eventos.</div>
                       ) : (
                         dayItems.map(item => (
                           <EventRow
@@ -704,11 +621,11 @@ export default function Agenda() {
       }
 
       return (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
             {DIAS_SEMANA.map((d, i) => (
               <div key={d} style={{
-                padding: '10px 8px', textAlign: 'center', fontSize: 10, fontWeight: 600,
+                padding: '10px 8px', textAlign: 'center', fontSize: FONT.xs, fontWeight: 600,
                 letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)',
                 fontFamily: 'var(--font-mono)', background: 'var(--color-surface-2)',
                 borderRight: i !== 6 ? '1px solid var(--color-border)' : 'none',
@@ -740,13 +657,13 @@ export default function Agenda() {
                     <span style={{
                       width: 24, height: 24, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       background: isToday ? 'var(--color-primary)' : 'transparent',
-                      color: isToday ? '#fff' : cell.inMonth ? 'var(--color-foreground)' : 'var(--color-muted)',
-                      fontSize: 12, fontWeight: isToday ? 700 : 500,
+                      color: isToday ? 'var(--color-on-primary)' : cell.inMonth ? 'var(--color-foreground)' : 'var(--color-muted)',
+                      fontSize: FONT.base, fontWeight: isToday ? 700 : 500,
                     }}>{cell.date.getDate()}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
                     {visible.map(item => <MonthChip key={item.id} item={item} />)}
-                    {more > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-muted)' }}>+{more} mais</span>}
+                    {more > 0 && <span style={{ fontSize: FONT.xs, fontWeight: 600, color: 'var(--color-muted)' }}>+{more} mais</span>}
                   </div>
                 </div>
               )
@@ -759,29 +676,29 @@ export default function Agenda() {
     // ---------- SEMANA ----------
     if (view === 'semana') {
       return (
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: SPACE.sm, overflowX: 'auto', paddingBottom: 4 }}>
           {weekDays.map(day => {
             const dayItems = itemsForDay(day)
             const isToday = sameDay(day, today)
             return (
               <div key={dateKey(day)} style={{
                 flex: '1 1 0%', minWidth: 160, background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden',
+                border: '1px solid var(--color-border)', borderRadius: RADIUS.card, overflow: 'hidden',
               }}>
                 <div style={{
                   padding: '10px 12px', textAlign: 'center',
                   background: isToday ? 'var(--color-primary)' : 'var(--color-surface-2)',
-                  color: isToday ? '#fff' : 'var(--color-foreground)',
+                  color: isToday ? 'var(--color-on-primary)' : 'var(--color-foreground)',
                   borderBottom: '1px solid var(--color-border)',
                 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: isToday ? 'rgba(255,255,255,0.75)' : 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: isToday ? 'var(--color-on-primary)' : 'var(--color-muted)', fontFamily: 'var(--font-mono)', opacity: isToday ? 0.75 : 1 }}>
                     {DIAS_SEMANA[day.getDay()]}
                   </div>
-                  <div style={{ fontSize: 20, fontFamily: 'var(--font-display)', lineHeight: 1.1 }}>{day.getDate()}</div>
+                  <div style={{ fontSize: FONT.cardTitle, fontFamily: 'var(--font-display)', lineHeight: 1.1 }}>{day.getDate()}</div>
                 </div>
                 <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 120 }}>
                   {dayItems.length === 0 ? (
-                    <div style={{ fontSize: 11, color: 'var(--color-muted)', textAlign: 'center', padding: '14px 0' }}>—</div>
+                    <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', textAlign: 'center', padding: '14px 0' }}>—</div>
                   ) : (
                     dayItems.map(item => (
                       <EventRow
@@ -803,11 +720,9 @@ export default function Agenda() {
     // ---------- DIA ----------
     const dayItems = itemsForDay(cursor)
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 720 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.sm, maxWidth: 720 }}>
         {dayItems.length === 0 ? (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-muted)', fontSize: 13 }}>
-            Nenhum evento neste dia.
-          </div>
+          <EmptyState message="Nenhum evento neste dia." />
         ) : (
           dayItems.map(item => (
             <EventRow
@@ -823,56 +738,38 @@ export default function Agenda() {
   }
 
   return (
-    <div style={{ padding: isMobile ? '24px 16px' : '32px 40px', maxWidth: 1150, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <PageContainer style={{ display: 'flex', flexDirection: 'column', gap: SPACE.xl }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', borderBottom: '1px solid var(--color-border)', paddingBottom: 24 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>
-            CALENDÁRIO DO ESCRITÓRIO
-          </div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, margin: 0, fontWeight: 400, letterSpacing: '-0.02em' }}>
-            Agenda
-          </h1>
-          <p style={{ color: 'var(--color-muted)', fontSize: 14, marginTop: 4 }}>
-            Audiências, prazos e compromissos do escritório em um só lugar.
-          </p>
-        </div>
-
-        <button
-          onClick={openCreate}
-          style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '9px 18px', minHeight: 44, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
-        >
-          ＋ Novo Evento
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="CALENDÁRIO DO ESCRITÓRIO"
+        title="Agenda"
+        description="Audiências, prazos e compromissos do escritório em um só lugar."
+        action={<Button onClick={openCreate}>＋ Novo Evento</Button>}
+      />
 
       {/* Toolbar: título do período + alternância de visão + navegação */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, margin: 0, fontWeight: 400, letterSpacing: '-0.02em', textTransform: 'capitalize' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SPACE.md, flexWrap: 'wrap' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, margin: 0, fontWeight: 400, letterSpacing: '-0.02em', textTransform: 'capitalize' }}>
           {viewTitle}
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', border: '1px solid var(--color-border)', borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: SPACE.xs }}>
             {(['mes', 'semana', 'dia'] as const).map(v => (
-              <button
+              <Button
                 key={v}
-                type="button"
+                size="sm"
+                variant={view === v ? 'primary' : 'secondary'}
                 onClick={() => setView(v)}
-                style={{
-                  padding: '10px 16px', minHeight: 44, fontSize: 12, fontWeight: 600,
-                  border: 'none', cursor: 'pointer',
-                  background: view === v ? 'var(--color-primary)' : 'var(--color-surface)',
-                  color: view === v ? '#fff' : 'var(--color-muted)',
-                }}
+                style={view === v ? undefined : { color: 'var(--color-muted)' }}
               >
                 {v === 'mes' ? 'Mês' : v === 'semana' ? 'Semana' : 'Dia'}
-              </button>
+              </Button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" onClick={() => shift(-1)} aria-label="Anterior" title="Anterior" style={navButtonStyle}>‹</button>
-            <button type="button" onClick={goToday} style={navButtonStyle}>Hoje</button>
-            <button type="button" onClick={() => shift(1)} aria-label="Próximo" title="Próximo" style={navButtonStyle}>›</button>
+          <div style={{ display: 'flex', gap: SPACE.xs }}>
+            <Button size="sm" variant="secondary" ariaLabel="Anterior" title="Anterior" onClick={() => shift(-1)}>‹</Button>
+            <Button size="sm" variant="secondary" onClick={goToday}>Hoje</Button>
+            <Button size="sm" variant="secondary" ariaLabel="Próximo" title="Próximo" onClick={() => shift(1)}>›</Button>
           </div>
         </div>
       </div>
@@ -880,7 +777,7 @@ export default function Agenda() {
       {/* Legenda */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
         {LEGENDA.map(l => (
-          <span key={l.tipo} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-muted)' }}>
+          <span key={l.tipo} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: FONT.sm, color: 'var(--color-muted)' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: `var(--color-${l.cor})` }} />
             <span aria-hidden>{TIPO_EMOJI[l.tipo]}</span> {l.label}
           </span>
@@ -892,9 +789,7 @@ export default function Agenda() {
 
       {/* Estado vazio do mês */}
       {view === 'mes' && !loading && items.length === 0 && (
-        <div style={{ textAlign: 'center', color: 'var(--color-muted)', fontSize: 13, padding: '8px 0 24px' }}>
-          Nenhum evento neste mês.
-        </div>
+        <EmptyState message="Nenhum evento neste mês." />
       )}
 
       {/* Modal */}
@@ -910,6 +805,6 @@ export default function Agenda() {
       />
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
-    </div>
+    </PageContainer>
   )
 }

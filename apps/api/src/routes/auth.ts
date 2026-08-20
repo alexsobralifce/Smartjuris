@@ -278,11 +278,11 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         return res.status(409).json({ error: 'Este e-mail já está cadastrado.', code: 'EMAIL_DUPLICATE' });
       }
 
-      const autoVerify = process.env.AUTO_VERIFY_EMAIL === 'true';
+      const requereOtp = process.env.REQUIRE_EMAIL_OTP === 'true';
 
-      // AUTO_VERIFY ativo: usuário que começou o cadastro mas não verificou fica
-      // marcado como verificado direto, sem precisar de código (que não chegaria).
-      if (autoVerify) {
+      // PADRÃO: usuário que começou o cadastro (não verificou) é dispensado de
+      // código — fica marcado como verificado direto. OTP só se REQUIRE_EMAIL_OTP=true.
+      if (!requereOtp) {
         const [upd] = await db.update(usuarios)
           .set({ emailVerificado: true })
           .where(eq(usuarios.email, email))
@@ -337,11 +337,11 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
 
     const senhaHash = await bcrypt.hash(senha, 12);
 
-    // Flag de ambiente para pular a verificação de e-mail por código OTP.
-    // Quando 'true' (ex.: ainda sem domínio de e-mail em produção), o usuário
-    // já nasce com emailVerificado:true e o cadastro segue direto, sem exigir
-    // um código que não chegaria. Reversível: desligue o flag para reativar o OTP.
-    const autoVerify = process.env.AUTO_VERIFY_EMAIL === 'true';
+    // PADRÃO: a verificação de e-mail por código OTP é DISPENSADA — o usuário já
+    // nasce com emailVerificado:true e o cadastro segue direto, sem pedir código.
+    // Para reativar a exigência de código (futuro, com domínio de e-mail em
+    // produção), defina REQUIRE_EMAIL_OTP=true na variável de ambiente.
+    const requereOtp = process.env.REQUIRE_EMAIL_OTP === 'true';
 
     // CNPJ opcional com validação leve de formato (14 dígitos)
     if (cnpj) {
@@ -369,8 +369,8 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         senha: senhaHash,
         role: 'admin',
         ativo: false,
-        // Se AUTO_VERIFY_EMAIL, dispensa o OTP e já considera o e-mail verificado.
-        emailVerificado: autoVerify ? true : false,
+        // Dispensa o OTP por padrão; só pede código se REQUIRE_EMAIL_OTP=true.
+        emailVerificado: requereOtp ? false : true,
         oab,
         oabUf,
         escritorioId: escritorioCriado.id,
@@ -382,11 +382,11 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
 
     await recordAudit(req, 'REGISTRO_ESCRITORIO', {
       alvoId: esc.id,
-      detalhes: { email, escritorioNome, autoVerify },
+      detalhes: { email, escritorioNome, requereOtp },
     });
 
-    // Se a verificação por código está habilitada, gera e envia o OTP.
-    if (!autoVerify) {
+    // Somente se opcionalmente exigido (REQUIRE_EMAIL_OTP=true), gera e envia o OTP.
+    if (requereOtp) {
       const codigo = String(Math.floor(100000 + Math.random() * 900000));
       const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
@@ -410,9 +410,8 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       });
     }
 
-    // AUTO_VERIFY ativo: dispensa o OTP. Ainda notifica o Root (para liberação)
-    // e envia boas-vindas — ambos fire-and-forget, não bloqueiam o cadastro,
-    // mesmo que o serviço de e-mail esteja indisponível.
+    // Padrão: dispensa o OTP. Ainda notifica o Root (para liberação) e envia
+    // boas-vindas — ambos fire-and-forget, não bloqueiam o cadastro.
     sendRootNewUserNotificationEmail({
       nome,
       email,

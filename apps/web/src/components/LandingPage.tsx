@@ -365,8 +365,10 @@ function CadastroForm({
         setSubmitError(await getErrorMessage(res, 'Não foi possível concluir o cadastro. Tente novamente.'))
         return
       }
-      // Se o backend retornar step:'ok', a verificação por e-mail foi dispensada
-      // (AUTO_VERIFY_EMAIL) → segue direto para a tela de sucesso, sem OTP.
+      // Por padrão o backend dispensa a verificação por e-mail (sem código OTP)
+      // e responde step:'ok' → segue direto para a tela de sucesso. A tela de
+      // código só é usada se o backend responder step:'verificacao'
+      // (futuro, com REQUIRE_EMAIL_OTP=true).
       let step = 'verificacao'
       try {
         const data = await res.clone().json()

@@ -455,9 +455,87 @@ async function ensureRootUser() {
   }
 }
 
+/**
+ * Garante um usuário root de acesso com e-mail próprio, independente do ROOT_EMAIL
+ * da plataforma. Pensado para permitir login com root@smartjuris.com (o padrão da
+ * variável ROOT_AUTH_EMAIL) usando a senha de ROOT_AUTH_PASSWORD.
+ *
+ * - Se o usuário já existe: garante role='root', ativo, emailVerificado e
+ *   SINCRONIZA a senha com ROOT_AUTH_PASSWORD (caso definida) — resolvendo o caso
+ *   em que a senha ficou "presa" na criação e não era atualizada por ensureRootUser.
+ * - Se não existe: cria com a senha fornecida (ou gera uma temporária).
+ *
+ * Idempotente e seguro: roda a cada startup.
+ */
+async function ensureRootAuthUser() {
+  try {
+    const rootAuthEmail = process.env.ROOT_AUTH_EMAIL || 'root@smartjuris.com';
+    const configuredPassword = process.env.ROOT_AUTH_PASSWORD;
+    const isProd = process.env.NODE_ENV === 'production';
+
+    const [existing] = await db.select().from(usuarios).where(eq(usuarios.email, rootAuthEmail)).limit(1);
+
+    // Determina a senha desejada (e se devemos forçar a reescrita).
+    // Em produção, se não houver senha configurada, não sobrescrevemos a existente
+    // (apenas garante as flags); sem senha e sem usuário existente, aborta de forma
+    // segura para não criar root com senha fraca.
+    let rootAuthPassword: string | null = null;
+    if (configuredPassword) {
+      rootAuthPassword = configuredPassword;
+    } else if (!existing && !isProd) {
+      rootAuthPassword = generateRandomPassword(16);
+      console.log(`🔑 ROOT_AUTH_PASSWORD not set. Generated temporary password for ${rootAuthEmail}: ${rootAuthPassword}`);
+    }
+
+    if (existing) {
+      const updates: Record<string, unknown> = {
+        role: 'root',
+        ativo: true,
+        emailVerificado: true,
+      };
+      // Sincroniza a senha apenas se houver uma senha configurada explicitamente.
+      if (configuredPassword) {
+        // Em produção, recusa sobrescrever com senha fraca (<12 chars).
+        if (isProd && configuredPassword.length < 12) {
+          console.error(`❌ ROOT_AUTH_PASSWORD for ${rootAuthEmail} must be at least 12 characters in production. Password NOT updated.`);
+        } else {
+          updates.senha = await bcrypt.hash(configuredPassword, 12);
+        }
+      }
+      await db.update(usuarios).set(updates).where(eq(usuarios.id, existing.id));
+      console.log(`👑 Root ${rootAuthEmail} garantido (role root/ativo).${configuredPassword && updates.senha ? ' Senha sincronizada com ROOT_AUTH_PASSWORD.' : ' Senha mantida.'}`);
+      return;
+    }
+
+    // Não existe: só cria se temos uma senha segura.
+    if (!rootAuthPassword) {
+      if (isProd) {
+        console.error('❌ ROOT_AUTH_PASSWORD must be set in production to create root@smartjuris.com. Refusing to create weak root.');
+      }
+      return; // não cria sem senha/config segura
+    }
+    if (isProd && rootAuthPassword.length < 12) {
+      console.error('❌ ROOT_AUTH_PASSWORD must be at least 12 characters in production. Refusing to create weak root.');
+      return;
+    }
+    await db.insert(usuarios).values({
+      nome: 'Root de Acesso',
+      email: rootAuthEmail,
+      senha: await bcrypt.hash(rootAuthPassword, 12),
+      role: 'root',
+      ativo: true,
+      emailVerificado: true,
+    });
+    console.log(`👑 Root ${rootAuthEmail} criado.`);
+  } catch (e) {
+    console.error('⚠️ Error ensuring root auth user:', e);
+  }
+}
+
 async function start() {
   await runMigrations();
   await ensureRootUser();
+  await ensureRootAuthUser();
   await runSeedIfEmpty();
   console.log('🚀 Starting server...');
   await import('./server.js');

@@ -66,12 +66,76 @@ const fmtNum = (v: number | null | undefined) => {
   return n.toLocaleString('pt-BR')
 }
 
+// Tela exibida quando a sessão expira. Informa o usuário e oferece voltar ao login.
+function SessionExpiredScreen({ onBackToLogin }: { onBackToLogin: () => void }) {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'var(--color-background)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      fontFamily: 'var(--font-sans)',
+    }}>
+      <div style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        padding: 40,
+        maxWidth: 420,
+        width: '100%',
+        textAlign: 'center',
+        boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
+      }}>
+        <div style={{
+          width: 64,
+          height: 64,
+          margin: '0 auto 20px',
+          borderRadius: '50%',
+          background: 'var(--color-warning-light)',
+          border: '2px solid var(--color-warning)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 30,
+        }}>⏱️</div>
+        <h1 style={{ margin: '0 0 10px', fontSize: 22, fontWeight: 700, color: 'var(--color-foreground)' }}>
+          Sessão expirada
+        </h1>
+        <p style={{ margin: '0 0 24px', fontSize: 15, lineHeight: 1.6, color: 'var(--color-muted)' }}>
+          Sua sessão expirou por inatividade. Para continuar, faça login novamente. Seus dados estão seguros e serão preservados.
+        </p>
+        <button
+          onClick={onBackToLogin}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            fontSize: 15,
+            fontWeight: 600,
+            color: '#fff',
+            background: 'var(--color-primary)',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-primary-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}
+        >
+          Voltar para o Login →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(readCachedUser)
   const [precisaTrocar, setPrecisaTrocar] = useState<boolean>(() => readCachedUser()?.precisaTrocarSenha === true)
   const [loading, setLoading] = useState(true)
   const [route, setRoute] = useState<Route>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
@@ -96,9 +160,15 @@ export default function App() {
             console.warn('Resposta inválida de /me:', err)
           }
         } else if (res.status === 401) {
-          // Sessão genuinamente ausente/inválida — comportamento original
+          // Sessão genuinamente ausente/inválida. Se havia um usuário em cache
+          // (estava logado e a sessão expirou), mostra a tela de "sessão expirada";
+          // senão é um visitante, e apenas mostra o login.
+          const hadCachedUser = !!readCachedUser()
           setUser(null)
           localStorage.removeItem('smartjuris_user')
+          if (hadCachedUser) {
+            setSessionExpired(true)
+          }
         } else {
           // Falha transitória (5xx etc.): NÃO desloga o usuário
           console.warn(`Falha ao validar sessão (/me) — status ${res.status}. Mantendo sessão atual.`)
@@ -122,11 +192,25 @@ export default function App() {
     return () => window.removeEventListener('nav-pecas', handleNav)
   }, [])
 
+  // Escuta o evento de sessão expirada disparado pelo authFetch (qualquer 401
+  // em chamada autenticada). Ao receber, desloga e mostra a tela de expiração.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setUser(null)
+      setPrecisaTrocar(false)
+      setSessionExpired(true)
+      localStorage.removeItem('smartjuris_user')
+    }
+    window.addEventListener('auth:session-expired', handleSessionExpired)
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired)
+  }, [])
+
   const handleLoginSuccess = (newUser: User) => {
     localStorage.setItem('smartjuris_user', JSON.stringify(newUser))
     setUser(newUser)
     setRoute('dashboard')
     setPrecisaTrocar(newUser.precisaTrocarSenha === true)
+    setSessionExpired(false)
   }
 
   const handleTrocaSenhaSuccess = (newUser: User) => {
@@ -143,6 +227,12 @@ export default function App() {
     setPrecisaTrocar(false)
   }
 
+  // Botão "Voltar ao login" da tela de sessão expirada: limpa o estado e
+  // volta para a Landing Page (login).
+  const handleBackToLogin = () => {
+    setSessionExpired(false)
+  }
+
   // Enquanto valida a sessão com /me, exibe estado de carregamento
   if (loading) {
     return (
@@ -150,6 +240,11 @@ export default function App() {
         <div style={{ padding: 24 }}>Carregando...</div>
       </div>
     )
+  }
+
+  // Sessão expirada: mostra a tela de expiração com opção de voltar ao login
+  if (sessionExpired) {
+    return <SessionExpiredScreen onBackToLogin={handleBackToLogin} />
   }
 
   // Se não estiver logado, exibe Landing Page

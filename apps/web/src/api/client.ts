@@ -65,8 +65,26 @@ const qs = (params: Record<string, string | undefined>) => {
   return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
 };
 
-const RELOAD_GUARD_KEY = 'smartjuris_auth_reloading';
 let isReloading = false;
+
+// Dispara um evento que o App escuta para redirecionar à tela de "sessão expirada".
+// Só notifica quando havia um usuário logado em cache (sessão real expirou) —
+// um 401 de login com senha errada NÃO deve mostrar a tela de expiração.
+// Guarda contra disparos repetidos: só notifica uma vez por sessão de navegação.
+function notifySessionExpired() {
+  const hadCachedUser = localStorage.getItem('smartjuris_user') !== null;
+  if (!hadCachedUser) return; // visitante/senha errada: não trata como expiração
+  localStorage.removeItem('smartjuris_user');
+  if (!isReloading) {
+    isReloading = true;
+    window.dispatchEvent(new CustomEvent('auth:session-expired'));
+  }
+}
+
+// Reinicia o guard de notificação (chamado no login bem-sucedido).
+function resetSessionExpiredGuard() {
+  isReloading = false;
+}
 
 const authFetch = (url: string, options: RequestInit = {}) => {
   const headers: Record<string, string> = {
@@ -83,14 +101,9 @@ const authFetch = (url: string, options: RequestInit = {}) => {
 
   return fetch(fullUrl, { ...options, headers, credentials: 'include' }).then(async r => {
     if (r.status === 401) {
-      localStorage.removeItem('smartjuris_user');
-      // Guarda contra loops infinitos de reload: só recarrega uma vez por sessão
-      // (o App chama /me no mount, que retorna 401 para visitantes sem cookie).
-      if (!isReloading && !sessionStorage.getItem(RELOAD_GUARD_KEY)) {
-        isReloading = true;
-        sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
-        window.location.reload();
-      }
+      // Sessão expirou ou token inválido: limpa o usuário e notifica o App para
+      // exibir a tela de "sessão expirada" (que oferece voltar ao login).
+      notifySessionExpired();
     }
     return r;
   });
@@ -144,7 +157,7 @@ async function bufferedResponse(res: Response): Promise<Response> {
 export const api = {
   auth: {
     login: (email: string, password: string) => {
-      sessionStorage.removeItem(RELOAD_GUARD_KEY);
+      resetSessionExpiredGuard();
       return authFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     },
     registro: (data: { nome: string; email: string; senha: string; oab: string; oabUf: string; escritorioNome: string; cnpj?: string; telefone?: string }) =>

@@ -1,3 +1,5 @@
+import '../config.js';
+
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 
@@ -6,6 +8,13 @@ const smtpUser = process.env.SMTP_USER;
 const smtpPass = process.env.SMTP_PASS;
 
 const defaultFrom = process.env.EMAIL_FROM || process.env.RESEND_FROM_EMAIL || (smtpUser ? `SmartJuris <${smtpUser}>` : 'SmartJuris <onboarding@resend.dev>');
+
+// Remetente específico para o Resend. O Resend só aceita remetentes de domínios
+// verificados (onboarding@resend.dev é o remetente padrão de teste). Esta cadeia
+// NUNCA deve usar EMAIL_FROM nem smtpUser — ambos costumam ser o endereço Gmail,
+// que não é verificável no Resend e faria todo fallback falhar com
+// "domain not verified". Se usar um domínio próprio, defina RESEND_FROM_EMAIL.
+const resendFrom = process.env.RESEND_FROM_EMAIL || 'SmartJuris <onboarding@resend.dev>';
 
 export const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
@@ -149,7 +158,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
   const recipient = Array.isArray(options.to) ? options.to.join(', ') : options.to;
   const fromAddress = options.from || defaultFrom;
 
-  // 1. Se o transportador SMTP estiver configurado (ex.: Gmail com Senha de App)
+  // 1. Tenta o transportador SMTP (ex.: Gmail com Senha de App). Se falhar,
+  // registra o erro e prossegue para o fallback Resend abaixo — NÃO aborta,
+  // garantindo que um transportador mal configurado não impeça o envio.
+  let smtpError: string | null = null;
   if (smtpTransporter) {
     try {
       const info = await smtpTransporter.sendMail({
@@ -164,16 +176,19 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
       console.log(`[Email-SMTP] E-mail enviado com sucesso: ID=${info.messageId}, Para=${recipient}, Assunto="${options.subject}"`);
       return { success: true, id: info.messageId };
     } catch (smtpErr: any) {
-      console.error('[Email-SMTP] Erro ao enviar e-mail via SMTP:', smtpErr);
-      return { success: false, error: smtpErr?.message || 'Falha no envio via SMTP.' };
+      smtpError = smtpErr?.message || 'Falha no envio via SMTP.';
+      console.error('[Email-SMTP] Erro ao enviar e-mail via SMTP; tentando fallback Resend:', smtpErr);
     }
   }
 
-  // 2. Caso contrário, se o Resend estiver configurado
+  // 2. Fallback: Resend. (Também usado quando SMTP não está configurado.)
   if (resend) {
+    // Usa o remetente específico do Resend (domínio verificado no Resend),
+    // já que o remetente do SMTP (ex.: gmail) não é aceito pelo Resend.
+    const resendFromAddress = options.from || resendFrom;
     try {
       const { data, error } = await resend.emails.send({
-        from: fromAddress,
+        from: resendFromAddress,
         to: options.to,
         subject: options.subject,
         html: options.html,
@@ -194,8 +209,15 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
     }
   }
 
-  console.warn('[Email] Nem SMTP (SMTP_USER/SMTP_PASS) nem RESEND_API_KEY estão configurados. E-mail não enviado:', options.subject);
-  return { success: false, error: 'Serviço de e-mail não configurado (configure SMTP ou Resend).' };
+  // 3. Nenhum transporte disponível, ou falhou e não houve fallback.
+  const motivo = !smtpTransporter && !resend
+    ? 'Serviço de e-mail não configurado (configure SMTP ou Resend).'
+    : (smtpError ?? 'Falha no envio de e-mail.');
+  const aviso = !smtpTransporter && !resend
+    ? `[Email] Nenhum serviço de e-mail configurado. Envio não realizado: ${options.subject}`
+    : `[Email] Todos os transportes falharam. Último erro: ${motivo}. Envio não realizado: ${options.subject}`;
+  console.warn(aviso);
+  return { success: false, error: motivo };
 }
 
 /**

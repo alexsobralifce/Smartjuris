@@ -88,6 +88,7 @@ export const usuarios = pgTable('usuarios', {
   oab: text('oab'),
   oabUf: text('oab_uf'),
   creditosMes: integer('creditos_mes'),
+  emailVerificado: boolean('email_verificado').notNull().default(false),
 });
 
 export const escritorios = pgTable('escritorios', {
@@ -250,5 +251,19 @@ export const eventos = pgTable('eventos', {
 }, (table) => ({
   escritorioInicioIdx: index('eventos_escritorio_inicio_idx').on(table.escritorioId, table.inicio),
 }));
+
+export const codigosVerificacao = pgTable('codigos_verificacao', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull(),
+  codigo: text('codigo').notNull(),
+  tipo: text('tipo').notNull().default('registro'),
+  tentativas: integer('tentativas').notNull().default(0),
+  utilizado: boolean('utilizado').notNull().default(false),
+  expiraEm: timestamp('expira_em', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  emailIdx: index('codigos_verificacao_email_idx').on(table.email),
+}));
+
 
 

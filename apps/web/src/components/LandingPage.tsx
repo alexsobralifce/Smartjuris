@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
@@ -71,29 +71,232 @@ function CadastroSucesso({ onBackToLogin }: { onBackToLogin: () => void }) {
       padding: '12px 0 4px', gap: SPACE.lg,
     }}>
       <div style={{
-        width: 60, height: 60, borderRadius: '50%',
+        width: 64, height: 64, borderRadius: '50%',
         background: 'var(--color-success-light)',
-        border: '1px solid var(--color-success)',
+        border: '2px solid var(--color-success)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M5 13l4 4L19 7" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, letterSpacing: '-0.02em', margin: 0 }}>
-        Cadastro recebido
-      </h3>
-      <p style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.6, margin: 0, maxWidth: 340 }}>
-        Cadastro recebido com sucesso. Seu acesso será habilitado em breve pelo administrador da plataforma.
-      </p>
-      <Button onClick={onBackToLogin} style={{ marginTop: SPACE.xs }}>
-        Entrar
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-foreground)' }}>
+          E-mail Verificado com Sucesso!
+        </div>
+        <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+          Seu cadastro foi registrado e o administrador da plataforma já foi notificado para liberar seu acesso e creditar seus tokens de IA.
+        </div>
+      </div>
+
+      <div style={{
+        background: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        borderRadius: RADIUS.control,
+        padding: '14px 18px',
+        fontSize: FONT.sm,
+        color: 'var(--color-foreground)',
+        lineHeight: 1.5,
+        textAlign: 'left',
+        width: '100%',
+      }}>
+        <div style={{ fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>📧 Próximo Passo:</div>
+        Você receberá um e-mail assim que seu escritório for aprovado com a quantidade de créditos disponíveis para geração de peças e consultas no sistema.
+      </div>
+
+      <Button onClick={onBackToLogin} style={{ width: '100%', padding: '12px' }}>
+        Ir para a Tela de Login →
       </Button>
     </div>
   )
 }
 
-function CadastroForm({ isMobile, onSuccess }: { isMobile: boolean; onSuccess: () => void }) {
+function CadastroVerificacao({
+  email,
+  onSuccess,
+  onBack,
+}: {
+  email: string
+  onSuccess: () => void
+  onBack: () => void
+}) {
+  const [codigo, setCodigo] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [cooldown, setCooldown] = useState(60)
+  const [resendMsg, setResendMsg] = useState('')
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setInterval(() => setCooldown(c => c - 1), 1000)
+    return () => clearInterval(timer)
+  }, [cooldown])
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setResendMsg('')
+    const clean = codigo.replace(/\D/g, '').trim()
+    if (clean.length !== 6) {
+      setError('Digite o código de 6 dígitos numéricos.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await api.auth.verificarCodigo(email, clean)
+      if (!res.ok) {
+        setError(await getErrorMessage(res, 'Código incorreto ou expirado.'))
+        return
+      }
+      onSuccess()
+    } catch (err: any) {
+      setError(err?.message || 'Falha ao validar código. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (cooldown > 0 || resending) return
+    setResending(true)
+    setError('')
+    setResendMsg('')
+    try {
+      const res = await api.auth.reenviarCodigo(email)
+      if (!res.ok) {
+        setError(await getErrorMessage(res, 'Falha ao reenviar código.'))
+        return
+      }
+      setResendMsg('Novo código enviado com sucesso para o seu e-mail!')
+      setCooldown(60)
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao reenviar código.')
+    } finally {
+      setResending(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '36px', marginBottom: 8 }}>📩</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Confirme seu E-mail
+        </div>
+        <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginTop: 4, lineHeight: 1.5 }}>
+          Enviamos um código de 6 dígitos para:<br />
+          <strong style={{ color: 'var(--color-foreground)', fontFamily: 'var(--font-mono)' }}>{email}</strong>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{
+          background: 'var(--color-danger-light)',
+          color: 'var(--color-danger)',
+          border: '1px solid var(--color-border)',
+          borderRadius: RADIUS.control,
+          padding: '12px 14px',
+          fontSize: FONT.base,
+          fontWeight: 500,
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {resendMsg && (
+        <div style={{
+          background: 'var(--color-success-light)',
+          color: 'var(--color-success)',
+          border: '1px solid var(--color-success)',
+          borderRadius: RADIUS.control,
+          padding: '10px 14px',
+          fontSize: FONT.sm,
+          fontWeight: 500,
+        }}>
+          ✓ {resendMsg}
+        </div>
+      )}
+
+      <Field label="Código de 6 dígitos (OTP)" error={error ? ' ' : undefined} required>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={6}
+          autoComplete="one-time-code"
+          placeholder="000000"
+          value={codigo}
+          onChange={e => {
+            const val = e.target.value.replace(/\D/g, '').slice(0, 6)
+            setCodigo(val)
+            if (error) setError('')
+          }}
+          autoFocus
+          style={{
+            ...inputStyle(!!error),
+            fontFamily: 'var(--font-mono)',
+            fontSize: '24px',
+            textAlign: 'center',
+            letterSpacing: '0.35em',
+            padding: '12px',
+            fontWeight: 700,
+          }}
+        />
+      </Field>
+
+      <Button
+        type="submit"
+        disabled={loading || codigo.length !== 6}
+        style={{ width: '100%', padding: '13px' }}
+      >
+        {loading ? 'Validando Código…' : 'Validar e Concluir Cadastro →'}
+      </Button>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: FONT.sm, marginTop: 4, flexWrap: 'wrap', gap: 8 }}>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={cooldown > 0 || resending}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: cooldown > 0 ? 'var(--color-muted)' : 'var(--color-primary)',
+            fontWeight: 600,
+            cursor: cooldown > 0 ? 'not-allowed' : 'pointer',
+            padding: 0,
+          }}
+        >
+          {resending ? 'Reenviando…' : cooldown > 0 ? `Reenviar código em ${cooldown}s` : '🔄 Reenviar código'}
+        </button>
+
+        <button
+          type="button"
+          onClick={onBack}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-muted)',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          ← Voltar / Corrigir dados
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function CadastroForm({
+  isMobile,
+  onCodeSent,
+}: {
+  isMobile: boolean
+  onCodeSent: (email: string) => void
+}) {
   const [values, setValues] = useState<CadastroValues>(CADASTRO_INICIAL)
   const [errors, setErrors] = useState<Partial<Record<keyof CadastroValues, string>>>({})
   const [touched, setTouched] = useState<Partial<Record<keyof CadastroValues, boolean>>>({})
@@ -160,7 +363,7 @@ function CadastroForm({ isMobile, onSuccess }: { isMobile: boolean; onSuccess: (
         setSubmitError(await getErrorMessage(res, 'Não foi possível concluir o cadastro. Tente novamente.'))
         return
       }
-      onSuccess()
+      onCodeSent(values.email.trim())
     } catch (err: any) {
       setSubmitError(err?.message || 'Não foi possível concluir o cadastro. Tente novamente.')
     } finally {
@@ -219,10 +422,9 @@ function CadastroForm({ isMobile, onSuccess }: { isMobile: boolean; onSuccess: (
               style={inputStyle(!!errors.oab)} />
           </Field>
           <Field label="UF da OAB" error={errors.oabUf} required>
-            <select value={values.oabUf}
-              onChange={e => setField('oabUf', e.target.value)} onBlur={() => handleBlur('oabUf')}
-              style={inputStyle(!!errors.oabUf)}>
-              <option value="">Selecione</option>
+            <select value={values.oabUf} onChange={e => setField('oabUf', e.target.value)}
+              onBlur={() => handleBlur('oabUf')} style={inputStyle(!!errors.oabUf)}>
+              <option value="">Selecione…</option>
               {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
             </select>
           </Field>
@@ -251,7 +453,7 @@ function CadastroForm({ isMobile, onSuccess }: { isMobile: boolean; onSuccess: (
       </section>
 
       <Button type="submit" disabled={loading} style={{ width: '100%', padding: '13px' }}>
-        {loading ? 'Enviando cadastro…' : 'Solicitar acesso →'}
+        {loading ? 'Enviando código de confirmação…' : 'Avançar e Receber Código por E-mail →'}
       </Button>
 
       <p style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5, margin: 0, textAlign: 'center' }}>
@@ -271,11 +473,13 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'login' | 'signup'>('login')
-  const [cadastroConcluido, setCadastroConcluido] = useState(false)
+  const [cadastroStep, setCadastroStep] = useState<'form' | 'otp' | 'sucesso'>('form')
+  const [emailPendente, setEmailPendente] = useState('')
 
   const switchMode = (m: 'login' | 'signup') => {
     setMode(m)
-    setCadastroConcluido(false)
+    setCadastroStep('form')
+    setEmailPendente('')
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -647,10 +851,22 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 </div>
               </div>
             </>
-          ) : cadastroConcluido ? (
+          ) : cadastroStep === 'otp' ? (
+            <CadastroVerificacao
+              email={emailPendente}
+              onSuccess={() => setCadastroStep('sucesso')}
+              onBack={() => setCadastroStep('form')}
+            />
+          ) : cadastroStep === 'sucesso' ? (
             <CadastroSucesso onBackToLogin={() => switchMode('login')} />
           ) : (
-            <CadastroForm isMobile={isMobile} onSuccess={() => setCadastroConcluido(true)} />
+            <CadastroForm
+              isMobile={isMobile}
+              onCodeSent={(em) => {
+                setEmailPendente(em)
+                setCadastroStep('otp')
+              }}
+            />
           )}
         </div>
       </main>

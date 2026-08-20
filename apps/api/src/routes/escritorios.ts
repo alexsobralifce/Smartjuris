@@ -206,20 +206,20 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     const [atualizado] = await db.update(escritorios).set(parsed.data)
       .where(eq(escritorios.id, id)).returning();
 
-    // Se o escritório foi ativado agora (era inativo e virou ativo), notifica o admin por e-mail
+    // Se o escritório foi ativado agora (era inativo e virou ativo), ativa o admin e notifica por e-mail com os créditos
     if (parsed.data.ativo === true && existente.ativo === false) {
-      db.select({ email: usuarios.email, nome: usuarios.nome })
-        .from(usuarios)
+      db.update(usuarios)
+        .set({ ativo: true })
         .where(eq(usuarios.escritorioId, id))
-        .limit(1)
+        .returning({ email: usuarios.email, nome: usuarios.nome })
         .then(([admin]) => {
           if (admin?.email) {
-            sendAccountActivatedEmail(admin.email, admin.nome, atualizado.nome).catch((err) => {
+            sendAccountActivatedEmail(admin.email, admin.nome, atualizado.nome, atualizado.limiteTokensMes).catch((err) => {
               console.error('[Escritorios] Erro ao enviar e-mail de ativação:', err);
             });
           }
         })
-        .catch((err) => console.error('[Escritorios] Erro ao buscar admin para e-mail:', err));
+        .catch((err) => console.error('[Escritorios] Erro ao ativar/buscar admin para e-mail:', err));
     }
 
     await recordAudit(req, 'UPDATE_ESCRITORIO', { alvoId: id, detalhes: parsed.data });

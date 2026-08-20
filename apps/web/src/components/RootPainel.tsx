@@ -39,6 +39,7 @@ interface CreditoEscritorio {
 
 type ModalState =
   | { kind: 'novoEscritorio' }
+  | { kind: 'ativar'; esc: Escritorio }
   | { kind: 'editar'; esc: Escritorio }
   | { kind: 'desativar'; esc: Escritorio }
   | { kind: 'excluir'; esc: Escritorio }
@@ -80,6 +81,16 @@ const fmtDate = (v: string | undefined | null) => {
   const d = new Date(v)
   if (Number.isNaN(d.getTime())) return v
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const fmtDetalhes = (v: unknown): string => {
+  if (v == null) return '—'
+  if (typeof v === 'string') return v
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
 }
 
 async function copiarTexto(text: string): Promise<boolean> {
@@ -390,14 +401,19 @@ export default function RootPainel() {
     }
   }
 
-  const handleAtivar = async (esc: Escritorio) => {
+  const handleAtivarSubmit = async (escId: string, data: { plano: string; limiteTokensMes: number }) => {
     try {
-      const res = await api.raiz.ativarEscritorio(esc.id)
+      const res = await api.raiz.atualizarEscritorio(escId, {
+        ativo: true,
+        plano: data.plano,
+        limiteTokensMes: data.limiteTokensMes,
+      })
       if (!res.ok) {
         addToast('error', await getErrorMessage(res, 'Falha ao ativar escritório.'))
         return
       }
-      addToast('success', 'Escritório ativado.')
+      setModal(null)
+      addToast('success', `Escritório ativado com ${data.limiteTokensMes.toLocaleString('pt-BR')} créditos liberados.`)
       loadEscritorios()
     } catch {
       addToast('error', 'Falha ao ativar escritório.')
@@ -515,7 +531,7 @@ export default function RootPainel() {
                         </Td>
                         <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           {!esc.ativo && (
-                            <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => handleAtivar(esc)}>Ativar</Button>
+                            <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'ativar', esc })}>Ativar</Button>
                           )}
                           <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
                           <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={!esc.ativo} onClick={() => setModal({ kind: 'desativar', esc })}>
@@ -719,7 +735,7 @@ export default function RootPainel() {
                       <span style={{ fontSize: FONT.xs, fontWeight: 600, color: am.color, background: am.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{am.label}</span>
                     </Td>
                     <Td style={{ fontSize: FONT.md, fontWeight: 500 }}>{l.actorNome || '—'}</Td>
-                    <Td style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>{l.detalhes || '—'}</Td>
+                    <Td style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>{fmtDetalhes(l.detalhes)}</Td>
                     <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)' }}>{l.ipAddress || '—'}</Td>
                   </Tr>
                 )
@@ -733,6 +749,9 @@ export default function RootPainel() {
       {/* ===== MODAIS ===== */}
       {modal?.kind === 'novoEscritorio' && (
         <NovoEscritorioModal open onClose={() => setModal(null)} onSubmit={handleCriarEscritorio} />
+      )}
+      {modal?.kind === 'ativar' && (
+        <AtivarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={(data) => handleAtivarSubmit(modal.esc.id, data)} />
       )}
       {modal?.kind === 'editar' && (
         <EditarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={handleEditar} />
@@ -870,6 +889,108 @@ function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean
         <Field label="Limite de tokens (mensal)">
           <input value={limiteTokensMes} onChange={e => setLimiteTokensMes(e.target.value)} style={inputStyle()} type="number" min={0} />
         </Field>
+      </div>
+    </Modal>
+  )
+}
+
+function AtivarEscritorioModal({
+  open,
+  esc,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  esc: Escritorio
+  onClose: () => void
+  onSubmit: (data: { plano: string; limiteTokensMes: number }) => Promise<void>
+}) {
+  const [plano, setPlano] = useState(esc.plano || 'basico')
+  const [limiteTokens, setLimiteTokens] = useState(String(esc.limiteTokensMes || 10000))
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+
+  const tokensNum = Number(limiteTokens)
+  const valid = limiteTokens.trim() !== '' && Number.isInteger(tokensNum) && tokensNum >= 0
+
+  const handleSubmit = async () => {
+    if (!valid) {
+      setError('Informe uma quantidade válida de créditos (inteiro >= 0).')
+      return
+    }
+    setSubmitting(true)
+    setError(undefined)
+    try {
+      await onSubmit({ plano, limiteTokensMes: tokensNum })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Ativar Escritório e Conceder Créditos"
+      width={480}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} disabled={submitting || !valid}>
+            {submitting ? 'Ativando…' : 'Ativar e Liberar Créditos →'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginBottom: SPACE.lg, lineHeight: 1.5 }}>
+        Ao ativar o escritório <strong>{esc.nome}</strong>, o administrador receberá um e-mail confirmando a liberação do acesso e o saldo de créditos informado abaixo.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <Field label="Plano de Assinatura">
+          <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle()}>
+            <option value="basico">Básico (Demo)</option>
+            <option value="starter">Starter</option>
+            <option value="profissional">Profissional</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </Field>
+
+        <Field
+          label="Créditos Iniciais / Limite Mensal de Tokens"
+          error={error}
+          required
+        >
+          <input
+            type="number"
+            min={0}
+            step={1000}
+            value={limiteTokens}
+            onChange={e => {
+              setLimiteTokens(e.target.value)
+              if (error) setError(undefined)
+            }}
+            placeholder="Ex.: 20000"
+            style={{ ...inputStyle(!!error), fontFamily: 'var(--font-mono)' }}
+          />
+        </Field>
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: -4 }}>
+          {[10000, 25000, 50000, 100000].map(sug => (
+            <Button
+              key={sug}
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setLimiteTokens(String(sug))}
+              style={{ fontSize: FONT.xs, padding: '4px 8px' }}
+            >
+              {sug.toLocaleString('pt-BR')} créditos
+            </Button>
+          ))}
+        </div>
       </div>
     </Modal>
   )

@@ -2,16 +2,16 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { db } from '../db/client.js';
-import { usuarios, logins, permissoesUsuario, escritorios } from '../db/schema.js';
-import { and, eq } from 'drizzle-orm';
+import { usuarios, logins, permissoesUsuario, escritorios, codigosVerificacao } from '../db/schema.js';
+import { and, eq, desc } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth.js';
 import { loginRateLimiter, registroRateLimiter } from '../middlewares/rateLimit.js';
 import { revokeToken } from '../middlewares/revocation.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { getTokenUsageMes } from '../services/usage.js';
-import { parseBody, formatZodError, registroSchema } from '../validation/schemas.js';
-import { sendWelcomeEmail } from '../services/email.js';
+import { parseBody, formatZodError, registroSchema, verificarCodigoSchema, reenviarCodigoSchema } from '../validation/schemas.js';
+import { sendVerificationCodeEmail, sendRootNewUserNotificationEmail, sendWelcomeEmail } from '../services/email.js';
 
 const router = Router();
 const SECRET = process.env.JWT_SECRET;
@@ -266,11 +266,43 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
     }
     const { nome, email, senha, oab, oabUf, escritorioNome, cnpj, telefone } = parsed.data;
 
-    // Duplicidade de e-mail (já normalizado em minúsculas pelo Zod)
-    const [existing] = await db.select({ id: usuarios.id }).from(usuarios)
-      .where(eq(usuarios.email, email)).limit(1);
+    // Checagem de usuário existente
+    const [existing] = await db.select({
+      id: usuarios.id,
+      nome: usuarios.nome,
+      emailVerificado: usuarios.emailVerificado,
+    }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
+
     if (existing) {
-      return res.status(409).json({ error: 'Este e-mail já está cadastrado.', code: 'EMAIL_DUPLICATE' });
+      if (existing.emailVerificado) {
+        return res.status(409).json({ error: 'Este e-mail já está cadastrado.', code: 'EMAIL_DUPLICATE' });
+      }
+
+      // Se o usuário iniciou cadastro mas não verificou o e-mail, gera um novo código OTP
+      const codigo = String(Math.floor(100000 + Math.random() * 900000));
+      const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+      await db.update(codigosVerificacao)
+        .set({ utilizado: true })
+        .where(and(eq(codigosVerificacao.email, email), eq(codigosVerificacao.tipo, 'registro')));
+
+      await db.insert(codigosVerificacao).values({
+        email,
+        codigo,
+        tipo: 'registro',
+        expiraEm,
+      });
+
+      sendVerificationCodeEmail(email, existing.nome, codigo).catch((err) => {
+        console.error('[Auth] Falha no envio de código de verificação:', err);
+      });
+
+      return res.status(200).json({
+        success: true,
+        step: 'verificacao',
+        email,
+        message: 'Código de verificação enviado para o seu e-mail.',
+      });
     }
 
     const senhaHash = await bcrypt.hash(senha, 12);
@@ -283,7 +315,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       }
     }
 
-    // Criação atômica do escritório (pendente de aprovação) + usuário admin
+    // Criação atômica do escritório (pendente de aprovação) + usuário admin (emailVerificado: false)
     const [esc] = await db.transaction(async (tx) => {
       const [escritorioCriado] = await tx.insert(escritorios).values({
         nome: escritorioNome,
@@ -294,18 +326,32 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         ...(cnpj ? { cnpj } : {}),
         ...(telefone ? { telefone } : {}),
       }).returning();
+
       await tx.insert(usuarios).values({
         nome,
         email,
         senha: senhaHash,
         role: 'admin',
-        ativo: true,
+        ativo: false,
+        emailVerificado: false,
         oab,
         oabUf,
         escritorioId: escritorioCriado.id,
         precisaTrocarSenha: false,
       });
+
       return [escritorioCriado];
+    });
+
+    // Gera código de verificação OTP de 6 dígitos
+    const codigo = String(Math.floor(100000 + Math.random() * 900000));
+    const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    await db.insert(codigosVerificacao).values({
+      email,
+      codigo,
+      tipo: 'registro',
+      expiraEm,
     });
 
     await recordAudit(req, 'REGISTRO_ESCRITORIO', {
@@ -313,17 +359,177 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       detalhes: { email, escritorioNome },
     });
 
-    // Envio assíncrono de e-mail de confirmação / boas-vindas
-    sendWelcomeEmail(email, nome, escritorioNome).catch((err) => {
-      console.error('[Auth] Falha no envio de e-mail de boas-vindas:', err);
+    // Envio do código de 6 dígitos para o e-mail do usuário
+    sendVerificationCodeEmail(email, nome, codigo).catch((err) => {
+      console.error('[Auth] Falha no envio de código de verificação:', err);
     });
 
     res.status(201).json({
-      message: 'Cadastro recebido com sucesso. Seu acesso será habilitado em breve pelo administrador da plataforma.',
+      success: true,
+      step: 'verificacao',
+      email,
+      message: 'Código de verificação enviado para o seu e-mail.',
     });
   } catch (error) {
     console.error('Registro error:', error);
     res.status(500).json({ error: 'Erro ao realizar o cadastro.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/verificar-codigo — validação do código OTP de 6 dígitos
+// ---------------------------------------------------------------------------
+router.post('/verificar-codigo', async (req, res) => {
+  try {
+    const parsed = parseBody(verificarCodigoSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { email, codigo } = parsed.data;
+
+    // Busca o código ativo mais recente
+    const [registroCodigo] = await db.select()
+      .from(codigosVerificacao)
+      .where(and(
+        eq(codigosVerificacao.email, email),
+        eq(codigosVerificacao.tipo, 'registro'),
+        eq(codigosVerificacao.utilizado, false),
+      ))
+      .orderBy(desc(codigosVerificacao.createdAt))
+      .limit(1);
+
+    if (!registroCodigo) {
+      return res.status(400).json({ error: 'Nenhum código de verificação pendente para este e-mail.' });
+    }
+
+    if (new Date() > new Date(registroCodigo.expiraEm)) {
+      return res.status(400).json({ error: 'Código de verificação expirado. Solicite um novo código.' });
+    }
+
+    if (registroCodigo.tentativas >= 5) {
+      return res.status(400).json({ error: 'Número máximo de tentativas excedido. Solicite um novo código.' });
+    }
+
+    if (registroCodigo.codigo !== codigo) {
+      await db.update(codigosVerificacao)
+        .set({ tentativas: registroCodigo.tentativas + 1 })
+        .where(eq(codigosVerificacao.id, registroCodigo.id));
+      return res.status(400).json({ error: 'Código de verificação incorreto.' });
+    }
+
+    // Código válido: marca como utilizado e ativa emailVerificado
+    await db.update(codigosVerificacao)
+      .set({ utilizado: true })
+      .where(eq(codigosVerificacao.id, registroCodigo.id));
+
+    const [userAtualizado] = await db.update(usuarios)
+      .set({ emailVerificado: true })
+      .where(eq(usuarios.email, email))
+      .returning();
+
+    if (userAtualizado?.escritorioId) {
+      const [escritorio] = await db.select().from(escritorios)
+        .where(eq(escritorios.id, userAtualizado.escritorioId)).limit(1);
+
+      // Notifica o Root por e-mail com os dados completos do novo cadastro
+      sendRootNewUserNotificationEmail({
+        nome: userAtualizado.nome,
+        email: userAtualizado.email,
+        oab: userAtualizado.oab || 'Não informada',
+        oabUf: userAtualizado.oabUf || 'BR',
+        escritorioNome: escritorio?.nome || 'Escritório',
+        telefone: escritorio?.telefone || undefined,
+        cnpj: escritorio?.cnpj || undefined,
+      }).catch((err) => console.error('[Auth] Erro ao notificar root por e-mail:', err));
+
+      // Envia confirmação de cadastro recebido ao advogado
+      sendWelcomeEmail(email, userAtualizado.nome, escritorio?.nome || 'Escritório')
+        .catch((err) => console.error('[Auth] Erro ao enviar boas-vindas:', err));
+    }
+
+    await recordAudit(req, 'VERIFICACAO_EMAIL_SUCESSO', {
+      alvoId: userAtualizado?.id,
+      detalhes: { email },
+    });
+
+    res.json({
+      success: true,
+      verified: true,
+      message: 'Cadastro confirmado com sucesso! O administrador já foi notificado para liberar o seu acesso.',
+    });
+  } catch (error) {
+    console.error('Erro na verificação de código:', error);
+    res.status(500).json({ error: 'Erro ao validar código de verificação.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/reenviar-codigo — reenvio com rate limit de 60s
+// ---------------------------------------------------------------------------
+router.post('/reenviar-codigo', async (req, res) => {
+  try {
+    const parsed = parseBody(reenviarCodigoSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { email } = parsed.data;
+
+    const [user] = await db.select({
+      id: usuarios.id,
+      nome: usuarios.nome,
+      emailVerificado: usuarios.emailVerificado,
+    }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Cadastro não encontrado para este e-mail.' });
+    }
+
+    if (user.emailVerificado) {
+      return res.status(400).json({ error: 'Este e-mail já foi verificado anteriormente.' });
+    }
+
+    // Cooldown de 60 segundos
+    const [ultimoCodigo] = await db.select()
+      .from(codigosVerificacao)
+      .where(and(eq(codigosVerificacao.email, email), eq(codigosVerificacao.tipo, 'registro')))
+      .orderBy(desc(codigosVerificacao.createdAt))
+      .limit(1);
+
+    if (ultimoCodigo?.createdAt) {
+      const segundosDesdeUltimo = (Date.now() - new Date(ultimoCodigo.createdAt).getTime()) / 1000;
+      if (segundosDesdeUltimo < 60) {
+        const restante = Math.ceil(60 - segundosDesdeUltimo);
+        return res.status(429).json({ error: `Aguarde ${restante}s antes de solicitar um novo código.` });
+      }
+    }
+
+    // Invalida anteriores
+    await db.update(codigosVerificacao)
+      .set({ utilizado: true })
+      .where(and(eq(codigosVerificacao.email, email), eq(codigosVerificacao.tipo, 'registro')));
+
+    // Gera novo código
+    const novoCodigo = String(Math.floor(100000 + Math.random() * 900000));
+    const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
+
+    await db.insert(codigosVerificacao).values({
+      email,
+      codigo: novoCodigo,
+      tipo: 'registro',
+      expiraEm,
+    });
+
+    sendVerificationCodeEmail(email, user.nome, novoCodigo).catch((err) => {
+      console.error('[Auth] Erro ao reenviar código:', err);
+    });
+
+    res.json({
+      success: true,
+      message: 'Novo código de verificação enviado para seu e-mail.',
+    });
+  } catch (error) {
+    console.error('Erro ao reenviar código:', error);
+    res.status(500).json({ error: 'Erro ao reenviar código.' });
   }
 });
 

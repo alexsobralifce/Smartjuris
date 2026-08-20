@@ -394,11 +394,18 @@ async function ensureDemoDataset(demoId: string, adminUserId: string | null) {
 
 async function ensureRootUser() {
   try {
-    const existingRoot = await db.select().from(usuarios).where(eq(usuarios.role, 'root')).limit(1);
-    if (existingRoot.length > 0) {
+    const rootEmail = process.env.ROOT_EMAIL || 'alexandresobral2004@gmail.com';
+    const existingRoots = await db.select().from(usuarios).where(eq(usuarios.role, 'root'));
+    
+    if (existingRoots.length > 0) {
+      const root = existingRoots[0];
+      if (root.email !== rootEmail) {
+        await db.update(usuarios).set({ email: rootEmail }).where(eq(usuarios.id, root.id));
+        console.log(`👑 Root user email updated to: ${rootEmail}`);
+      }
       return;
     }
-    const rootEmail = process.env.ROOT_EMAIL || 'root@smartjuris.com';
+
     const configuredRootPassword = process.env.ROOT_PASSWORD;
 
     let rootPassword: string;

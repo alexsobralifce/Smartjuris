@@ -163,6 +163,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
   // garantindo que um transportador mal configurado não impeça o envio.
   let smtpError: string | null = null;
   if (smtpTransporter) {
+    console.log(`[Email-SMTP] Tentando envio via SMTP (${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || 465}, from=${fromAddress}, to=${recipient})`);
     try {
       const info = await smtpTransporter.sendMail({
         from: fromAddress,
@@ -177,7 +178,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
       return { success: true, id: info.messageId };
     } catch (smtpErr: any) {
       smtpError = smtpErr?.message || 'Falha no envio via SMTP.';
-      console.error('[Email-SMTP] Erro ao enviar e-mail via SMTP; tentando fallback Resend:', smtpErr);
+      // Log detalhado para diagnóstico no Railway: inclui código/status (ex.: 535 auth) se disponíveis.
+      const code = smtpErr?.code ? ` | code=${smtpErr.code}` : '';
+      const responseCode = smtpErr?.responseCode ? ` | responseCode=${smtpErr.responseCode}` : '';
+      console.error(`[Email-SMTP] Erro ao enviar via SMTP: ${smtpError}${code}${responseCode}. Tentando fallback Resend.`);
     }
   }
 

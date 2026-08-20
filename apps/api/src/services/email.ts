@@ -28,6 +28,12 @@ export const smtpTransporter = (smtpUser && smtpPass)
         user: smtpUser,
         pass: smtpPass,
       },
+      // Timeouts obrigatórios: sem eles, se o Railway não alcançar o Gmail
+      // (egress/DNS/trava), o sendMail fica pendurado indefinidamente sem log.
+      // Com estes valores, a falha retorna rápido (e cai no Resend) com erro claro.
+      connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 10000, // 10s p/ abrir a conexão
+      greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 10000,     // 10s p/ resposta do servidor
+      socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 15000,         // 15s p/ envio/leitura
     })
   : null;
 

@@ -9,7 +9,7 @@ export const processosSchema = z.object({
   area: z.string().min(1),
   status: z.string().min(1),
   valor: z.string().min(1),
-  prazo: z.string().min(1),
+  prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data no formato AAAA-MM-DD'),
   advogado: z.string().optional(),
 });
 export const processosPatchSchema = processosSchema.partial();
@@ -21,7 +21,7 @@ export const pecasSchema = z.object({
   area: z.string().min(1),
   cliente: z.string().min(1),
   status: z.string().min(1),
-  prazo: z.string().min(1),
+  prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data no formato AAAA-MM-DD'),
   modelo: z.string().min(1),
   fontes: z.number().int(),
   conteudo: z.string().min(1),
@@ -62,7 +62,7 @@ export const timesheetSchema = z.object({
   processoId: z.string().optional(),
   advogado: z.string().optional(),
   descricao: z.string().min(1),
-  minutos: z.number(),
+  minutos: z.number().int().min(0).max(1440),
   valorHora: z.string().optional(),
 });
 
@@ -104,3 +104,77 @@ function translateZodMessage(msg: string): string {
   if (m.includes('invalid_string')) return 'formato inválido';
   return msg; // mantém a mensagem original quando não reconhece
 }
+
+// --- Geração RAG ---
+export const ragGenerateSchema = z.object({
+  tipo: z.string().min(1),
+  area: z.string().min(1),
+  dadosCaso: z.string().min(1),
+});
+
+export const uuidSchema = z.string().uuid();
+
+// --- Multi-tenant: Escritórios (gestão root) ---
+export const escritorioCreateSchema = z.object({
+  nome: z.string().min(1),
+  plano: z.string().min(1).default('basico'),
+  limiteUsuarios: z.number().int().min(1).optional(),
+  limitePecasMes: z.number().int().min(0).optional(),
+  limiteProcessos: z.number().int().min(0).optional(),
+  isDemo: z.boolean().optional(),
+  limiteTokensMes: z.number().int().min(0).nullable().optional(),
+  adminEmail: z.string().email(),
+  adminNome: z.string().min(1),
+});
+
+export const escritorioPatchSchema = z.object({
+  nome: z.string().min(1).optional(),
+  plano: z.string().min(1).optional(),
+  limiteUsuarios: z.number().int().min(1).optional(),
+  limitePecasMes: z.number().int().min(0).optional(),
+  limiteProcessos: z.number().int().min(0).optional(),
+  isDemo: z.boolean().optional(),
+  limiteTokensMes: z.number().int().min(0).nullable().optional(),
+  ativo: z.boolean().optional(),
+});
+
+// --- Multi-tenant: Usuários do escritório (gestão admin do escritório) ---
+export const escritorioUserCreateSchema = z.object({
+  nome: z.string().min(1),
+  email: z.string().email(),
+  modulos: z.array(z.string()).default([]),
+});
+
+export const escritorioUserPatchSchema = z.object({
+  nome: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(['admin', 'user']).optional(),
+  ativo: z.boolean().optional(),
+  oab: z.string().optional(),
+  oabUf: z.string().optional(),
+});
+
+// --- Multi-tenant: Permissões por módulo ---
+export const permissoesUpdateSchema = z.object({
+  permissoes: z.array(z.object({
+    modulo: z.string().min(1),
+    ativo: z.boolean(),
+  })),
+});
+
+// --- Papel timbrado: identidade do escritório (exportação de documentos) ---
+export const escritorioIdentitySchema = z.object({
+  razaoSocial: z.string().optional(),
+  cnpj: z.string().optional(),
+  inscricaoOab: z.string().optional(),
+  endereco: z.string().optional(),
+  numero: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  uf: z.string().optional(),
+  cep: z.string().optional(),
+  telefone: z.string().optional(),
+  email: z.string().optional(),
+  site: z.string().optional(),
+  logoUrl: z.string().optional(),
+});

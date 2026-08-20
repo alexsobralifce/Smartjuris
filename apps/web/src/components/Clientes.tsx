@@ -111,6 +111,8 @@ export default function Clientes() {
       if (Array.isArray(data)) setClientes(data)
     } catch (e) {
       console.error(e)
+      setClientes([])
+      addToast('error', 'Não foi possível carregar os clientes.')
     } finally {
       setLoading(false)
     }

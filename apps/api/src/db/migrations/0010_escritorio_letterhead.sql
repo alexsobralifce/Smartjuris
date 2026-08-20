@@ -1,0 +1,15 @@
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS razao_social text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS cnpj text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS inscricao_oab text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS endereco text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS numero text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS bairro text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS cidade text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS uf text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS cep text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS telefone text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS site text;
+ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS logo_url text;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS oab text;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS oab_uf text;

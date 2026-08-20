@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import Toast, { ToastMessage } from './Toast'
 import type { Processo, Peca } from '@lexia/shared'
 
 const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
@@ -12,22 +13,83 @@ const statusLabel: Record<string, { label: string; color: string; bg: string }> 
 export default function Dashboard() {
   const [processos, setProcessos] = useState<Processo[]>([])
   const [pecas, setPecas] = useState<Peca[]>([])
+  const [erro, setErro] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  // Root não acessa dados de negócio (modelo multi-tenant): detecta via sessão cacheada
+  // para não disparar chamadas a /api/processos e /api/pecas (que retornariam 403).
+  const [isRoot] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('smartjuris_user')
+      if (!raw) return false
+      return JSON.parse(raw)?.role === 'root'
+    } catch {
+      return false
+    }
+  })
+
+  // Sistema de Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = String(Date.now())
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
 
   useEffect(() => {
+    let cancelled = false
     async function loadData() {
       try {
         const [procData, pecasData] = await Promise.all([
           api.processos.list(),
           api.pecas.list()
         ])
-        setProcessos(procData)
-        setPecas(pecasData)
+        if (cancelled) return
+        setProcessos(Array.isArray(procData) ? procData : [])
+        setPecas(Array.isArray(pecasData) ? pecasData : [])
+        setErro(false)
       } catch (error) {
+        if (cancelled) return
         console.error(error)
+        setErro(true)
+        addToast('error', 'Erro ao carregar dados do painel. Tente novamente.')
       }
     }
-    loadData()
-  }, [])
+    if (!isRoot) {
+      loadData()
+    } else {
+      // Root: sem dados de negócio — mantém o painel limpo.
+      setProcessos([])
+      setPecas([])
+      setErro(false)
+    }
+    return () => { cancelled = true }
+  }, [reloadKey, isRoot])
+
+  if (isRoot) {
+    return (
+      <div style={{ padding: '32px 40px', maxWidth: 1200 }}>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.02em', color: 'var(--color-foreground)' }}>
+            Painel de Operações
+          </div>
+          <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 4 }}>
+            SmartJuris Operações · administração da plataforma
+          </div>
+        </div>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '32px 36px' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-foreground)', marginBottom: 8 }}>
+            Você está no painel de Operações.
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1.6 }}>
+            Use a aba <strong style={{ color: 'var(--color-foreground)' }}>Administração &gt; Escritórios</strong> para gestão de tenants (criação, limites e auditoria da plataforma).
+            Os dados de processos, peças e clientes são restritos aos escritórios.
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const ativos = processos.filter(p => p.status === 'ativo').length
   const emRevisao = pecas.filter(p => p.status === 'revisao').length
@@ -59,6 +121,24 @@ export default function Dashboard() {
           DADOS DEMONSTRATIVOS
         </div>
       </div>
+
+      {/* Erro de carregamento */}
+      {erro && (
+        <div style={{ background: 'var(--color-danger-light)', border: '1px solid var(--color-danger)', borderRadius: 6, padding: '12px 16px', marginBottom: 20, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ color: 'var(--color-danger)' }}>
+            ⚠️ Não foi possível carregar os dados do painel.
+          </div>
+          <button
+            onClick={() => setReloadKey(k => k + 1)}
+            style={{
+              background: 'var(--color-danger)', color: '#fff', border: 'none',
+              padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
@@ -146,6 +226,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Componente Toast de Mensageria Flutuante */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

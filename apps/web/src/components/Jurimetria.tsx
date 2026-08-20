@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import Toast, { ToastMessage } from './Toast'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 const taxaSucesso = [
@@ -37,6 +38,16 @@ function ChanceBar({ value }: { value: number }) {
 export default function Jurimetria() {
   const [activeTab, setActiveTab] = useState<'overview' | 'previsao' | 'simulador' | 'acordaos'>('overview')
   const [stats, setStats] = useState<any>(null)
+  const [erro, setErro] = useState(false)
+
+  // Sistema de Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = String(Date.now())
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
 
   // Estado do Resumidor de Acórdãos Extensos
   const [acordaoTexto, setAcordaoTexto] = useState('')
@@ -55,8 +66,27 @@ export default function Jurimetria() {
     economia: 'Proposta de acordo acima de 85% do valor'
   })
 
+  const carregarStats = () => {
+    setErro(false)
+    api.jurimetria.stats()
+      .then(data => {
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          setStats(data)
+        } else {
+          setErro(true)
+          addToast('error', 'Resposta inválida ao carregar dados de jurimetria.')
+        }
+      })
+      .catch(err => {
+        console.error('Erro ao carregar dados de jurimetria:', err)
+        setErro(true)
+        addToast('error', 'Erro ao carregar dados de jurimetria. Tente novamente.')
+      })
+  }
+
   useEffect(() => {
-    api.jurimetria.stats().then(setStats).catch(console.error)
+    carregarStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleResumirAcordao = (e: React.FormEvent) => {
@@ -117,9 +147,30 @@ export default function Jurimetria() {
     setSimResult({ chance, dias, decisao, economia })
   }
 
+  if (erro) {
+    return (
+      <div style={{ padding: 40, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ color: 'var(--color-danger)', fontSize: 15, fontWeight: 600 }}>Erro ao carregar dados de jurimetria</div>
+        <div style={{ color: 'var(--color-muted)', fontSize: 13, maxWidth: 480 }}>
+          Não foi possível carregar as estatísticas. Verifique sua conexão e tente novamente.
+        </div>
+        <button
+          onClick={carregarStats}
+          style={{
+            background: 'var(--color-primary)', color: '#fff', border: 'none',
+            padding: '9px 20px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Tentar novamente
+        </button>
+        <Toast toasts={toasts} onDismiss={dismissToast} />
+      </div>
+    )
+  }
+
   if (!stats) return <div style={{ padding: 40, color: 'var(--color-muted)' }}>Carregando dados de jurimetria...</div>
 
-  const { taxaExito, distribuicaoArea, previsoes } = stats
+  const { taxaExito, distribuicaoArea = [], previsoes = [] } = stats
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 1100 }}>
@@ -234,12 +285,12 @@ export default function Jurimetria() {
                 </tr>
               </thead>
               <tbody>
-                {previsoes.map((p: any) => (
-                  <tr key={p.processo} style={{ borderTop: '1px solid var(--color-border)' }}
+                {previsoes.map((p: any, i: number) => (
+                  <tr key={p.processo || i} style={{ borderTop: '1px solid var(--color-border)' }}
                     onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)'}
                     onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                   >
-                    <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>{p.processo.slice(0, 18)}...</td>
+                    <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>{(p.processo || '—').slice(0, 18)}{p.processo && p.processo.length > 18 ? '...' : ''}</td>
                     <td style={{ padding: '14px 20px' }}>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{p.tipo}</div>
                       <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 1 }}>{p.cliente}</div>
@@ -469,6 +520,8 @@ EMENTA: RECURSO ESPECIAL. DIREITO DO CONSUMIDOR. TRANSPORTE AÉREO. CANCELAMENTO
           </div>
         </div>
       )}
+      {/* Componente Toast de Mensageria Flutuante */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

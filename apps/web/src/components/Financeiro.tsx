@@ -81,6 +81,7 @@ export default function Financeiro() {
       if (Array.isArray(tData)) setTimesheets(tData)
     } catch (e) {
       console.error(e)
+      addToast('error', 'Não foi possível carregar os dados financeiros.')
     } finally {
       setLoading(false)
     }
@@ -94,7 +95,10 @@ export default function Financeiro() {
   useEffect(() => {
     api.clientes.list()
       .then(data => { if (Array.isArray(data)) setClientes(data) })
-      .catch(e => console.error(e))
+      .catch(e => {
+        console.error(e)
+        addToast('error', 'Não foi possível carregar a lista de clientes.')
+      })
   }, [])
 
   // Fecha o dropdown ao clicar fora ou pressionar Escape

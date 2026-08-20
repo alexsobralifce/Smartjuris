@@ -332,7 +332,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               <button
                 type="button"
                 onClick={() => {
-                  setEmail('aline@smartjuris.com')
+                  setEmail('user@smartjuris.com')
                   setPassword('user123')
                 }}
                 style={{
@@ -340,8 +340,23 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                   padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11
                 }}
               >
-                ⚖️ <strong>Advogada:</strong> <code>aline@smartjuris.com</code> (Preencher)
+                ⚖️ <strong>Advogado/Usuário:</strong> <code>user@smartjuris.com</code> (Preencher)
               </button>
+            </div>
+
+            <div style={{
+              marginTop: 10,
+              paddingTop: 10,
+              borderTop: '1px solid var(--color-border)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+            }}>
+              <span style={{ color: 'var(--color-accent)', flexShrink: 0 }}>🔋</span>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>Modo demonstração: 10.000 tokens/mês por usuário.</div>
+                <div style={{ color: 'var(--color-muted)' }}>A geração de peças e resumos com IA consome tokens.</div>
+              </div>
             </div>
           </div>
         </div>

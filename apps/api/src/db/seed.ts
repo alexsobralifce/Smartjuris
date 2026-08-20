@@ -19,86 +19,6 @@ async function seed() {
   await db.delete(documentos);
   await db.delete(usuarios);
 
-  // Insert Clientes
-  console.log('Inserting clientes...');
-  await db.insert(clientes).values([
-    {
-      tipo: 'PF',
-      nome: 'Fernanda Oliveira',
-      cpfCnpj: '321.654.987-00',
-      email: 'fernanda.oliveira@email.com',
-      telefone: '(11) 98765-4321',
-      cep: '01001-000',
-      logradouro: 'Praça da Sé',
-      numero: '100',
-      complemento: 'Apto 42',
-      bairro: 'Sé',
-      cidade: 'São Paulo',
-      uf: 'SP',
-      qualificacao: 'brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 321.654.987-00, residente e domiciliada na Praça da Sé, nº 100, Sé, São Paulo/SP, CEP 01001-000'
-    },
-    {
-      tipo: 'PF',
-      nome: 'Roberto Souza',
-      cpfCnpj: '123.456.789-11',
-      email: 'roberto.souza@email.com',
-      telefone: '(11) 97654-3210',
-      cep: '04001-000',
-      logradouro: 'Rua Vergueiro',
-      numero: '500',
-      complemento: 'Bloco B',
-      bairro: 'Vila Mariana',
-      cidade: 'São Paulo',
-      uf: 'SP',
-      qualificacao: 'brasileiro, casado, engenheiro civil, inscrito no CPF sob o nº 123.456.789-11, residente e domiciliado na Rua Vergueiro, nº 500, Vila Mariana, São Paulo/SP, CEP 04001-000'
-    },
-    {
-      tipo: 'PJ',
-      nome: 'Construtora Alfa',
-      cpfCnpj: '12.345.678/0001-99',
-      email: 'contato@construtoraalfa.com.br',
-      telefone: '(11) 3344-5566',
-      cep: '01310-100',
-      logradouro: 'Avenida Paulista',
-      numero: '1500',
-      complemento: 'Conj 81',
-      bairro: 'Bela Vista',
-      cidade: 'São Paulo',
-      uf: 'SP',
-      qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-99, com sede na Avenida Paulista, nº 1500, Conj 81, Bela Vista, São Paulo/SP, CEP 01310-100'
-    },
-    {
-      tipo: 'PF',
-      nome: 'Lúcia Ferreira',
-      cpfCnpj: '456.789.012-33',
-      email: 'lucia.ferreira@email.com',
-      telefone: '(11) 96543-2109',
-      cep: '05401-000',
-      logradouro: 'Rua Teodoro Sampaio',
-      numero: '800',
-      complemento: 'Apto 12',
-      bairro: 'Pinheiros',
-      cidade: 'São Paulo',
-      uf: 'SP',
-      qualificacao: 'brasileira, viúva, aposentada, inscrita no CPF sob o nº 456.789.012-33, residente e domiciliada na Rua Teodoro Sampaio, nº 800, Pinheiros, São Paulo/SP, CEP 05401-000'
-    },
-    {
-      tipo: 'PJ',
-      nome: 'Indústria Metalúrgica Sul',
-      cpfCnpj: '98.765.432/0001-10',
-      email: 'diretoria@metalsul.com.br',
-      telefone: '(11) 4004-9988',
-      cep: '09010-000',
-      logradouro: 'Avenida Industrial',
-      numero: '2000',
-      complemento: 'Galpão 4',
-      bairro: 'Jardim',
-      cidade: 'Santo André',
-      uf: 'SP',
-      qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 98.765.432/0001-10, com sede na Avenida Industrial, nº 2000, Santo André/SP, CEP 09010-000'
-    }
-  ]);
-
   // Hashing passwords (dev/test credentials; production seed is skipped in startup.ts)
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
   const userPassword = process.env.SEED_USER_PASSWORD || 'user123';
@@ -106,7 +26,7 @@ async function seed() {
   const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
   const hashedUserPassword = await bcrypt.hash(userPassword, 10);
 
-  // Insert Users
+  // Insert Users (before clientes/processos/pecas so they can be owned by the admin user)
   console.log('Inserting usuarios...');
   const [adminUser, normalUser1, normalUser2] = await db.insert(usuarios).values([
     {
@@ -129,6 +49,91 @@ async function seed() {
     }
   ]).returning({ id: usuarios.id, nome: usuarios.nome });
 
+  // Insert Clientes
+  console.log('Inserting clientes...');
+  await db.insert(clientes).values([
+    {
+      tipo: 'PF',
+      nome: 'Fernanda Oliveira',
+      cpfCnpj: '321.654.987-00',
+      email: 'fernanda.oliveira@email.com',
+      telefone: '(11) 98765-4321',
+      cep: '01001-000',
+      logradouro: 'Praça da Sé',
+      numero: '100',
+      complemento: 'Apto 42',
+      bairro: 'Sé',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 321.654.987-00, residente e domiciliada na Praça da Sé, nº 100, Sé, São Paulo/SP, CEP 01001-000',
+      usuarioId: adminUser.id,
+    },
+    {
+      tipo: 'PF',
+      nome: 'Roberto Souza',
+      cpfCnpj: '123.456.789-11',
+      email: 'roberto.souza@email.com',
+      telefone: '(11) 97654-3210',
+      cep: '04001-000',
+      logradouro: 'Rua Vergueiro',
+      numero: '500',
+      complemento: 'Bloco B',
+      bairro: 'Vila Mariana',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'brasileiro, casado, engenheiro civil, inscrito no CPF sob o nº 123.456.789-11, residente e domiciliado na Rua Vergueiro, nº 500, Vila Mariana, São Paulo/SP, CEP 04001-000',
+      usuarioId: adminUser.id,
+    },
+    {
+      tipo: 'PJ',
+      nome: 'Construtora Alfa',
+      cpfCnpj: '12.345.678/0001-99',
+      email: 'contato@construtoraalfa.com.br',
+      telefone: '(11) 3344-5566',
+      cep: '01310-100',
+      logradouro: 'Avenida Paulista',
+      numero: '1500',
+      complemento: 'Conj 81',
+      bairro: 'Bela Vista',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-99, com sede na Avenida Paulista, nº 1500, Conj 81, Bela Vista, São Paulo/SP, CEP 01310-100',
+      usuarioId: adminUser.id,
+    },
+    {
+      tipo: 'PF',
+      nome: 'Lúcia Ferreira',
+      cpfCnpj: '456.789.012-33',
+      email: 'lucia.ferreira@email.com',
+      telefone: '(11) 96543-2109',
+      cep: '05401-000',
+      logradouro: 'Rua Teodoro Sampaio',
+      numero: '800',
+      complemento: 'Apto 12',
+      bairro: 'Pinheiros',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'brasileira, viúva, aposentada, inscrita no CPF sob o nº 456.789.012-33, residente e domiciliada na Rua Teodoro Sampaio, nº 800, Pinheiros, São Paulo/SP, CEP 05401-000',
+      usuarioId: adminUser.id,
+    },
+    {
+      tipo: 'PJ',
+      nome: 'Indústria Metalúrgica Sul',
+      cpfCnpj: '98.765.432/0001-10',
+      email: 'diretoria@metalsul.com.br',
+      telefone: '(11) 4004-9988',
+      cep: '09010-000',
+      logradouro: 'Avenida Industrial',
+      numero: '2000',
+      complemento: 'Galpão 4',
+      bairro: 'Jardim',
+      cidade: 'Santo André',
+      uf: 'SP',
+      qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 98.765.432/0001-10, com sede na Avenida Industrial, nº 2000, Santo André/SP, CEP 09010-000',
+      usuarioId: adminUser.id,
+    }
+  ]);
+
   // Insert Processos
   console.log('Inserting processos...');
   const insertProcessos = await db.insert(processos).values([
@@ -142,6 +147,7 @@ async function seed() {
       valor: 'R$ 87.500,00',
       prazo: '2026-09-15',
       advogado: adminUser.nome,
+      usuarioId: adminUser.id,
     },
     {
       tipo: 'Ação de Danos Morais',
@@ -153,6 +159,7 @@ async function seed() {
       valor: 'R$ 15.000,00',
       prazo: '2026-08-25',
       advogado: normalUser1.nome,
+      usuarioId: adminUser.id,
     },
     {
       tipo: 'Defesa Cível',
@@ -164,6 +171,7 @@ async function seed() {
       valor: 'R$ 150.000,00',
       prazo: '2026-09-01',
       advogado: adminUser.nome,
+      usuarioId: adminUser.id,
     },
     {
       tipo: 'Ação Ordinária de Cobrança',
@@ -175,6 +183,7 @@ async function seed() {
       valor: 'R$ 42.000,00',
       prazo: '2025-11-20',
       advogado: normalUser2.nome,
+      usuarioId: adminUser.id,
     }
   ]).returning({ id: processos.id });
 
@@ -184,6 +193,7 @@ async function seed() {
     {
       processoId: insertProcessos[0].id,
       tipo: 'Petição Inicial Trabalhista',
+      usuarioId: adminUser.id,
       area: 'Trabalhista',
       cliente: 'Fernanda Oliveira',
       status: 'revisao',
@@ -203,6 +213,7 @@ em face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e 
     {
       processoId: insertProcessos[1].id,
       tipo: 'Petição Inicial de Danos Morais',
+      usuarioId: adminUser.id,
       area: 'Consumerista',
       cliente: 'Roberto Souza',
       status: 'aprovado',
@@ -214,6 +225,7 @@ em face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e 
     {
       processoId: insertProcessos[2].id,
       tipo: 'Contestação Cível',
+      usuarioId: adminUser.id,
       area: 'Cível',
       cliente: 'Construtora Alfa',
       status: 'revisao',

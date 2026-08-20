@@ -2,15 +2,16 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { chunks } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
-import { trackTokenUsage } from '../services/usage.js';
+import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { deepseekClient } from '../services/ai.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
-import { cosineDistance, sql, desc } from 'drizzle-orm';
+import { AuthenticatedRequest } from '../middlewares/auth.js';
+import { cosineDistance, sql, desc, or } from 'drizzle-orm';
+import { parseBody, formatZodError, ragGenerateSchema } from '../validation/schemas.js';
 
 const router = Router();
 
 router.post('/generate', aiRateLimiter, async (req, res) => {
-  const { tipo, area, dadosCaso } = req.body;
   const controller = new AbortController();
   let aborted = false;
   const abort = () => {
@@ -22,6 +23,26 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
   const timeout = setTimeout(abort, 120000);
 
   try {
+    const parsed = parseBody(ragGenerateSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { tipo, area, dadosCaso } = parsed.data;
+
+    // Cota de tokens do modo demo (antes de iniciar o stream SSE)
+    const quota = await checkTokenQuota(req as AuthenticatedRequest);
+    if (quota.status === 'blocked') {
+      return res.status(403).json({
+        error: 'Limite de tokens do modo demonstração atingido para este mês. Contate o suporte para aumentar o limite.',
+        code: 'TOKEN_LIMIT_EXCEEDED',
+        usado: quota.usado,
+        limite: quota.limite,
+      });
+    }
+    if (quota.status === 'warn') {
+      res.setHeader('X-Token-Quota-Warning', String(quota.pct));
+    }
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -32,23 +53,60 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
     req.on('close', abort);
 
     if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 10, label: 'Gerando embeddings da requisição...' })}\n\n`);
-    
-    const queryText = `${tipo} ${area} ${dadosCaso}`;
-    const embedding = await generateEmbedding(queryText, (req as any).user?.id);
 
-    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
-    
-    // Similarity search
-    const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
-    const relevantChunks = await db
-      .select({
-        texto: chunks.texto,
-        metadata: chunks.metadata,
-        similarity
-      })
-      .from(chunks)
-      .orderBy((t) => desc(t.similarity))
-      .limit(5);
+    // Tipagem compartilhada entre a busca vetorial e o fallback por palavras-chave
+    let relevantChunks: { texto: string; metadata: unknown; similarity: number }[] = [];
+
+    try {
+      const queryText = `${tipo} ${area} ${dadosCaso}`;
+      const embedding = await generateEmbedding(queryText, (req as any).user?.id);
+
+      if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
+
+      // Similarity search (HNSW / cosine distance)
+      const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
+      relevantChunks = await db
+        .select({
+          texto: chunks.texto,
+          metadata: chunks.metadata,
+          similarity
+        })
+        .from(chunks)
+        .orderBy((t) => desc(t.similarity))
+        .limit(5);
+    } catch {
+      // Fallback: busca por palavras-chave quando os embeddings estão indisponíveis
+      if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Embeddings indisponíveis — usando busca por palavras-chave...' })}\n\n`);
+
+      const stopwords = new Set([
+        'de', 'a', 'o', 'e', 'que', 'do', 'da', 'em', 'para', 'com', 'por',
+        'um', 'uma', 'no', 'na', 'os', 'as', 'se', 'não', 'nao', '&',
+        'ou', 'dos', 'das', 'ao', 'aos', 'à', 'é', 'nos', 'meu', 'minha', 'seu', 'sua'
+      ]);
+
+      // Tokens de tipo/área + primeiras ~12 palavras do caso, sem pontuação
+      const source = `${tipo} ${area} ${dadosCaso.split(/\s+/).slice(0, 12).join(' ')}`;
+      const keywords: string[] = [];
+      const seen = new Set<string>();
+      for (const rawToken of source.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/)) {
+        const token = rawToken.trim();
+        if (token.length < 3 || seen.has(token) || stopwords.has(token)) continue;
+        seen.add(token);
+        keywords.push(token);
+        if (keywords.length >= 8) break;
+      }
+
+      // Fallback mínimo quando nenhuma keyword restar
+      const effectiveKeywords = keywords.length > 0 ? keywords : [tipo, area].filter(Boolean);
+
+      const likeClauses = effectiveKeywords.map(k => sql`${chunks.texto} ILIKE ${'%' + k.replace(/'/g, "''") + '%'}`);
+
+      const rows = likeClauses.length > 0
+        ? await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).where(or(...likeClauses)).limit(5)
+        : await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).limit(5);
+
+      relevantChunks = rows.map(r => ({ texto: r.texto, metadata: r.metadata, similarity: 0 }));
+    }
 
     const contexto = relevantChunks.map(c => c.texto).join('\n\n');
 
@@ -117,7 +175,8 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
   } catch (err: any) {
     if (!res.writableEnded) {
       console.error('Erro na rota de RAG:', err);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      // Mensagem fixa para o cliente; o erro real fica apenas no log do servidor
+      res.write(`data: ${JSON.stringify({ error: 'Falha ao gerar peça. Tente novamente.' })}\n\n`);
       res.end();
     }
   } finally {

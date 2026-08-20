@@ -1,5 +1,17 @@
 import { getApiBaseUrl } from './config';
 
+export type User = {
+  id: string;
+  name: string;
+  role: 'root' | 'admin' | 'user';
+  email: string;
+  escritorioId: string | null;
+  permissoes: string[];
+  precisaTrocarSenha: boolean;
+  tokensMes?: number | null;
+  limiteTokensMes?: number | null;
+};
+
 const qs = (params: Record<string, string | undefined>) => {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
   return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
@@ -50,6 +62,37 @@ export async function getErrorMessage(res: Response, fallback: string): Promise<
   }
 }
 
+/**
+ * Baixa um arquivo autenticado e dispara o download no navegador
+ * (blob + object URL + anchor com atributo `download`).
+ */
+async function downloadApiFile(url: string, filename: string): Promise<void> {
+  const res = await authFetch(url);
+  if (!res.ok) {
+    throw new Error(await getErrorMessage(res, 'Falha ao baixar arquivo.'));
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}
+
+/**
+ * Bufferiza o corpo de uma Response para permitir múltiplas leituras
+ * (ex.: chamar res.json() e depois getErrorMessage(res)). Sem isso, o
+ * clone() interno de getErrorMessage lança "body already used" e o toast
+ * cai no fallback genérico, escondendo a mensagem real do backend.
+ */
+async function bufferedResponse(res: Response): Promise<Response> {
+  const body = await res.text().catch(() => '');
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) => {
@@ -57,6 +100,8 @@ export const api = {
       return authFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     },
     logout: () => authFetch('/api/auth/logout', { method: 'POST' }),
+    trocarSenha: (senhaAtual: string, novaSenha: string) =>
+      authFetch('/api/auth/trocar-senha', { method: 'POST', body: JSON.stringify({ senhaAtual, novaSenha }) }),
     me: () => {
       // Sondagem de sessão: NÃO deve disparar reload em 401 (visitante sem cookie é normal).
       const baseUrl = getApiBaseUrl();
@@ -85,6 +130,7 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(patch)
     }),
+    export: (id: string, format: 'pdf' | 'docx') => downloadApiFile(`/api/pecas/${id}/export?format=${format}`, `peca-${id}.${format}`),
   },
   documentos: {
     list: () => authFetch('/api/documentos').then(r => r.json()),
@@ -131,16 +177,37 @@ export const api = {
     }),
     delete: (id: string) => authFetch(`/api/clientes/${id}`, { method: 'DELETE' }),
   },
-  admin: {
-    listUsers: () => authFetch('/api/admin/users').then(r => r.json()),
-    createUser: (data: any) => authFetch('/api/admin/users', { method: 'POST', body: JSON.stringify(data) }),
-    updateUser: (id: string, patch: any) => authFetch(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-    deleteUser: (id: string) => authFetch(`/api/admin/users/${id}`, { method: 'DELETE' }),
-    resetPassword: (id: string, senha: string) => authFetch(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ senha }) }),
-    getGlobalStats: (from?: string, to?: string) => authFetch('/api/admin/stats/global' + qs({ from, to })).then(r => r.json()),
-    getFinancialStats: (from?: string, to?: string) => authFetch('/api/admin/stats/financial' + qs({ from, to })).then(r => r.json()),
-    getLoginLogs: (from?: string, to?: string, sucesso?: string) => authFetch('/api/admin/logs/logins' + qs({ from, to, sucesso })).then(r => r.json()),
-    getTokenLogs: (from?: string, to?: string) => authFetch('/api/admin/logs/tokens' + qs({ from, to })).then(r => r.json()),
-    getAuditLogs: (from?: string, to?: string) => authFetch('/api/admin/logs/audit' + qs({ from, to })).then(r => r.json()),
+  escritorio: {
+    getInfo: () => authFetch('/api/admin/escritorio/info').then(r => r.json()),
+    saveIdentity: (patch: Record<string, string>) =>
+      authFetch('/api/admin/escritorio/info', { method: 'PATCH', body: JSON.stringify(patch) }).then(r => r.json()),
+    listUsers: () => authFetch('/api/admin/escritorio/usuarios').then(r => r.json()),
+    criarUsuario: (data: { nome: string; email: string; permissoes: string[] }) =>
+      authFetch('/api/admin/escritorio/usuarios', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+    updateUsuario: (id: string, patch: any) =>
+      authFetch(`/api/admin/escritorio/usuarios/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then(r => r.json()),
+    resetarSenha: (id: string) =>
+      authFetch(`/api/admin/escritorio/usuarios/${id}/reset-password`, { method: 'POST' }).then(r => r.json()),
+    desativarUsuario: (id: string) =>
+      authFetch(`/api/admin/escritorio/usuarios/${id}/desativar`, { method: 'POST' }).then(r => r.json()),
+    salvarPermissoes: (id: string, permissoes: { modulo: string; ativo: boolean }[]) =>
+      authFetch(`/api/admin/escritorio/permissoes/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ permissoes }),
+      }).then(r => r.json()),
+    getMetricas: () => authFetch('/api/admin/escritorio/metricas').then(r => r.json()),
+  },
+  raiz: {
+    listEscritorios: () => authFetch('/api/root/escritorios').then(r => r.json()),
+    criarEscritorio: async (data: { nome: string; adminNome: string; adminEmail: string }) =>
+      bufferedResponse(await authFetch('/api/root/escritorios', { method: 'POST', body: JSON.stringify(data) })),
+    editarEscritorio: async (id: string, patch: any) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })),
+    desativarEscritorio: async (id: string) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${id}`, { method: 'DELETE' })),
+    excluirEscritorioPermanente: async (id: string) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${id}/permanente`, { method: 'DELETE' })),
+    getMetricasAgregadas: () => authFetch('/api/root/metricas').then(r => r.json()),
+    getAuditoria: () => authFetch('/api/root/auditoria').then(r => r.json()),
   }
 };

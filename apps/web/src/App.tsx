@@ -10,12 +10,26 @@ import Financeiro from './components/Financeiro'
 import Contratos from './components/Contratos'
 import Crm from './components/Crm'
 import Clientes from './components/Clientes'
-import Admin from './components/Admin'
+import TrocarSenha from './components/TrocarSenha'
+import AdminEscritorio from './components/AdminEscritorio'
+import RootPainel from './components/RootPainel'
 import LandingPage from './components/LandingPage'
 import { api } from './api/client'
 import { useTheme } from './hooks/useTheme'
 
 type Route = 'dashboard' | 'processos' | 'clientes' | 'pecas' | 'validacao' | 'jurimetria' | 'financeiro' | 'contratos' | 'crm' | 'base' | 'documentacao' | 'admin'
+
+interface User {
+  id?: string
+  name: string
+  role: string
+  email: string
+  escritorioId?: string
+  permissoes?: string[]
+  precisaTrocarSenha?: boolean
+  tokensMes?: number | null
+  limiteTokensMes?: number | null
+}
 
 const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
   { id: 'dashboard', label: 'Painel', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -32,7 +46,7 @@ const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
   { id: 'admin', label: 'Administração', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
 ]
 
-const readCachedUser = (): { name: string; role: string; email: string } | null => {
+const readCachedUser = (): User | null => {
   try {
     const cachedUser = localStorage.getItem('smartjuris_user')
     return cachedUser ? JSON.parse(cachedUser) : null
@@ -41,8 +55,16 @@ const readCachedUser = (): { name: string; role: string; email: string } | null 
   }
 }
 
+const fmtNum = (v: number | null | undefined) => {
+  if (v == null) return '0'
+  const n = typeof v === 'string' ? parseFloat(v) : v
+  if (Number.isNaN(n)) return '0'
+  return n.toLocaleString('pt-BR')
+}
+
 export default function App() {
-  const [user, setUser] = useState<{ name: string; role: string; email: string } | null>(readCachedUser)
+  const [user, setUser] = useState<User | null>(readCachedUser)
+  const [precisaTrocar, setPrecisaTrocar] = useState<boolean>(() => readCachedUser()?.precisaTrocarSenha === true)
   const [loading, setLoading] = useState(true)
   const [route, setRoute] = useState<Route>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -55,23 +77,33 @@ export default function App() {
       .then(async res => {
         if (cancelled) return
         if (res.ok) {
-          const data = await res.json()
-          if (data?.user) {
-            setUser(data.user)
-            localStorage.setItem('smartjuris_user', JSON.stringify(data.user))
-          } else {
-            setUser(null)
-            localStorage.removeItem('smartjuris_user')
+          try {
+            const data = await res.json()
+            if (data?.user) {
+              setUser(data.user)
+              setPrecisaTrocar(data.user.precisaTrocarSenha === true)
+              localStorage.setItem('smartjuris_user', JSON.stringify(data.user))
+            } else {
+              setUser(null)
+              localStorage.removeItem('smartjuris_user')
+            }
+          } catch (err) {
+            // 200 sem corpo JSON válido: mantém a sessão atual
+            console.warn('Resposta inválida de /me:', err)
           }
-        } else {
+        } else if (res.status === 401) {
+          // Sessão genuinamente ausente/inválida — comportamento original
           setUser(null)
           localStorage.removeItem('smartjuris_user')
+        } else {
+          // Falha transitória (5xx etc.): NÃO desloga o usuário
+          console.warn(`Falha ao validar sessão (/me) — status ${res.status}. Mantendo sessão atual.`)
         }
       })
-      .catch(() => {
+      .catch(err => {
         if (cancelled) return
-        setUser(null)
-        localStorage.removeItem('smartjuris_user')
+        // Falha de rede / servidor indisponível: NÃO desloga o usuário
+        console.warn('Erro de rede ao validar sessão (/me). Mantendo sessão atual.', err)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -86,9 +118,17 @@ export default function App() {
     return () => window.removeEventListener('nav-pecas', handleNav)
   }, [])
 
-  const handleLoginSuccess = (newUser: { name: string; role: string; email: string }) => {
+  const handleLoginSuccess = (newUser: User) => {
     localStorage.setItem('smartjuris_user', JSON.stringify(newUser))
     setUser(newUser)
+    setRoute('dashboard')
+    setPrecisaTrocar(newUser.precisaTrocarSenha === true)
+  }
+
+  const handleTrocaSenhaSuccess = (newUser: User) => {
+    localStorage.setItem('smartjuris_user', JSON.stringify(newUser))
+    setUser(newUser)
+    setPrecisaTrocar(false)
     setRoute('dashboard')
   }
 
@@ -96,6 +136,7 @@ export default function App() {
     api.auth.logout().catch(() => {})
     localStorage.removeItem('smartjuris_user')
     setUser(null)
+    setPrecisaTrocar(false)
   }
 
   // Enquanto valida a sessão com /me, exibe estado de carregamento
@@ -112,8 +153,55 @@ export default function App() {
     return <LandingPage onLoginSuccess={handleLoginSuccess} />
   }
 
+  // Fluxo de troca de senha obrigatória — impede o acesso ao shell até concluir
+  if (precisaTrocar) {
+    return <TrocarSenha user={user} onSuccess={handleTrocaSenhaSuccess} />
+  }
+
   // Iniciais do usuário
   const initials = user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'U'
+
+  // Indicador de consumo de tokens (apenas usuários do modo demonstração)
+  let tokenBadge: React.ReactNode = null
+  if (user && user.limiteTokensMes != null) {
+    const tokens = user.tokensMes ?? 0
+    const limite = user.limiteTokensMes
+    const pct = limite > 0 ? Math.round((tokens / limite) * 100) : 100
+    const badgeStyle: React.CSSProperties = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 10,
+      fontWeight: 600,
+      lineHeight: 1,
+      borderRadius: 4,
+      padding: '3px 6px',
+      marginTop: 6,
+      whiteSpace: 'nowrap',
+    }
+    if (pct >= 100) {
+      tokenBadge = (
+        <span
+          title="Geração de peças/resumos por IA bloqueada até o próximo mês."
+          style={{ ...badgeStyle, color: 'var(--color-danger)', background: 'var(--color-danger-light)' }}
+        >
+          🔋 Limite de tokens atingido ({pct}%)
+        </span>
+      )
+    } else if (pct >= 80) {
+      tokenBadge = (
+        <span style={{ ...badgeStyle, color: 'var(--color-warning)', background: 'var(--color-warning-light)' }}>
+          🔋 {fmtNum(tokens)} / {fmtNum(limite)} tokens ({pct}%)
+        </span>
+      )
+    } else {
+      tokenBadge = (
+        <span style={{ ...badgeStyle, color: 'var(--color-muted)', background: 'rgba(255,255,255,0.08)' }}>
+          🔋 {fmtNum(tokens)} / {fmtNum(limite)} tokens
+        </span>
+      )
+    }
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-background)' }}>
@@ -155,7 +243,12 @@ export default function App() {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {nav.filter(item => item.id !== 'admin' || user?.role === 'root').map(item => (
+          {nav.filter(item => {
+            if (!user) return false
+            if (user.role === 'admin' || user.role === 'root') return true // admin e root veem todos os módulos
+            // user comum: dashboard e documentacao sempre liberados; demais só se estiver em permissoes
+            return item.id === 'dashboard' || item.id === 'documentacao' || (user.permissoes ?? []).includes(item.id)
+          }).map(item => (
             <button
               key={item.id}
               onClick={() => setRoute(item.id)}
@@ -317,7 +410,8 @@ export default function App() {
             {sidebarOpen && (
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <div style={{ color: '#fff', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'Dr. Advogado'}</div>
-                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'capitalize' }}>{user?.role === 'admin' ? 'Administrador' : 'Advogado'}</div>
+                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'capitalize' }}>{user?.role === 'root' ? 'Operações' : user?.role === 'admin' ? 'Administrador' : 'Advogado'}</div>
+                {tokenBadge}
               </div>
             )}
           </div>
@@ -357,7 +451,8 @@ export default function App() {
         {route === 'crm' && <Crm />}
         {route === 'base' && <Base />}
         {route === 'documentacao' && <Documentacao />}
-        {route === 'admin' && <Admin />}
+        {route === 'admin' && user?.role === 'root' && <RootPainel />}
+        {route === 'admin' && user?.role === 'admin' && <AdminEscritorio />}
       </main>
     </div>
   )

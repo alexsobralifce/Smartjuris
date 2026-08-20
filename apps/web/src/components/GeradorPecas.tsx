@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import { getApiBaseUrl } from '../api/config'
+import Toast, { ToastMessage } from './Toast'
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
 
@@ -80,6 +81,15 @@ export default function GeradorPecas() {
   const [progressoLabel, setProgressoLabel] = useState('')
   const [copied, setCopied] = useState(false)
 
+  // Sistema de Toast
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
+    const id = String(Date.now())
+    setToasts(prev => [...prev, { id, type, text }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
+
   // Lista de processos e clientes para vinculo e autocomplete
   const [processosList, setProcessosList] = useState<any[]>([])
   const [clientesList, setClientesList] = useState<any[]>([])
@@ -150,10 +160,22 @@ export default function GeradorPecas() {
             })
           });
 
+          if (!response.ok) {
+            let msg = 'Falha ao gerar peça. Tente novamente.'
+            try {
+              const errData = await response.clone().json()
+              if (typeof errData?.error === 'string' && errData.error) msg = errData.error
+            } catch { /* corpo não-JSON: mantém mensagem padrão */ }
+            throw new Error(msg)
+          }
+
           if (!response.body) throw new Error('No body');
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           
+          // Acumulador com flush throttled (50ms) para não re-renderizar a cada token.
+          let acc = '';
+          let lastFlush = 0;
           let buffer = '';
           while (true) {
             const { done, value } = await reader.read();
@@ -168,16 +190,29 @@ export default function GeradorPecas() {
                 const dataStr = line.substring(6).trim();
                 if (!dataStr) continue;
                 
-                const data = JSON.parse(dataStr);
+                let data: any;
+                try {
+                  data = JSON.parse(dataStr);
+                } catch {
+                  // Linha SSE malformada: ignora e continua o stream
+                  continue;
+                }
                 
                 if (data.progress !== undefined) {
                   setProgresso(data.progress);
                   setProgressoLabel(data.label);
                 }
                 if (data.token !== undefined) {
-                  setTextoEmGeracao(prev => prev + data.token);
+                  acc += data.token;
+                  const now = Date.now();
+                  if (now - lastFlush >= 50) {
+                    setTextoEmGeracao(acc);
+                    lastFlush = now;
+                  }
                 }
                 if (data.done) {
+                  // Flush final do acumulador antes de consolidar a peça.
+                  setTextoEmGeracao(acc);
                   setPecaConteudo(data.conteudo);
                   setFontesRecuperadas(data.fontes || []);
                   
@@ -203,7 +238,12 @@ export default function GeradorPecas() {
           }
         } catch (e: any) {
           console.error('Erro na geração', e);
-          setProgressoLabel(e?.message || 'Erro na geração!');
+          const msg = e?.message || 'Erro na geração da peça. Tente novamente.';
+          setProgressoLabel(msg);
+          addToast('error', msg);
+          // Volta para o passo de dados para o usuário poder corrigir e tentar novamente
+          setProgresso(0);
+          setStep('dados');
         }
       }
       run()
@@ -607,6 +647,8 @@ export default function GeradorPecas() {
           </div>
         </div>
       )}
+      {/* Componente Toast de Mensageria Flutuante */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

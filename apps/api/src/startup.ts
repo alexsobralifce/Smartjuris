@@ -1,10 +1,10 @@
-import { db } from './db/client.js';
+import { db, client } from './db/client.js';
 import { sql, eq } from 'drizzle-orm';
 import { readdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { usuarios, processos, pecas, documentos, clientes } from './db/schema.js';
 
@@ -61,22 +61,41 @@ async function runMigrations() {
 
   const files = (await readdir(migrationsDir)).filter(f => f.endsWith('.sql')).sort();
 
+  // Idempotently add content_hash column (backward compatible with legacy filename-only records)
+  await db.execute(sql`ALTER TABLE drizzle.__drizzle_migrations ADD COLUMN IF NOT EXISTS content_hash text;`);
+
   // Get applied migrations
-  const applied = await db.execute(sql`SELECT hash FROM drizzle.__drizzle_migrations`);
-  const appliedHashes = new Set((applied as any).map((r: any) => r.hash));
+  const applied = await db.execute(sql`SELECT hash, content_hash FROM drizzle.__drizzle_migrations`);
+  const appliedMap = new Map<string, string | null>();
+  for (const row of applied as any[]) {
+    appliedMap.set(row.hash, row.content_hash ?? null);
+  }
 
   for (const file of files) {
-    const hash = file.replace('.sql', '');
-    if (appliedHashes.has(hash)) {
-      console.log(`  ✓ Already applied: ${file}`);
+    const name = file.replace('.sql', '');
+    const sqlContent = await readFile(join(migrationsDir, file), 'utf-8');
+    const contentHash = createHash('sha256').update(sqlContent).digest('hex');
+    const prior = appliedMap.get(name);
+
+    if (prior !== undefined) {
+      if (prior === contentHash) {
+        console.log(`  ✓ Already applied: ${file}`);
+        continue;
+      }
+      if (prior === null) {
+        await db.execute(sql`UPDATE drizzle.__drizzle_migrations SET content_hash = ${contentHash} WHERE hash = ${name}`);
+        console.log(`  ✓ Already applied (hash backfilled): ${file}`);
+        continue;
+      }
+      console.log(`  ⚠️ ${file} was modified after being applied — skipping (manual review required).`);
       continue;
     }
 
-    const sqlContent = await readFile(join(migrationsDir, file), 'utf-8');
-    
-    // Execute raw statements
-    await db.execute(sql.raw(sqlContent));
-    await db.execute(sql`INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES (${hash}, ${Date.now()})`);
+    // Execute raw statements inside a transaction
+    await client.begin(async (tx) => {
+      await tx.unsafe(sqlContent);
+      await tx`INSERT INTO drizzle.__drizzle_migrations (hash, content_hash, created_at) VALUES (${name}, ${contentHash}, ${Date.now()})`;
+    });
     console.log(`  ✅ Applied: ${file}`);
   }
 
@@ -87,217 +106,290 @@ async function runSeedIfEmpty() {
   try {
     // Skip demo seed in production to avoid exposing known credentials
     if (process.env.NODE_ENV === 'production') {
-      console.log('🔒 Production mode: skipping demo seed. Create admin user manually.');
+      console.log('🔒 Production mode: skipping demo seed.');
       return;
     }
 
-    const existingUsers = await db.select().from(usuarios).limit(1);
-    if (existingUsers.length > 0) {
-      console.log('🌱 Database already seeded.');
-      return;
+    // Skip se o escritório demo já existir com >=2 usuários ativos
+    // (o escritório "Escritório de Demonstração" é criado pela migration 0007).
+    const demoRows = (await db.execute(sql`
+      SELECT id FROM escritorios WHERE nome = 'Escritório de Demonstração' LIMIT 1
+    `)) as any[];
+    const demoId = demoRows[0]?.id ?? null;
+
+    if (demoId) {
+      const countRows = (await db.execute(sql`
+        SELECT COUNT(*)::int AS count FROM usuarios WHERE escritorio_id = ${demoId} AND ativo = true
+      `)) as any[];
+      const activeUsers = Number(countRows[0]?.count ?? 0);
+      if (activeUsers >= 2) {
+        console.log('🌱 Demo seed já configurado (escritório demo com >=2 usuários ativos).');
+        return;
+      }
     }
 
-    console.log('🌱 Database is empty. Seeding initial demonstration data...');
+    console.log('🌱 Garantindo escritório demo + admin + user...');
+
+    // 1. Garantir escritório de demonstração (plano basico, limite padrão de 2 usuários)
+    let demo_id = demoId;
+    if (!demo_id) {
+      const created = (await db.execute(sql`
+        INSERT INTO escritorios (nome, plano, is_demo, limite_tokens_mes)
+        VALUES ('Escritório de Demonstração', 'basico', true, 10000) RETURNING id
+      `)) as any[];
+      demo_id = created[0]?.id ?? null;
+    } else {
+      // Base existente (migration 0007/0009): garante os flags de demo de forma idempotente
+      await db.execute(sql`
+        UPDATE escritorios SET is_demo = true, limite_tokens_mes = 10000 WHERE id = ${demo_id}
+      `);
+    }
+    if (!demo_id) {
+      console.error('⚠️ Seed: não foi possível garantir o escritório de demonstração.');
+      return;
+    }
 
     const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
     const userPassword = process.env.SEED_USER_PASSWORD || 'user123';
-    console.log(`🔑 Dev seed passwords -> admin@smartjuris.com: ${adminPassword} | aline@smartjuris.com / carlos@smartjuris.com: ${userPassword}`);
+    console.log(`🔑 Dev seed passwords -> admin@smartjuris.com: ${adminPassword} | user@smartjuris.com: ${userPassword}`);
 
     const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
     const hashedUserPassword = await bcrypt.hash(userPassword, 10);
 
-    const [adminUser, normalUser1, normalUser2] = await db.insert(usuarios).values([
-      {
-        nome: 'Dr. Marcos Costa',
-        email: 'admin@smartjuris.com',
-        senha: hashedAdminPassword,
-        role: 'admin',
-      },
-      {
-        nome: 'Dra. Aline Mendes',
-        email: 'aline@smartjuris.com',
-        senha: hashedUserPassword,
-        role: 'user',
-      },
-      {
-        nome: 'Dr. Carlos Eduardo',
-        email: 'carlos@smartjuris.com',
-        senha: hashedUserPassword,
-        role: 'user',
-      }
-    ]).returning({ id: usuarios.id, nome: usuarios.nome });
+    // 2. Admin do escritório demo (admin sempre tem acesso total — sem linhas em permissoes_usuario)
+    const [adminRow] = (await db.execute(sql`
+      INSERT INTO usuarios (nome, email, senha, role, ativo, escritorio_id, precisa_trocar_senha)
+      VALUES ('Administrador Demo', 'admin@smartjuris.com', ${hashedAdminPassword}, 'admin', true, ${demo_id}, false)
+      ON CONFLICT (email) DO UPDATE SET
+        role = 'admin',
+        senha = EXCLUDED.senha,
+        ativo = true,
+        escritorio_id = EXCLUDED.escritorio_id,
+        precisa_trocar_senha = false
+      RETURNING id
+    `)) as any[];
+    const adminUserId = adminRow?.id ?? null;
 
-    await db.insert(clientes).values([
-      {
-        tipo: 'PF',
-        nome: 'Fernanda Oliveira',
-        cpfCnpj: '321.654.987-00',
-        email: 'fernanda.oliveira@email.com',
-        telefone: '(11) 98765-4321',
-        cep: '01001-000',
-        logradouro: 'Praça da Sé',
-        numero: '100',
-        complemento: 'Apto 42',
-        bairro: 'Sé',
-        cidade: 'São Paulo',
-        uf: 'SP',
-        qualificacao: 'brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 321.654.987-00, residente e domiciliada na Praça da Sé, nº 100, Sé, São Paulo/SP, CEP 01001-000'
-      },
-      {
-        tipo: 'PF',
-        nome: 'Roberto Souza',
-        cpfCnpj: '123.456.789-11',
-        email: 'roberto.souza@email.com',
-        telefone: '(11) 97654-3210',
-        cep: '04001-000',
-        logradouro: 'Rua Vergueiro',
-        numero: '500',
-        complemento: 'Bloco B',
-        bairro: 'Vila Mariana',
-        cidade: 'São Paulo',
-        uf: 'SP',
-        qualificacao: 'brasileiro, casado, engenheiro civil, inscrito no CPF sob o nº 123.456.789-11, residente e domiciliado na Rua Vergueiro, nº 500, Vila Mariana, São Paulo/SP, CEP 04001-000'
-      },
-      {
-        tipo: 'PJ',
-        nome: 'Construtora Alfa',
-        cpfCnpj: '12.345.678/0001-99',
-        email: 'contato@construtoraalfa.com.br',
-        telefone: '(11) 3344-5566',
-        cep: '01310-100',
-        logradouro: 'Avenida Paulista',
-        numero: '1500',
-        complemento: 'Conj 81',
-        bairro: 'Bela Vista',
-        cidade: 'São Paulo',
-        uf: 'SP',
-        qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-99, com sede na Avenida Paulista, nº 1500, Conj 81, Bela Vista, São Paulo/SP, CEP 01310-100'
-      },
-      {
-        tipo: 'PF',
-        nome: 'Lúcia Ferreira',
-        cpfCnpj: '456.789.012-33',
-        email: 'lucia.ferreira@email.com',
-        telefone: '(11) 96543-2109',
-        cep: '05401-000',
-        logradouro: 'Rua Teodoro Sampaio',
-        numero: '800',
-        complemento: 'Apto 12',
-        bairro: 'Pinheiros',
-        cidade: 'São Paulo',
-        uf: 'SP',
-        qualificacao: 'brasileira, viúva, aposentada, inscrita no CPF sob o nº 456.789.012-33, residente e domiciliada na Rua Teodoro Sampaio, nº 800, Pinheiros, São Paulo/SP, CEP 05401-000'
-      }
-    ]);
+    // 3. User comum + permissões default (processos, clientes, pecas, validacao, jurimetria, contratos, documentacao)
+    const [userRow] = (await db.execute(sql`
+      INSERT INTO usuarios (nome, email, senha, role, ativo, escritorio_id, precisa_trocar_senha)
+      VALUES ('Usuário Demo', 'user@smartjuris.com', ${hashedUserPassword}, 'user', true, ${demo_id}, false)
+      ON CONFLICT (email) DO UPDATE SET
+        role = 'user',
+        senha = EXCLUDED.senha,
+        ativo = true,
+        escritorio_id = EXCLUDED.escritorio_id,
+        precisa_trocar_senha = false
+      RETURNING id
+    `)) as any[];
+    const demoUserId = userRow?.id ?? null;
 
-    const insertProcessos = await db.insert(processos).values([
-      {
-        tipo: 'Reclamação Trabalhista',
-        cliente: 'Fernanda Oliveira',
-        adverso: 'Empresa XYZ S.A.',
-        vara: '3ª Vara do Trabalho de SP',
-        area: 'Trabalhista',
-        status: 'ativo',
-        valor: 'R$ 87.500,00',
-        prazo: '2026-09-15',
-        advogado: adminUser.nome,
-      },
-      {
-        tipo: 'Ação de Danos Morais',
-        cliente: 'Roberto Souza',
-        adverso: 'Companhia Aérea VooFácil',
-        vara: '2ª Vara Cível de Guarulhos',
-        area: 'Consumerista',
-        status: 'ativo',
-        valor: 'R$ 15.000,00',
-        prazo: '2026-08-25',
-        advogado: normalUser1.nome,
-      },
-      {
-        tipo: 'Defesa Cível',
-        cliente: 'Construtora Alfa',
-        adverso: 'Sindicato dos Trabalhadores',
-        vara: '10ª Vara Cível de SP',
-        area: 'Cível',
-        status: 'ativo',
-        valor: 'R$ 150.000,00',
-        prazo: '2026-09-01',
-        advogado: adminUser.nome,
-      },
-      {
-        tipo: 'Ação Ordinária de Cobrança',
-        cliente: 'Lúcia Ferreira',
-        adverso: 'Banco do Brasil S.A.',
-        vara: '5ª Vara de Família de SP',
-        area: 'Cível',
-        status: 'arquivado',
-        valor: 'R$ 42.000,00',
-        prazo: '2025-11-20',
-        advogado: normalUser2.nome,
-      }
-    ]).returning({ id: processos.id });
+    if (demoUserId) {
+      await db.execute(sql`
+        INSERT INTO permissoes_usuario (usuario_id, modulo, ativo)
+        SELECT ${demoUserId}, m, true
+        FROM unnest(ARRAY['processos','clientes','pecas','validacao','jurimetria','contratos','documentacao']) AS m
+        ON CONFLICT (usuario_id, modulo) DO NOTHING
+      `);
+    }
 
-    await db.insert(pecas).values([
-      {
-        processoId: insertProcessos[0].id,
-        tipo: 'Petição Inicial Trabalhista',
-        area: 'Trabalhista',
-        cliente: 'Fernanda Oliveira',
-        status: 'revisao',
-        prazo: '2026-09-10',
-        modelo: 'DeepSeek Chat',
-        fontes: 4,
-        conteudo: `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO DE SÃO PAULO — SP\n\nProcesso nº 0001234-56.2026.5.02.0001\n\nFERNANDA OLIVEIRA, brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 000.000.000-00, residente e domiciliada na Rua das Flores, nº 123, São Paulo/SP, por seu advogado infra-assinado, vem, mui respeitosamente, perante Vossa Excelência, propor a presente:\n\nRECLAMAÇÃO TRABALHISTA\n\nem face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e fundamentos a seguir expostos...`
-      },
-      {
-        processoId: insertProcessos[1].id,
-        tipo: 'Petição Inicial de Danos Morais',
-        area: 'Consumerista',
-        cliente: 'Roberto Souza',
-        status: 'aprovado',
-        prazo: '2026-08-23',
-        modelo: 'DeepSeek Chat',
-        fontes: 2,
-        conteudo: 'EXCELENTÍSSIMO JUIZ DA 2ª VARA CÍVEL DA COMARCA DE GUARULHOS - SP...'
-      },
-      {
-        processoId: insertProcessos[2].id,
-        tipo: 'Contestação Cível',
-        area: 'Cível',
-        cliente: 'Construtora Alfa',
-        status: 'revisao',
-        prazo: '2026-08-30',
-        modelo: 'DeepSeek Chat',
-        fontes: 3,
-        conteudo: 'EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DA 10ª VARA CÍVEL DA CAPITAL...'
-      }
-    ]);
+    // 4. Atribuir registros existentes sem escritorio_id ao escritório demo
+    await db.execute(sql`UPDATE processos SET escritorio_id = ${demo_id} WHERE escritorio_id IS NULL;`);
+    await db.execute(sql`UPDATE pecas SET escritorio_id = ${demo_id} WHERE escritorio_id IS NULL;`);
+    await db.execute(sql`UPDATE clientes SET escritorio_id = ${demo_id} WHERE escritorio_id IS NULL;`);
+    await db.execute(sql`UPDATE andamentos SET escritorio_id = ${demo_id} WHERE escritorio_id IS NULL;`);
+    await db.execute(sql`UPDATE lancamentos_financeiros SET escritorio_id = ${demo_id} WHERE escritorio_id IS NULL;`);
+    await db.execute(sql`UPDATE timesheet SET escritorio_id = ${demo_id} WHERE escritorio_id IS NULL;`);
 
-    await db.insert(documentos).values([
-      {
-        nome: 'CLT_Compilada_2024.pdf',
-        colecao: 'Legislação Federal',
-        tamanho: '2.4 MB',
-        chunks: 845
-      },
-      {
-        nome: 'Súmulas_TST_Atualizadas.pdf',
-        colecao: 'Jurisprudência',
-        tamanho: '1.1 MB',
-        chunks: 312
-      },
-      {
-        nome: 'Jurisprudencia_Danos_Morais_Aereo.pdf',
-        colecao: 'Jurisprudência',
-        tamanho: '850 KB',
-        chunks: 95
-      }
-    ]);
+    // 5. Criar dataset demo caso não exista (ex.: banco novo ou seed parcial)
+    const procCountRows = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM processos`)) as any[];
+    const procCount = Number(procCountRows[0]?.count ?? 0);
+    if (procCount === 0) {
+      await ensureDemoDataset(demo_id, adminUserId);
+    }
 
-    console.log('✅ Demonstration seed completed successfully!');
+    console.log('✅ Demo seed (escritório + admin + user) atualizado.');
   } catch (seedErr) {
     console.error('⚠️ Seed warning:', seedErr);
   }
+}
+
+async function ensureDemoDataset(demoId: string, adminUserId: string | null) {
+  console.log('🌱 Criando dataset de demonstração...');
+
+  await db.insert(clientes).values([
+    {
+      tipo: 'PF',
+      nome: 'Fernanda Oliveira',
+      cpfCnpj: '321.654.987-00',
+      email: 'fernanda.oliveira@email.com',
+      telefone: '(11) 98765-4321',
+      cep: '01001-000',
+      logradouro: 'Praça da Sé',
+      numero: '100',
+      complemento: 'Apto 42',
+      bairro: 'Sé',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'brasileira, solteira, auxiliar administrativa, inscrita no CPF sob o nº 321.654.987-00, residente e domiciliada na Praça da Sé, nº 100, Sé, São Paulo/SP, CEP 01001-000',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      tipo: 'PF',
+      nome: 'Roberto Souza',
+      cpfCnpj: '123.456.789-11',
+      email: 'roberto.souza@email.com',
+      telefone: '(11) 97654-3210',
+      cep: '04001-000',
+      logradouro: 'Rua Vergueiro',
+      numero: '500',
+      complemento: 'Bloco B',
+      bairro: 'Vila Mariana',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'brasileiro, casado, engenheiro civil, inscrito no CPF sob o nº 123.456.789-11, residente e domiciliado na Rua Vergueiro, nº 500, Vila Mariana, São Paulo/SP, CEP 04001-000',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      tipo: 'PJ',
+      nome: 'Construtora Alfa',
+      cpfCnpj: '12.345.678/0001-99',
+      email: 'contato@construtoraalfa.com.br',
+      telefone: '(11) 3344-5566',
+      cep: '01310-100',
+      logradouro: 'Avenida Paulista',
+      numero: '1500',
+      complemento: 'Conj 81',
+      bairro: 'Bela Vista',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 12.345.678/0001-99, com sede na Avenida Paulista, nº 1500, Conj 81, Bela Vista, São Paulo/SP, CEP 01310-100',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      tipo: 'PF',
+      nome: 'Lúcia Ferreira',
+      cpfCnpj: '456.789.012-33',
+      email: 'lucia.ferreira@email.com',
+      telefone: '(11) 96543-2109',
+      cep: '05401-000',
+      logradouro: 'Rua Teodoro Sampaio',
+      numero: '800',
+      complemento: 'Apto 12',
+      bairro: 'Pinheiros',
+      cidade: 'São Paulo',
+      uf: 'SP',
+      qualificacao: 'brasileira, viúva, aposentada, inscrita no CPF sob o nº 456.789.012-33, residente e domiciliada na Rua Teodoro Sampaio, nº 800, Pinheiros, São Paulo/SP, CEP 05401-000',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+  ]);
+
+  const novosProcessos = await db.insert(processos).values([
+    {
+      tipo: 'Reclamação Trabalhista',
+      cliente: 'Fernanda Oliveira',
+      adverso: 'Empresa XYZ S.A.',
+      vara: '3ª Vara do Trabalho de SP',
+      area: 'Trabalhista',
+      status: 'ativo',
+      valor: 'R$ 87.500,00',
+      prazo: '2026-09-15',
+      advogado: 'Administrador Demo',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      tipo: 'Ação de Danos Morais',
+      cliente: 'Roberto Souza',
+      adverso: 'Companhia Aérea VooFácil',
+      vara: '2ª Vara Cível de Guarulhos',
+      area: 'Consumerista',
+      status: 'ativo',
+      valor: 'R$ 15.000,00',
+      prazo: '2026-08-25',
+      advogado: 'Administrador Demo',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      tipo: 'Defesa Cível',
+      cliente: 'Construtora Alfa',
+      adverso: 'Sindicato dos Trabalhadores',
+      vara: '10ª Vara Cível de SP',
+      area: 'Cível',
+      status: 'ativo',
+      valor: 'R$ 150.000,00',
+      prazo: '2026-09-01',
+      advogado: 'Administrador Demo',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      tipo: 'Ação Ordinária de Cobrança',
+      cliente: 'Lúcia Ferreira',
+      adverso: 'Banco do Brasil S.A.',
+      vara: '5ª Vara de Família de SP',
+      area: 'Cível',
+      status: 'arquivado',
+      valor: 'R$ 42.000,00',
+      prazo: '2025-11-20',
+      advogado: 'Administrador Demo',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+  ]).returning({ id: processos.id });
+
+  await db.insert(pecas).values([
+    {
+      processoId: novosProcessos[0].id,
+      tipo: 'Petição Inicial Trabalhista',
+      area: 'Trabalhista',
+      cliente: 'Fernanda Oliveira',
+      status: 'revisao',
+      prazo: '2026-09-10',
+      modelo: 'DeepSeek Chat',
+      fontes: 4,
+      conteudo: 'EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO DE SÃO PAULO — SP. Petição inicial demonstrativa.',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      processoId: novosProcessos[1].id,
+      tipo: 'Petição Inicial de Danos Morais',
+      area: 'Consumerista',
+      cliente: 'Roberto Souza',
+      status: 'aprovado',
+      prazo: '2026-08-23',
+      modelo: 'DeepSeek Chat',
+      fontes: 2,
+      conteudo: 'EXCELENTÍSSIMO JUIZ DA 2ª VARA CÍVEL DA COMARCA DE GUARULHOS - SP. Petição inicial demonstrativa.',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+    {
+      processoId: novosProcessos[2].id,
+      tipo: 'Contestação Cível',
+      area: 'Cível',
+      cliente: 'Construtora Alfa',
+      status: 'revisao',
+      prazo: '2026-08-30',
+      modelo: 'DeepSeek Chat',
+      fontes: 3,
+      conteudo: 'EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DA 10ª VARA CÍVEL DA CAPITAL. Contestação demonstrativa.',
+      usuarioId: adminUserId,
+      escritorioId: demoId,
+    },
+  ]);
+
+  await db.insert(documentos).values([
+    { nome: 'CLT_Compilada_2024.pdf', colecao: 'Legislação Federal', tamanho: '2.4 MB', chunks: 845 },
+    { nome: 'Súmulas_TST_Atualizadas.pdf', colecao: 'Jurisprudência', tamanho: '1.1 MB', chunks: 312 },
+    { nome: 'Jurisprudencia_Danos_Morais_Aereo.pdf', colecao: 'Jurisprudência', tamanho: '850 KB', chunks: 95 },
+  ]);
 }
 
 async function ensureRootUser() {

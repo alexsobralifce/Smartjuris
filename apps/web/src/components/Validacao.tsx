@@ -19,6 +19,7 @@ export default function Validacao() {
   const [pecas, setPecas] = useState<Peca[]>([])
   const [selected, setSelected] = useState<Peca | null>(null)
   const [comment, setComment] = useState('')
+  const [downloading, setDownloading] = useState<'pdf' | 'docx' | null>(null)
 
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
@@ -31,11 +32,12 @@ export default function Validacao() {
   const reload = async () => {
     try {
       const todas = await api.pecas.list()
-      const fila = todas.filter((p: Peca) => p.status === 'revisao' || p.status === 'aprovado')
+      const fila = (Array.isArray(todas) ? todas : []).filter((p: Peca) => p.status === 'revisao' || p.status === 'aprovado')
       setPecas(fila)
       setSelected(prev => prev ? fila.find((p: Peca) => p.id === prev.id) ?? fila[0] ?? null : fila[0] ?? null)
     } catch (e) {
       console.error(e)
+      addToast('error', 'Não foi possível carregar a fila de validação.')
     }
   }
 
@@ -58,6 +60,19 @@ export default function Validacao() {
   }
 
   const pendentes = pecas.filter(p => p.status === 'revisao').length
+
+  const handleDownload = async (format: 'pdf' | 'docx') => {
+    if (!selected) return
+    setDownloading(format)
+    try {
+      await api.pecas.export(selected.id, format)
+    } catch (e) {
+      console.error(e)
+      addToast('error', 'Falha ao baixar o arquivo.')
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -116,8 +131,26 @@ export default function Validacao() {
                 </button>
               </div>
             )}
-            {selected.status === 'aprovado' && (
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-success)', background: 'var(--color-success-light)', padding: '6px 14px', borderRadius: 6 }}>✓ Aprovado</span>
+            {(selected.status === 'aprovado' || selected.status === 'protocolado') && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {selected.status === 'aprovado' && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-success)', background: 'var(--color-success-light)', padding: '6px 14px', borderRadius: 6 }}>✓ Aprovado</span>
+                )}
+                <button
+                  onClick={() => handleDownload('pdf')}
+                  disabled={downloading !== null}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: downloading !== null ? 'not-allowed' : 'pointer', opacity: downloading !== null ? 0.5 : 1 }}
+                >
+                  {downloading === 'pdf' ? 'Baixando…' : 'Baixar PDF'}
+                </button>
+                <button
+                  onClick={() => handleDownload('docx')}
+                  disabled={downloading !== null}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-foreground)', fontSize: 12, fontWeight: 600, cursor: downloading !== null ? 'not-allowed' : 'pointer', opacity: downloading !== null ? 0.5 : 1 }}
+                >
+                  {downloading === 'docx' ? 'Baixando…' : 'Baixar DOCX'}
+                </button>
+              </div>
             )}
           </div>
 

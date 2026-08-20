@@ -1,10 +1,8 @@
+import '../config.js';
+
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.js';
-import * as dotenv from 'dotenv';
-import { resolve } from 'path';
-
-dotenv.config({ path: resolve(process.cwd(), '../../.env') });
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://lexia:lexia@localhost:5432/lexia';
 

@@ -13,9 +13,10 @@ router.get('/stats', (req, res) => {
       { name: 'Penal', value: 10 },
     ],
     previsoes: [
-      { mes: 'Jan', exitos: 12, improcedentes: 3 },
-      { mes: 'Fev', exitos: 15, improcedentes: 2 },
-      { mes: 'Mar', exitos: 18, improcedentes: 4 },
+      { processo: '0001234-56.2026.5.02.0001', tipo: 'Reclamação Trabalhista', cliente: 'Fernanda Oliveira', valor: 'R$ 87.500,00', prazo: '2026-09-15', chance: 86 },
+      { processo: '0005678-91.2026.8.26.0224', tipo: 'Ação de Danos Morais', cliente: 'Roberto Souza', valor: 'R$ 15.000,00', prazo: '2026-08-25', chance: 72 },
+      { processo: '0009876-54.2026.8.26.0100', tipo: 'Defesa Cível', cliente: 'Construtora Alfa', valor: 'R$ 150.000,00', prazo: '2026-09-01', chance: 64 },
+      { processo: '0004321-09.2025.8.26.0100', tipo: 'Ação Ordinária de Cobrança', cliente: 'Lúcia Ferreira', valor: 'R$ 42.000,00', prazo: '2025-11-20', chance: 91 },
     ]
   });
 });

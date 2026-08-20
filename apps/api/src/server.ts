@@ -1,8 +1,8 @@
+import './config.js';
+
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import * as dotenv from 'dotenv';
-import { resolve } from 'path';
 
 import processosRoutes from './routes/processos.js';
 import pecasRoutes from './routes/pecas.js';
@@ -13,14 +13,18 @@ import jurimetriaRoutes from './routes/jurimetria.js';
 import financeiroRoutes from './routes/financeiro.js';
 import andamentosRoutes from './routes/andamentos.js';
 import clientesRoutes from './routes/clientes.js';
-import adminRoutes from './routes/admin.js';
+import escritorioRoutes from './routes/escritorios.js';
+import adminEscritorioRoutes from './routes/adminEscritorio.js';
+import permissoesRoutes from './routes/permissoes.js';
+import rootStatsRoutes from './routes/rootStats.js';
 
 import { authMiddleware } from './middlewares/auth.js';
-import { requireRoot } from './middlewares/roleGuard.js';
+import { requireRoot, requireAdmin } from './middlewares/roleGuard.js';
+import { rejectRoot } from './middlewares/rejectRoot.js';
+import { forcePasswordChange } from './middlewares/forcePasswordChange.js';
+import { requireModule } from './middlewares/moduleGuard.js';
 import { globalApiLimiter } from './middlewares/rateLimit.js';
 import { client } from './db/client.js';
-
-dotenv.config({ path: resolve(process.cwd(), '../../.env') });
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -53,20 +57,39 @@ app.use(cookieParser());
 // Global rate limiter for all /api routes
 app.use('/api', globalApiLimiter);
 
-// Rotas
+// Rotas — ordem importa: rotas mais específicas primeiro.
+// Auth (público, mas com authMiddleware para /me e /logout)
 app.use('/api/auth', authRoutes);
-app.use('/api/processos', authMiddleware, processosRoutes);
-app.use('/api/pecas', authMiddleware, pecasRoutes);
-app.use('/api/documentos', authMiddleware, documentosRoutes);
-app.use('/api/rag', authMiddleware, ragRoutes);
-app.use('/api/jurimetria', authMiddleware, jurimetriaRoutes);
-app.use('/api/financeiro', authMiddleware, financeiroRoutes);
-app.use('/api/andamentos', authMiddleware, andamentosRoutes);
-app.use('/api/clientes', authMiddleware, clientesRoutes);
-app.use('/api/admin', authMiddleware, requireRoot, adminRoutes);
+
+// Plataforma — root only
+app.use('/api/root/escritorios', authMiddleware, requireRoot, escritorioRoutes);
+app.use('/api/root', authMiddleware, requireRoot, rootStatsRoutes);
+
+// Admin do escritório — admin role + tenant internamente + forcePasswordChange
+app.use('/api/admin/escritorio', authMiddleware, requireAdmin, forcePasswordChange, adminEscritorioRoutes);
+app.use('/api/admin/escritorio/permissoes', authMiddleware, requireAdmin, forcePasswordChange, permissoesRoutes);
+
+// Negócio — root é bloqueado; forcePasswordChange; alguns precisam requireModule
+app.use('/api/processos', authMiddleware, rejectRoot, forcePasswordChange, processosRoutes);
+app.use('/api/pecas', authMiddleware, rejectRoot, forcePasswordChange, pecasRoutes);
+app.use('/api/clientes', authMiddleware, rejectRoot, forcePasswordChange, clientesRoutes);
+app.use('/api/financeiro', authMiddleware, rejectRoot, forcePasswordChange, requireModule('financeiro'), financeiroRoutes);
+app.use('/api/andamentos', authMiddleware, rejectRoot, forcePasswordChange, andamentosRoutes);
+app.use('/api/documentos', authMiddleware, rejectRoot, forcePasswordChange, documentosRoutes);
+app.use('/api/rag', authMiddleware, rejectRoot, forcePasswordChange, requireModule('pecas'), ragRoutes);
+app.use('/api/jurimetria', authMiddleware, rejectRoot, forcePasswordChange, requireModule('jurimetria'), jurimetriaRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Rota não encontrada.' });
+});
+
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[API] Unhandled error:', err);
+  res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 
 const server = app.listen(port, () => {
@@ -94,4 +117,5 @@ process.on('uncaughtException', (err) => {
 });
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason);
+  shutdown('unhandledRejection', 1);
 });

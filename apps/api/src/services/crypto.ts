@@ -28,17 +28,23 @@ export function encryptField(plain: string): string {
 
 export function decryptField(value: string): string {
   if (value == null) return value as any;
-  if (!value.startsWith(PREFIX)) return value; // legacy plaintext
+  if (!value.startsWith(PREFIX)) return value; // legacy plaintext (dados antigos sem criptografia)
+  const parts = value.slice(PREFIX.length).split(':');
+  if (parts.length !== 3) {
+    // Valor com prefixo indica que DEVERIA ser descriptografável;
+    // servir o texto cifrado como resposta mascararia falhas de configuração/descriptografia.
+    throw new Error('Campo criptografado com formato inválido.');
+  }
+  const [iv, tag, ct] = parts.map((p) => Buffer.from(p, 'base64'));
+  const key = getKey();
   try {
-    const parts = value.slice(PREFIX.length).split(':');
-    if (parts.length !== 3) return value;
-    const [iv, tag, ct] = parts.map((p) => Buffer.from(p, 'base64'));
-    const key = getKey();
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
   } catch (e) {
     console.error('[crypto] Failed to decrypt field:', e);
-    return value; // best-effort: return raw on failure
+    // Chave incorreta/dado corrompido: propaga o erro para a rota retornar 500
+    // em vez de silenciosamente devolver o ciphertext como se fosse o valor real.
+    throw new Error('Falha ao descriptografar campo.');
   }
 }

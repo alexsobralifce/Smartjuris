@@ -170,14 +170,14 @@ export default function Admin() {
   useEffect(() => {
     if (activeTab === 'metricas') {
       setLoading(true)
-      api.admin.getGlobalStats(from, to).then(d => { setGlobalStats(d); setLoading(false) }).catch(e => { console.error(e); setLoading(false) })
+      api.admin.getGlobalStats(from, to).then(d => { setGlobalStats(d); setLoading(false) }).catch(e => { console.error(e); notify('error', 'Não foi possível carregar as estatísticas.'); setLoading(false) })
     }
   }, [activeTab, from, to])
 
   useEffect(() => {
     if (activeTab === 'financeiro') {
       setLoading(true)
-      api.admin.getFinancialStats(from, to).then(d => { setFinancialStats(d); setLoading(false) }).catch(e => { console.error(e); setLoading(false) })
+      api.admin.getFinancialStats(from, to).then(d => { setFinancialStats(d); setLoading(false) }).catch(e => { console.error(e); notify('error', 'Não foi possível carregar os dados financeiros.'); setLoading(false) })
     }
   }, [activeTab, from, to])
 
@@ -185,11 +185,11 @@ export default function Admin() {
     if (activeTab !== 'logs') return
     setLoading(true)
     if (logSubTab === 'logins') {
-      api.admin.getLoginLogs(from, to, loginSucessoFilter || undefined).then(d => { setLoginLogs(Array.isArray(d) ? d : []); setLoading(false) }).catch(e => { console.error(e); setLoading(false) })
+      api.admin.getLoginLogs(from, to, loginSucessoFilter || undefined).then(d => { setLoginLogs(Array.isArray(d) ? d : []); setLoading(false) }).catch(e => { console.error(e); notify('error', 'Não foi possível carregar os logs.'); setLoading(false) })
     } else if (logSubTab === 'tokens') {
-      api.admin.getTokenLogs(from, to).then(d => { setTokenLogs(Array.isArray(d) ? d : []); setLoading(false) }).catch(e => { console.error(e); setLoading(false) })
+      api.admin.getTokenLogs(from, to).then(d => { setTokenLogs(Array.isArray(d) ? d : []); setLoading(false) }).catch(e => { console.error(e); notify('error', 'Não foi possível carregar os logs.'); setLoading(false) })
     } else {
-      api.admin.getAuditLogs(from, to).then(d => { setAuditLogs(Array.isArray(d) ? d : []); setLoading(false) }).catch(e => { console.error(e); setLoading(false) })
+      api.admin.getAuditLogs(from, to).then(d => { setAuditLogs(Array.isArray(d) ? d : []); setLoading(false) }).catch(e => { console.error(e); notify('error', 'Não foi possível carregar os logs.'); setLoading(false) })
     }
   }, [activeTab, logSubTab, from, to, loginSucessoFilter])
 

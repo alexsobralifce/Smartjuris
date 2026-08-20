@@ -12,4 +12,5 @@ export const requireRole = (...roles: string[]) =>
 
 export const requireRoot = requireRole('root');
 
-export const requireAdmin = requireRole('admin', 'root');
+// Root não passa por aqui (é barrado antes pelo rejectRoot nas rotas de escritório).
+export const requireAdmin = requireRole('admin');

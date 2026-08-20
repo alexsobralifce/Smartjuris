@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, date, uuid, integer, jsonb, index, numeric, boolean, AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, date, uuid, integer, jsonb, index, numeric, boolean, uniqueIndex, AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
 
@@ -31,6 +31,7 @@ export const processos = pgTable('processos', {
   advogado: text('advogado').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
 });
 
 export const pecas = pgTable('pecas', {
@@ -48,6 +49,7 @@ export const pecas = pgTable('pecas', {
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   updatedBy: uuid('updated_by').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
 });
 
 export const documentos = pgTable('documentos', {
@@ -75,12 +77,52 @@ export const usuarios = pgTable('usuarios', {
   nome: text('nome').notNull(),
   email: text('email').unique().notNull(),
   senha: text('senha').notNull(), // hashed
-  role: text('role').notNull(), // 'admin' | 'user'
+  role: text('role').notNull(), // 'admin' | 'user' | 'root'
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   ativo: boolean('ativo').default(true),
   ultimoLogin: timestamp('ultimo_login', { withTimezone: true }),
   createdBy: uuid('created_by').references((): AnyPgColumn => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
+  precisaTrocarSenha: boolean('precisa_trocar_senha').notNull().default(false),
+  oab: text('oab'),
+  oabUf: text('oab_uf'),
 });
+
+export const escritorios = pgTable('escritorios', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  nome: text('nome').notNull(),
+  plano: text('plano').notNull().default('basico'),
+  limiteUsuarios: integer('limite_usuarios').notNull().default(2),
+  limitePecasMes: integer('limite_pecas_mes').notNull().default(50),
+  limiteProcessos: integer('limite_processos').notNull().default(100),
+  isDemo: boolean('is_demo').notNull().default(false),
+  limiteTokensMes: integer('limite_tokens_mes'),
+  ativo: boolean('ativo').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  createdBy: uuid('created_by').references((): AnyPgColumn => usuarios.id),
+  razaoSocial: text('razao_social'),
+  cnpj: text('cnpj'),
+  inscricaoOab: text('inscricao_oab'),
+  endereco: text('endereco'),
+  numero: text('numero'),
+  bairro: text('bairro'),
+  cidade: text('cidade'),
+  uf: text('uf'),
+  cep: text('cep'),
+  telefone: text('telefone'),
+  email: text('email'),
+  site: text('site'),
+  logoUrl: text('logo_url'),
+});
+
+export const permissoesUsuario = pgTable('permissoes_usuario', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  usuarioId: uuid('usuario_id').notNull().references(() => usuarios.id),
+  modulo: text('modulo').notNull(),
+  ativo: boolean('ativo').notNull().default(true),
+}, (table) => ({
+  uniqueUserModulo: uniqueIndex('permissoes_usuario_unique').on(table.usuarioId, table.modulo),
+}));
 
 export const andamentos = pgTable('andamentos', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -91,6 +133,7 @@ export const andamentos = pgTable('andamentos', {
   resumoIA: text('resumo_ia'),
   prazoFatal: text('prazo_fatal'),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
 });
 
 export const lancamentosFinanceiros = pgTable('lancamentos_financeiros', {
@@ -102,6 +145,7 @@ export const lancamentosFinanceiros = pgTable('lancamentos_financeiros', {
   vencimento: text('vencimento').notNull(),
   status: text('status').default('pendente'), // 'pago' | 'pendente' | 'atrasado'
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
 });
 
 export const timesheet = pgTable('timesheet', {
@@ -114,6 +158,7 @@ export const timesheet = pgTable('timesheet', {
   faturado: text('faturado').default('nao'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
 });
 
 export const clientes = pgTable('clientes', {
@@ -133,6 +178,7 @@ export const clientes = pgTable('clientes', {
   qualificacao: text('qualificacao'), // ex: "brasileira, solteira, auxiliar administrativa"
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
 });
 
 export const logins = pgTable('logins', {

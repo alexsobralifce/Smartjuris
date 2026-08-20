@@ -51,10 +51,11 @@ export default function Processos() {
         api.processos.list(),
         api.clientes.list()
       ])
-      setProcessos(data)
+      setProcessos(Array.isArray(data) ? data : [])
       if (Array.isArray(cData)) setClientesList(cData)
     } catch (e) {
       console.error(e)
+      addToast('error', 'Não foi possível carregar os processos.')
     }
   }
 
@@ -68,7 +69,10 @@ export default function Processos() {
         .then(data => {
           if (Array.isArray(data)) setAndamentosList(data)
         })
-        .catch(err => console.error(err))
+        .catch(err => {
+          console.error(err)
+          addToast('error', 'Não foi possível carregar os andamentos.')
+        })
         .finally(() => setLoadingAndamentos(false))
     }
   }, [selected])
@@ -134,7 +138,7 @@ export default function Processos() {
       setNovaDescricaoAndamento('')
       setNovoPrazoAndamento('')
       const updated = await api.andamentos.listByProcesso(selected.id)
-      setAndamentosList(updated)
+      setAndamentosList(Array.isArray(updated) ? updated : [])
     } catch (err) {
       console.error(err)
       addToast('error', 'Erro ao adicionar andamento.')

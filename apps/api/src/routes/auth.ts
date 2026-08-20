@@ -2,12 +2,14 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { db } from '../db/client.js';
-import { usuarios, logins } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { usuarios, logins, permissoesUsuario, escritorios } from '../db/schema.js';
+import { and, eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth.js';
 import { loginRateLimiter } from '../middlewares/rateLimit.js';
-import { revokeToken, isRevoked } from '../middlewares/revocation.js';
+import { revokeToken } from '../middlewares/revocation.js';
+import { recordAudit } from '../middlewares/audit.js';
+import { getTokenUsageMes } from '../services/usage.js';
 
 const router = Router();
 const SECRET = process.env.JWT_SECRET;
@@ -71,9 +73,27 @@ function recordEmailFailure(normalizedEmail: string): void {
   }
 }
 
+/**
+ * Limite de tokens mensal do usuário: apenas escritórios demo têm limite.
+ * Usuários sem escritório (root) e escritórios não-demo retornam null.
+ */
+async function getLimiteTokensMes(escritorioId: string | null | undefined): Promise<number | null> {
+  if (!escritorioId) return null;
+  const rows = await db
+    .select({ limiteTokensMes: escritorios.limiteTokensMes })
+    .from(escritorios)
+    .where(and(eq(escritorios.id, escritorioId), eq(escritorios.isDemo, true)))
+    .limit(1);
+  return rows[0]?.limiteTokensMes ?? null;
+}
+
 router.post('/login', loginRateLimiter, async (req, res) => {
   const { email, password } = req.body;
-  const normalizedEmail = typeof email === 'string' ? email.toLowerCase() : '';
+  // Validação de entrada antes de qualquer acesso ao banco/criptografia
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+    return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+  }
+  const normalizedEmail = email.toLowerCase();
 
   try {
     // Per-email lockout: targeted brute force on a single account
@@ -85,8 +105,8 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       emailLockout.delete(normalizedEmail);
     }
 
-    // Busca usuário no banco
-    const [user] = await db.select().from(usuarios).where(eq(usuarios.email, email)).limit(1);
+    // Busca usuário no banco (normalizado para não contornar o lockout com variação de caixa)
+    const [user] = await db.select().from(usuarios).where(eq(usuarios.email, normalizedEmail)).limit(1);
 
     if (!user) {
       recordEmailFailure(normalizedEmail);
@@ -132,10 +152,68 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     // Sucesso: reseta contador de bloqueio por email
     emailLockout.delete(normalizedEmail);
 
-    // Gera token JWT real com jti
+    // Busca dados de tenancy e flag de troca de senha do banco (valores atuais/defensivos)
+    const [tenantRow] = await db
+      .select({ escritorioId: usuarios.escritorioId, precisaTrocarSenha: usuarios.precisaTrocarSenha })
+      .from(usuarios)
+      .where(eq(usuarios.id, user.id))
+      .limit(1);
+
+    const escritorioId = tenantRow?.escritorioId ?? null;
+    const precisaTrocarSenha = tenantRow?.precisaTrocarSenha ?? false;
+
+    // Se o usuário pertence a um escritório, verifica se o escritório está ativo
+    let limiteTokensMes: number | null = null;
+    if (escritorioId) {
+      const [escritorio] = await db
+        .select({ ativo: escritorios.ativo, isDemo: escritorios.isDemo, limiteTokensMes: escritorios.limiteTokensMes })
+        .from(escritorios)
+        .where(eq(escritorios.id, escritorioId))
+        .limit(1);
+      if (!escritorio || escritorio.ativo === false) {
+        await db.insert(logins).values({
+          usuarioId: user.id,
+          emailTentado: email,
+          ipAddress: req.ip || null,
+          userAgent: req.headers['user-agent'] || null,
+          sucesso: false,
+          motivoFalha: 'Escritório desativado',
+        });
+        return res.status(403).json({ error: 'Escritório desativado. Contate o suporte da plataforma.' });
+      }
+      // Apenas escritórios demo expõem limite de tokens (demais: null)
+      if (escritorio.isDemo && escritorio.limiteTokensMes != null) {
+        limiteTokensMes = Number(escritorio.limiteTokensMes);
+      }
+    }
+
+    // Consumo de tokens do mês (apenas quando há limite definido)
+    let tokensMes = 0;
+    if (limiteTokensMes != null) {
+      tokensMes = await getTokenUsageMes(user.id);
+    }
+
+    // Permissões de módulo: apenas role 'user' tem permissões granulares
+    let permissoes: string[] = [];
+    if (user.role === 'user') {
+      const permRows = await db.select({ modulo: permissoesUsuario.modulo }).from(permissoesUsuario)
+        .where(and(eq(permissoesUsuario.usuarioId, user.id), eq(permissoesUsuario.ativo, true)));
+      permissoes = permRows.map((r) => r.modulo);
+    }
+
+    // Gera token JWT real com jti e payload multi-tenant completo
     const jti = randomUUID();
     const token = jwt.sign(
-      { id: user.id, role: user.role, name: user.nome, email: user.email, jti },
+      {
+        id: user.id,
+        role: user.role,
+        name: user.nome,
+        email: user.email,
+        escritorioId,
+        permissoes,
+        precisaTrocarSenha,
+        jti,
+      },
       SECRET,
       { expiresIn: '1d' }
     );
@@ -153,9 +231,15 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
     res.json({
       user: {
+        id: user.id,
         name: user.nome,
         role: user.role,
         email: user.email,
+        escritorioId: escritorioId ?? null,
+        permissoes,
+        precisaTrocarSenha,
+        tokensMes,
+        limiteTokensMes,
       },
     });
   } catch (error) {
@@ -164,17 +248,109 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   }
 });
 
-router.get('/me', authMiddleware, (req: AuthenticatedRequest, res) => {
+router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
+  const [tokensMes, limiteTokensMes] = await Promise.all([
+    req.user.id ? getTokenUsageMes(req.user.id) : Promise.resolve(0),
+    getLimiteTokensMes(req.user.escritorioId),
+  ]);
   res.json({
     user: {
+      id: req.user.id,
       name: req.user.name,
       role: req.user.role,
       email: req.user.email,
+      escritorioId: req.user.escritorioId ?? null,
+      permissoes: req.user.permissoes ?? [],
+      precisaTrocarSenha: req.user.precisaTrocarSenha ?? false,
+      tokensMes,
+      limiteTokensMes,
     },
   });
+});
+
+router.post('/trocar-senha', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  const { senhaAtual, novaSenha } = (req.body ?? {}) as { senhaAtual?: string; novaSenha?: string };
+
+  if (typeof novaSenha !== 'string' || novaSenha.length < 8) {
+    return res.status(400).json({ error: 'A nova senha deve ter no mínimo 8 caracteres.' });
+  }
+  // Decisão segura: a senha atual é SEMPRE exigida (inclusive quando precisaTrocarSenha=true,
+  // pois o usuário deve saber a senha temporária informada pelo admin).
+  if (typeof senhaAtual !== 'string' || !senhaAtual) {
+    return res.status(400).json({ error: 'A senha atual é obrigatória.' });
+  }
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'Token inválido ou expirado.' });
+  }
+
+  try {
+    const [user] = await db.select().from(usuarios).where(eq(usuarios.id, req.user.id)).limit(1);
+    if (!user) {
+      return res.status(401).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const isValid = await bcrypt.compare(senhaAtual, user.senha);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Senha atual incorreta.' });
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 12);
+    await db.update(usuarios).set({ senha: senhaHash, precisaTrocarSenha: false })
+      .where(eq(usuarios.id, user.id));
+    await recordAudit(req, 'PASSWORD_CHANGE', {});
+
+    // Revoga o token antigo (que ainda carregava precisaTrocarSenha=true)
+    const oldToken = resolveTokenFromRequest(req);
+    if (oldToken) {
+      try {
+        const decoded = jwt.verify(oldToken, SECRET);
+        if (typeof decoded === 'object' && decoded !== null && decoded.jti && typeof decoded.exp === 'number') {
+          revokeToken(decoded.jti, decoded.exp * 1000);
+        }
+      } catch {
+        // Token inválido/expirado: nada a revogar.
+      }
+    }
+
+    const permRows = await db.select({ modulo: permissoesUsuario.modulo }).from(permissoesUsuario)
+      .where(and(eq(permissoesUsuario.usuarioId, user.id), eq(permissoesUsuario.ativo, true)));
+    const permissoes = permRows.map((r) => r.modulo);
+
+    const jti = randomUUID();
+    const token = jwt.sign(
+      {
+        id: user.id,
+        role: user.role,
+        name: user.nome,
+        email: user.email,
+        escritorioId: user.escritorioId,
+        permissoes,
+        precisaTrocarSenha: false,
+        jti,
+      },
+      SECRET,
+      { expiresIn: '1d' }
+    );
+
+    res.cookie(COOKIE_NAME, token, cookieOptions);
+    res.json({
+      user: {
+        id: user.id,
+        name: user.nome,
+        role: user.role,
+        email: user.email,
+        escritorioId: user.escritorioId,
+        permissoes,
+        precisaTrocarSenha: false,
+      },
+    });
+  } catch (error) {
+    console.error('Password change error:', error);
+    res.status(500).json({ error: 'Erro ao trocar a senha.' });
+  }
 });
 
 router.post('/logout', (req, res) => {

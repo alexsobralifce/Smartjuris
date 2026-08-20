@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { db } from '../db/client.js';
 import {
   usuarios,
@@ -10,19 +11,40 @@ import {
   logins,
   auditLog,
 } from '../db/schema.js';
-import { eq, and, gte, lte, desc, asc, count, sum } from 'drizzle-orm';
-import { requireRoot } from '../middlewares/roleGuard.js';
+import { eq, and, ne, gte, lte, desc, asc, count, sum } from 'drizzle-orm';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
+import { parseBody, formatZodError } from '../validation/schemas.js';
 
 const router = Router();
 
-// Todas as rotas de admin exigem role root
-router.use(requireRoot);
+// --- Schemas de validação de usuários ---
+const createUserSchema = z.object({
+  nome: z.string().min(1),
+  email: z.string().email(),
+  senha: z.string().min(8),
+  role: z.enum(['admin', 'user', 'root']),
+});
+
+const updateUserSchema = z.object({
+  nome: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(['admin', 'user', 'root']).optional(),
+  senha: z.string().min(8).optional(),
+  ativo: z.boolean().optional(),
+});
 
 const dateFilter = (col: any, from?: string, to?: string) => {
   const conds: any[] = [];
-  if (from) conds.push(gte(col, new Date(from)));
-  if (to) conds.push(lte(col, new Date(to)));
+  if (from) {
+    const fromTime = new Date(from).getTime();
+    if (Number.isNaN(fromTime)) return undefined; // data inválida: ignora o filtro
+    conds.push(gte(col, new Date(fromTime)));
+  }
+  if (to) {
+    const toTime = new Date(to).getTime();
+    if (Number.isNaN(toTime)) return undefined; // data inválida: ignora o filtro
+    conds.push(lte(col, new Date(toTime)));
+  }
   return conds.length ? and(...conds) : undefined;
 };
 
@@ -152,13 +174,11 @@ router.get('/users/:id', async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post('/users', async (req: AuthenticatedRequest, res) => {
   try {
-    const { nome, email, senha, role } = req.body || {};
-    if (!nome || !email || !senha || !role) {
-      return res.status(400).json({ error: 'Nome, email, senha e role são obrigatórios.' });
+    const parsed = parseBody(createUserSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
     }
-    if (!['admin', 'user', 'root'].includes(role)) {
-      return res.status(400).json({ error: 'Role inválida. Use admin, user ou root.' });
-    }
+    const { nome, email, senha, role } = parsed.data;
 
     const [existing] = await db.select({ id: usuarios.id }).from(usuarios)
       .where(eq(usuarios.email, email)).limit(1);
@@ -201,7 +221,11 @@ router.patch('/users/:id', async (req: AuthenticatedRequest, res) => {
     const [target] = await db.select().from(usuarios).where(eq(usuarios.id, id)).limit(1);
     if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-    const { nome, email, role, ativo } = body;
+    const parsed = parseBody(updateUserSchema, body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { nome, email, role, ativo } = parsed.data;
 
     // Guard: não é permitido rebaixar/desativar a própria conta root
     if (id === req.user?.id && ((role && role !== 'root') || ativo === false)) {
@@ -217,11 +241,20 @@ router.patch('/users/:id', async (req: AuthenticatedRequest, res) => {
       }
     }
 
+    // Email duplicado em outro usuário
+    if (email !== undefined) {
+      const [duplicate] = await db.select({ id: usuarios.id }).from(usuarios)
+        .where(and(eq(usuarios.email, email), ne(usuarios.id, id))).limit(1);
+      if (duplicate) {
+        return res.status(409).json({ error: 'Email já cadastrado para outro usuário.' });
+      }
+    }
+
     const updates: Record<string, any> = {};
     if (nome !== undefined) updates.nome = nome;
     if (email !== undefined) updates.email = email;
     if (role !== undefined) updates.role = role;
-    if (ativo !== undefined) updates.ativo = Boolean(ativo);
+    if (ativo !== undefined) updates.ativo = ativo; // boolean real (nunca "false" como string)
 
     let updated = target;
     if (Object.keys(updates).length > 0) {
@@ -547,112 +580,8 @@ router.get('/stats/financial', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Endpoint 10: GET /logs/logins?from=&to=&sucesso=
+// Os endpoints de logs (/logs/logins, /logs/tokens, /logs/audit) foram migrados
+// para routes/rootStats.ts com escopo agregado por escritório (Fase 3).
 // ---------------------------------------------------------------------------
-router.get('/logs/logins', async (req, res) => {
-  try {
-    const { from, to, sucesso } = req.query as { from?: string; to?: string; sucesso?: string };
-    const conds: any[] = [];
-    const df = dateFilter(logins.createdAt, from, to);
-    if (df) conds.push(df);
-    if (sucesso === 'true') conds.push(eq(logins.sucesso, true));
-    else if (sucesso === 'false') conds.push(eq(logins.sucesso, false));
-
-    const query = db.select({
-      id: logins.id,
-      emailTentado: logins.emailTentado,
-      nome: usuarios.nome,
-      ipAddress: logins.ipAddress,
-      userAgent: logins.userAgent,
-      sucesso: logins.sucesso,
-      motivoFalha: logins.motivoFalha,
-      createdAt: logins.createdAt,
-    }).from(logins)
-      .leftJoin(usuarios, eq(logins.usuarioId, usuarios.id))
-      .orderBy(desc(logins.createdAt))
-      .limit(500);
-
-    const rows = conds.length ? await query.where(and(...conds)) : await query;
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching login logs:', error);
-    res.status(500).json({ error: 'Erro ao buscar logs de login.' });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Endpoint 11: GET /logs/tokens?from=&to=&usuario_id=&modelo=
-// ---------------------------------------------------------------------------
-router.get('/logs/tokens', async (req, res) => {
-  try {
-    const { from, to, usuario_id, modelo } = req.query as {
-      from?: string;
-      to?: string;
-      usuario_id?: string;
-      modelo?: string;
-    };
-    const conds: any[] = [];
-    const df = dateFilter(tokenUsage.createdAt, from, to);
-    if (df) conds.push(df);
-    if (usuario_id) conds.push(eq(tokenUsage.usuarioId, usuario_id));
-    if (modelo) conds.push(eq(tokenUsage.modelo, modelo));
-
-    const query = db.select({
-      id: tokenUsage.id,
-      nome: usuarios.nome,
-      email: usuarios.email,
-      modelo: tokenUsage.modelo,
-      operacao: tokenUsage.operacao,
-      promptTokens: tokenUsage.promptTokens,
-      completionTokens: tokenUsage.completionTokens,
-      totalTokens: tokenUsage.totalTokens,
-      custoUsd: tokenUsage.custoUsd,
-      custoBrl: tokenUsage.custoBrl,
-      horarioPico: tokenUsage.horarioPico,
-      createdAt: tokenUsage.createdAt,
-    }).from(tokenUsage)
-      .leftJoin(usuarios, eq(tokenUsage.usuarioId, usuarios.id))
-      .orderBy(desc(tokenUsage.createdAt))
-      .limit(500);
-
-    const rows = conds.length ? await query.where(and(...conds)) : await query;
-    res.json(rows.map((r) => ({ ...r, custoUsd: Number(r.custoUsd ?? 0), custoBrl: Number(r.custoBrl ?? 0) })));
-  } catch (error) {
-    console.error('Error fetching token logs:', error);
-    res.status(500).json({ error: 'Erro ao buscar logs de tokens.' });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Endpoint 12: GET /logs/audit?from=&to=&acao=
-// ---------------------------------------------------------------------------
-router.get('/logs/audit', async (req, res) => {
-  try {
-    const { from, to, acao } = req.query as { from?: string; to?: string; acao?: string };
-    const conds: any[] = [];
-    const df = dateFilter(auditLog.createdAt, from, to);
-    if (df) conds.push(df);
-    if (acao) conds.push(eq(auditLog.acao, acao));
-
-    const query = db.select({
-      id: auditLog.id,
-      actorNome: usuarios.nome,
-      acao: auditLog.acao,
-      alvoEmail: auditLog.alvoEmail,
-      detalhes: auditLog.detalhes,
-      ipAddress: auditLog.ipAddress,
-      createdAt: auditLog.createdAt,
-    }).from(auditLog)
-      .leftJoin(usuarios, eq(auditLog.actorId, usuarios.id))
-      .orderBy(desc(auditLog.createdAt))
-      .limit(500);
-
-    const rows = conds.length ? await query.where(and(...conds)) : await query;
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching audit logs:', error);
-    res.status(500).json({ error: 'Erro ao buscar logs de auditoria.' });
-  }
-});
 
 export default router;

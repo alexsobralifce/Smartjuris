@@ -30,9 +30,10 @@ export default function Base() {
   const reload = async () => {
     try {
       const docs = await api.documentos.list()
-      setDocumentos(docs)
+      setDocumentos(Array.isArray(docs) ? docs : [])
     } catch (e) {
       console.error(e)
+      addToast('error', 'Não foi possível carregar os documentos.')
     }
   }
 

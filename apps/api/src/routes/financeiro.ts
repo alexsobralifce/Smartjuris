@@ -2,17 +2,20 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { lancamentosFinanceiros, timesheet } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
-import { canMutate } from '../middlewares/ownership.js';
+import { canMutateTenant } from '../middlewares/ownership.js';
+import { tenantScope, tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { encryptField, decryptField } from '../services/crypto.js';
-import { parseBody, formatZodError, lancamentoSchema, lancamentoPatchSchema, timesheetSchema } from '../validation/schemas.js';
+import { parseBody, formatZodError, lancamentoSchema, lancamentoPatchSchema, timesheetSchema, uuidSchema } from '../validation/schemas.js';
 
 const router = Router();
 
 // Listar lançamentos financeiros
 router.get('/lancamentos', async (req, res) => {
   try {
-    const list = await db.select().from(lancamentosFinanceiros).orderBy(desc(lancamentosFinanceiros.vencimento));
+    const list = await db.select().from(lancamentosFinanceiros)
+      .where(tenantScope(req, lancamentosFinanceiros))
+      .orderBy(desc(lancamentosFinanceiros.vencimento));
     res.json(list.map((l) => ({ ...l, valor: decryptField(l.valor) })));
   } catch (error) {
     console.error('Error fetching lancamentos:', error);
@@ -23,6 +26,10 @@ router.get('/lancamentos', async (req, res) => {
 // Criar lançamento financeiro
 router.post('/lancamentos', async (req, res) => {
   try {
+    const escritorioId = tenantScopeEscritorioId(req);
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
     const parsed = parseBody(lancamentoSchema, req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
@@ -36,6 +43,7 @@ router.post('/lancamentos', async (req, res) => {
       vencimento: data.vencimento,
       status: data.status ?? 'pendente',
       usuarioId: (req as any).user?.id ?? null,
+      escritorioId,
     }).returning();
     await recordAudit(req, 'CREATE_LANCAMENTO', { alvoId: inserted.id, detalhes: parsed.data });
     res.status(201).json({ ...inserted, valor: decryptField(inserted.valor) });
@@ -49,11 +57,14 @@ router.post('/lancamentos', async (req, res) => {
 router.patch('/lancamentos/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!uuidSchema.safeParse(id).success) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
     const [existente] = await db.select().from(lancamentosFinanceiros).where(eq(lancamentosFinanceiros.id, id)).limit(1);
     if (!existente) {
       return res.status(404).json({ error: 'Lançamento não encontrado.' });
     }
-    if (!canMutate(req, existente.usuarioId)) {
+    if (!canMutateTenant(req, existente.escritorioId, existente.usuarioId)) {
       return res.status(403).json({ error: 'Acesso negado.' });
     }
     const parsed = parseBody(lancamentoPatchSchema, req.body);
@@ -77,7 +88,9 @@ router.patch('/lancamentos/:id', async (req, res) => {
 // Listar horas gravadas no Timesheet
 router.get('/timesheet', async (req, res) => {
   try {
-    const list = await db.select().from(timesheet).orderBy(desc(timesheet.created_at));
+    const list = await db.select().from(timesheet)
+      .where(tenantScope(req, timesheet))
+      .orderBy(desc(timesheet.created_at));
     res.json(list);
   } catch (error) {
     console.error('Error fetching timesheet:', error);
@@ -88,6 +101,10 @@ router.get('/timesheet', async (req, res) => {
 // Registrar entrada de Timesheet
 router.post('/timesheet', async (req, res) => {
   try {
+    const escritorioId = tenantScopeEscritorioId(req);
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
     const parsed = parseBody(timesheetSchema, req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
@@ -101,6 +118,7 @@ router.post('/timesheet', async (req, res) => {
       valorHora: data.valorHora ?? '350,00',
       faturado: 'nao',
       usuarioId: (req as any).user?.id ?? null,
+      escritorioId,
     }).returning();
     await recordAudit(req, 'CREATE_TIMESHEET', { alvoId: inserted.id, detalhes: parsed.data });
     res.status(201).json(inserted);

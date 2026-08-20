@@ -13,6 +13,9 @@ export interface AuthenticatedRequest extends Request {
     role: string;
     name: string;
     email: string;
+    escritorioId: string | null;
+    permissoes: string[];
+    precisaTrocarSenha: boolean;
   };
 }
 
@@ -48,7 +51,17 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
       return res.status(401).json({ error: 'Token inválido ou expirado.' });
     }
 
-    req.user = decoded;
+    // Tolerância a tokens antigos (pré-multi-tenant): preenche com defaults seguros
+    // quando o payload não contém os novos campos.
+    req.user = {
+      id: decoded?.id,
+      role: decoded?.role,
+      name: decoded?.name,
+      email: decoded?.email,
+      escritorioId: decoded?.escritorioId ?? null,
+      permissoes: decoded?.permissoes ?? [],
+      precisaTrocarSenha: decoded?.precisaTrocarSenha ?? false,
+    };
     return next();
   });
 }

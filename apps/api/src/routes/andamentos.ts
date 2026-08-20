@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
-import { andamentos } from '../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { andamentos, processos } from '../db/schema.js';
+import { eq, desc, and } from 'drizzle-orm';
+import { tenantScope, tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
 import { deepseekClient } from '../services/ai.js';
-import { trackTokenUsage } from '../services/usage.js';
-import { parseBody, formatZodError, andamentoSchema } from '../validation/schemas.js';
+import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
+import { AuthenticatedRequest } from '../middlewares/auth.js';
+import { parseBody, formatZodError, andamentoSchema, uuidSchema } from '../validation/schemas.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { redactPII } from '../services/pii.js';
@@ -15,8 +17,11 @@ const router = Router();
 router.get('/processo/:processoId', async (req, res) => {
   try {
     const { processoId } = req.params;
+    if (!uuidSchema.safeParse(processoId).success) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
     const list = await db.select().from(andamentos)
-      .where(eq(andamentos.processoId, processoId))
+      .where(and(tenantScope(req, andamentos), eq(andamentos.processoId, processoId)))
       .orderBy(desc(andamentos.data));
     res.json(list);
   } catch (error) {
@@ -34,25 +39,47 @@ router.post('/', aiRateLimiter, async (req, res) => {
     }
     const { processoId, tipo, descricao, prazoFatal } = parsed.data;
 
+    if (!uuidSchema.safeParse(processoId).success) {
+      return res.status(400).json({ error: 'Identificador de processo inválido.' });
+    }
+
+    const escritorioId = tenantScopeEscritorioId(req);
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+
+    // O processo deve pertencer ao mesmo escritório do usuário autenticado
+    const [processo] = await db.select({ escritorioId: processos.escritorioId }).from(processos).where(eq(processos.id, processoId)).limit(1);
+    if (!processo || processo.escritorioId !== escritorioId) {
+      return res.status(403).json({ error: 'Processo não pertence ao seu escritório.' });
+    }
+
     let resumoIA = '';
     if (tipo === 'Intimação' || tipo === 'Despacho') {
-      try {
-        // Redact PII before sending to the LLM (descricao original continues stored in DB)
-        const safeDescricao = redactPII(descricao);
-        const prompt = `Você é um assistente jurídico sênior. Resuma a seguinte intimação/despacho em 2 frases curtas, destacando a AÇÃO RECOMENDADA ao advogado e o prazo fatal:\n\n${safeDescricao}`;
-        const completion = await deepseekClient.chat.completions.create({
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-        });
-        resumoIA = `🤖 Resumo IA: ${completion.choices[0]?.message?.content || 'Intimação registrada.'}`;
-        await trackTokenUsage((req as any).user?.id, 'resumo_andamento', 'deepseek-chat', {
-          prompt_tokens: (completion as any)?.usage?.prompt_tokens,
-          completion_tokens: (completion as any)?.usage?.completion_tokens,
-        });
-      } catch (aiErr) {
-        console.warn('Erro ao gerar resumo de IA:', aiErr);
-        resumoIA = `🤖 Resumo IA: Intimação cadastrada. Ação recomendada: Análise dos autos para providências cabíveis.`;
+      // Cota de tokens do modo demo: bloqueado pula o resumo de IA,
+      // mas NÃO bloqueia o registro manual do andamento.
+      const quota = await checkTokenQuota(req as AuthenticatedRequest);
+      if (quota.status === 'blocked') {
+        resumoIA = '🤖 Resumo IA: Limite de tokens do modo demonstração atingido. Resumo de IA não gerado neste mês.';
+      } else {
+        try {
+          // Redact PII before sending to the LLM (descricao original continues stored in DB)
+          const safeDescricao = redactPII(descricao);
+          const prompt = `Você é um assistente jurídico sênior. Resuma a seguinte intimação/despacho em 2 frases curtas, destacando a AÇÃO RECOMENDADA ao advogado e o prazo fatal:\n\n${safeDescricao}`;
+          const completion = await deepseekClient.chat.completions.create({
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.2,
+          });
+          resumoIA = `🤖 Resumo IA: ${completion.choices[0]?.message?.content || 'Intimação registrada.'}`;
+          await trackTokenUsage((req as any).user?.id, 'resumo_andamento', 'deepseek-chat', {
+            prompt_tokens: (completion as any)?.usage?.prompt_tokens,
+            completion_tokens: (completion as any)?.usage?.completion_tokens,
+          });
+        } catch (aiErr) {
+          console.warn('Erro ao gerar resumo de IA:', aiErr);
+          resumoIA = `🤖 Resumo IA: Intimação cadastrada. Ação recomendada: Análise dos autos para providências cabíveis.`;
+        }
       }
     }
 
@@ -62,7 +89,8 @@ router.post('/', aiRateLimiter, async (req, res) => {
       descricao,
       resumoIA: resumoIA || null,
       prazoFatal: prazoFatal || null,
-      usuarioId: (req as any).user?.id || null
+      usuarioId: (req as any).user?.id || null,
+      escritorioId,
     }).returning();
 
     await recordAudit(req, 'CREATE_ANDAMENTO', { alvoId: inserted.id, detalhes: { processoId, tipo, prazoFatal } });

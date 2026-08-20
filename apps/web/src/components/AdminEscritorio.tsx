@@ -11,7 +11,9 @@ interface Usuario {
   role: 'admin' | 'user'
   ativo: boolean
   ultimoLogin?: string
-  permissoes?: string[]
+  precisaTrocarSenha?: boolean
+  oab?: string | null
+  oabUf?: string | null
 }
 
 type Modal =
@@ -321,11 +323,17 @@ export default function AdminEscritorio() {
   // Ao trocar de usuário no seletor de permissões, carrega as permissões atuais.
   useEffect(() => {
     if (!selectedUserId) { setPermissoesSelecionadas([]); setPermissoesOriginal([]); return }
-    const u = users.find(x => x.id === selectedUserId)
-    const permissoes = u?.permissoes ?? []
-    setPermissoesSelecionadas(permissoes)
-    setPermissoesOriginal(permissoes)
-  }, [selectedUserId, users])
+    let cancelled = false
+    api.escritorio.getPermissoes(selectedUserId).then(data => {
+      if (cancelled) return
+      const ativos = Array.isArray(data?.permissoes)
+        ? data.permissoes.filter((p: any) => p.ativo).map((p: any) => p.modulo)
+        : []
+      setPermissoesSelecionadas(ativos)
+      setPermissoesOriginal(ativos)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedUserId])
 
   const handleCriarUsuario = async (data: { nome: string; email: string; permissoes: string[] }) => {
     try {
@@ -377,7 +385,7 @@ export default function AdminEscritorio() {
     if (!selectedUserId) return
     setSavingPermissoes(true)
     try {
-      const res = await api.escritorio.salvarPermissoes(selectedUserId, permissoesSelecionadas)
+      const res = await api.escritorio.salvarPermissoes(selectedUserId, MODULOS.map(m => ({ modulo: m.id, ativo: permissoesSelecionadas.includes(m.id) })))
       if (!res.ok) {
         addToast('error', await getErrorMessage(res, 'Falha ao salvar permissões.'))
         return

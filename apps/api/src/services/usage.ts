@@ -56,12 +56,26 @@ export async function trackTokenUsage(
  * Total de tokens consumidos pelo usuário no mês corrente.
  */
 export async function getTokenUsageMes(usuarioId: string): Promise<number> {
-  const rows = (await db.execute(sql`
+  const rows = await db.execute(sql`
     SELECT COALESCE(SUM(total_tokens), 0) AS total
     FROM token_usage
     WHERE usuario_id = ${usuarioId}
       AND created_at >= date_trunc('month', now())
-  `)) as any[];
+  `) as any[];
+  return Number(rows[0]?.total ?? 0);
+}
+
+/**
+ * Total de tokens consumidos por TODOS os usuários de um escritório no mês corrente.
+ */
+export async function getTokenUsageMesEscritorio(escritorioId: string): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT COALESCE(SUM(t.total_tokens), 0) AS total
+    FROM token_usage t
+    JOIN usuarios u ON u.id = t.usuario_id
+    WHERE u.escritorio_id = ${escritorioId}
+      AND t.created_at >= date_trunc('month', now())
+  `) as any[];
   return Number(rows[0]?.total ?? 0);
 }
 
@@ -73,10 +87,12 @@ export interface TokenQuota {
 }
 
 /**
- * Verifica a cota de tokens do usuário (apenas escritórios demo têm limite).
- * - Aviso (warn) a partir de 80% do limite mensal.
+ * Verifica a cota de tokens (créditos) do usuário no mês corrente.
+ * - Limite efetivo = override individual do usuário (`usuarios.creditos_mes`)
+ *   ou, na ausência, o saldo do escritório (`escritorios.limite_tokens_mes`).
+ * - Aviso (warn) a partir de 80% do limite.
  * - Bloqueio (blocked) ao atingir 100%.
- * - Escritórios não-demo e usuários sem escritório (root) não têm limite.
+ * - Sem limite definido (usuário e escritório com saldo nulo) → sem restrição.
  */
 export async function checkTokenQuota(req: AuthenticatedRequest): Promise<TokenQuota> {
   const usuarioId = req.user?.id;
@@ -84,7 +100,7 @@ export async function checkTokenQuota(req: AuthenticatedRequest): Promise<TokenQ
 
   const rows = await db
     .select({
-      isDemo: escritorios.isDemo,
+      creditosMes: usuarios.creditosMes,
       limiteTokensMes: escritorios.limiteTokensMes,
     })
     .from(usuarios)
@@ -92,13 +108,16 @@ export async function checkTokenQuota(req: AuthenticatedRequest): Promise<TokenQ
     .where(eq(usuarios.id, usuarioId))
     .limit(1);
 
-  const esc = rows[0];
-  if (!esc || !esc.isDemo || esc.limiteTokensMes == null) {
-    return { status: 'ok', usado: 0, limite: null, pct: 0 };
-  }
+  const reg = rows[0];
+  if (!reg) return { status: 'ok', usado: 0, limite: null, pct: 0 };
+
+  const limite = reg.creditosMes != null
+    ? Number(reg.creditosMes)
+    : (reg.limiteTokensMes != null ? Number(reg.limiteTokensMes) : null);
+
+  if (limite == null) return { status: 'ok', usado: 0, limite: null, pct: 0 };
 
   const usado = await getTokenUsageMes(usuarioId);
-  const limite = Number(esc.limiteTokensMes);
   const pct = limite > 0 ? Math.round((usado / limite) * 100) : 0;
 
   if (pct >= 100) return { status: 'blocked', usado, limite, pct };

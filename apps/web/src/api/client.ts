@@ -220,18 +220,19 @@ export const api = {
       authFetch('/api/admin/escritorio/info', { method: 'PATCH', body: JSON.stringify(patch) }).then(r => r.json()),
     listUsers: () => authFetch('/api/admin/escritorio/usuarios').then(r => r.json()),
     criarUsuario: (data: { nome: string; email: string; permissoes: string[] }) =>
-      authFetch('/api/admin/escritorio/usuarios', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+      authFetch('/api/admin/escritorio/usuarios', { method: 'POST', body: JSON.stringify({ nome: data.nome, email: data.email, modulos: data.permissoes }) }).then(r => r.json()),
     updateUsuario: (id: string, patch: any) =>
       authFetch(`/api/admin/escritorio/usuarios/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then(r => r.json()),
     resetarSenha: (id: string) =>
       authFetch(`/api/admin/escritorio/usuarios/${id}/reset-password`, { method: 'POST' }).then(r => r.json()),
     desativarUsuario: (id: string) =>
-      authFetch(`/api/admin/escritorio/usuarios/${id}/desativar`, { method: 'POST' }).then(r => r.json()),
+      authFetch(`/api/admin/escritorio/usuarios/${id}`, { method: 'DELETE' }),
     salvarPermissoes: (id: string, permissoes: { modulo: string; ativo: boolean }[]) =>
       authFetch(`/api/admin/escritorio/permissoes/${id}`, {
         method: 'PUT',
         body: JSON.stringify({ permissoes }),
       }).then(r => r.json()),
+    getPermissoes: (id: string) => authFetch(`/api/admin/escritorio/permissoes/${id}`).then(r => r.json()),
     getMetricas: () => authFetch('/api/admin/escritorio/metricas').then(r => r.json()),
   },
   raiz: {
@@ -246,6 +247,11 @@ export const api = {
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}/permanente`, { method: 'DELETE' })),
     getMetricasAgregadas: () => authFetch('/api/root/metricas').then(r => r.json()),
     getAuditoria: () => authFetch('/api/root/auditoria').then(r => r.json()),
+    getCreditos: () => authFetch('/api/root/creditos').then(r => r.json()),
+    adicionarCreditosEscritorio: async (id: string, quantidade: number) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),
+    adicionarCreditosUsuario: async (id: string, quantidade: number) =>
+      bufferedResponse(await authFetch(`/api/root/usuarios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),
   },
   jurisprudencias: {
     listCourts: (): Promise<{ data: Court[] }> =>

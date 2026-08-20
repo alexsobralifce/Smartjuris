@@ -87,6 +87,7 @@ export const usuarios = pgTable('usuarios', {
   precisaTrocarSenha: boolean('precisa_trocar_senha').notNull().default(false),
   oab: text('oab'),
   oabUf: text('oab_uf'),
+  creditosMes: integer('creditos_mes'),
 });
 
 export const escritorios = pgTable('escritorios', {

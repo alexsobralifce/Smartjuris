@@ -17,6 +17,7 @@ import escritorioRoutes from './routes/escritorios.js';
 import adminEscritorioRoutes from './routes/adminEscritorio.js';
 import permissoesRoutes from './routes/permissoes.js';
 import rootStatsRoutes from './routes/rootStats.js';
+import rootCreditosRoutes from './routes/rootCreditos.js';
 import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 
 import { authMiddleware } from './middlewares/auth.js';
@@ -64,6 +65,7 @@ app.use('/api/auth', authRoutes);
 
 // Plataforma — root only
 app.use('/api/root/escritorios', authMiddleware, requireRoot, escritorioRoutes);
+app.use('/api/root', authMiddleware, requireRoot, rootCreditosRoutes);
 app.use('/api/root', authMiddleware, requireRoot, rootStatsRoutes);
 
 // Admin do escritório — admin role + tenant internamente + forcePasswordChange

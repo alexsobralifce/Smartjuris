@@ -179,3 +179,8 @@ export const escritorioIdentitySchema = z.object({
   site: z.string().optional(),
   logoUrl: z.string().optional(),
 });
+
+// --- Créditos (root): adicionar saldo a escritório ou usuário ---
+export const creditosAddSchema = z.object({
+  quantidade: z.number().int().positive().max(1_000_000_000),
+});

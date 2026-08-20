@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
 
-type Tab = 'escritorios' | 'metricas' | 'auditoria'
+type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria'
 
 interface Escritorio {
   id: string
@@ -16,12 +16,33 @@ interface Escritorio {
   usoPercentual?: number
 }
 
+interface CreditoUsuario {
+  id: string
+  nome: string
+  email: string
+  creditosDisponiveis: number | null
+  consumidosMes: number
+  restantes: number | null
+}
+
+interface CreditoEscritorio {
+  id: string
+  nome: string
+  plano: string
+  isDemo: boolean
+  creditosDisponiveis: number | null
+  consumidosMes: number
+  restantes: number | null
+  usuarios: CreditoUsuario[]
+}
+
 type Modal =
   | { kind: 'novoEscritorio' }
   | { kind: 'editar'; esc: Escritorio }
   | { kind: 'desativar'; esc: Escritorio }
   | { kind: 'excluir'; esc: Escritorio }
   | { kind: 'tempSenha'; titulo: string; senha: string }
+  | { kind: 'addCreditos'; alvo: { tipo: 'escritorio' | 'usuario'; id: string; nome: string } }
   | null
 
 const PLANOS = [
@@ -258,12 +279,67 @@ function ExcluirEscritorioModal({ esc, onCancel, onSubmit }: { esc: Escritorio; 
   )
 }
 
+function AddCreditosModal({ alvo, onCancel, onSubmit }: { alvo: { tipo: 'escritorio' | 'usuario'; id: string; nome: string }; onCancel: () => void; onSubmit: (quantidade: number) => void }) {
+  const [quantidade, setQuantidade] = useState('')
+  const [error, setError] = useState<string | undefined>()
+  const [submitting, setSubmitting] = useState(false)
+
+  const q = Number(quantidade)
+  const valid = quantidade.trim() !== '' && Number.isInteger(q) && q > 0
+
+  const submit = async () => {
+    if (!valid) {
+      setError('Informe um número inteiro positivo de créditos.')
+      return
+    }
+    setSubmitting(true)
+    await onSubmit(q)
+    setSubmitting(false)
+  }
+
+  const rotulo = alvo.tipo === 'escritorio' ? 'Adicionar créditos ao escritório' : 'Adicionar tokens ao usuário'
+
+  return (
+    <div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '-0.02em', marginBottom: 4 }}>{rotulo}</div>
+      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginBottom: 20 }}>
+        <strong style={{ color: 'var(--color-foreground)' }}>{alvo.nome}</strong> · 1 crédito = 1 token. O saldo é somado ao valor atual e vale para o mês corrente.
+      </div>
+
+      <div>
+        <label style={labelStyle}>Quantidade de créditos</label>
+        <input
+          value={quantidade}
+          onChange={e => { setQuantidade(e.target.value); if (error) setError(undefined) }}
+          style={{ ...inputStyle, borderColor: error ? 'var(--color-danger)' : 'var(--color-border)' }}
+          type="number"
+          min={1}
+          step={1}
+          placeholder="Ex.: 50000"
+          autoFocus
+        />
+        {error && <div style={{ color: 'var(--color-danger)', fontSize: 11, marginTop: 6 }}>{error}</div>}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+        <button onClick={onCancel} style={ghostBtn}>Cancelar</button>
+        <button disabled={!valid || submitting} onClick={submit} style={{ ...primaryBtn, opacity: valid && !submitting ? 1 : 0.5, cursor: valid && !submitting ? 'pointer' : 'not-allowed' }}>
+          {submitting ? 'Adicionando…' : 'Adicionar créditos'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function RootPainel() {
   const [activeTab, setActiveTab] = useState<Tab>('escritorios')
 
   const [escritorios, setEscritorios] = useState<Escritorio[]>([])
   const [metricas, setMetricas] = useState<any[]>([])
   const [auditoria, setAuditoria] = useState<any[]>([])
+  const [creditos, setCreditos] = useState<CreditoEscritorio[]>([])
+  const [loadingCreditos, setLoadingCreditos] = useState(false)
+  const [expandedEsc, setExpandedEsc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<Modal>(null)
 
@@ -306,9 +382,22 @@ export default function RootPainel() {
     }
   }, [addToast])
 
+  const loadCreditos = useCallback(async () => {
+    setLoadingCreditos(true)
+    try {
+      const data = await api.raiz.getCreditos()
+      setCreditos(Array.isArray(data) ? data : [])
+    } catch {
+      addToast('error', 'Não foi possível carregar os créditos.')
+    } finally {
+      setLoadingCreditos(false)
+    }
+  }, [addToast])
+
   useEffect(() => { loadEscritorios() }, [loadEscritorios])
   useEffect(() => { if (activeTab === 'metricas') loadMetricas() }, [activeTab, loadMetricas])
   useEffect(() => { if (activeTab === 'auditoria') loadAuditoria() }, [activeTab, loadAuditoria])
+  useEffect(() => { if (activeTab === 'creditos') loadCreditos() }, [activeTab, loadCreditos])
 
   const handleCriarEscritorio = async (data: { nome: string; adminNome: string; adminEmail: string }) => {
     try {
@@ -372,6 +461,23 @@ export default function RootPainel() {
     }
   }
 
+  const handleAddCreditos = async (tipo: 'escritorio' | 'usuario', id: string, quantidade: number) => {
+    try {
+      const res = tipo === 'escritorio'
+        ? await api.raiz.adicionarCreditosEscritorio(id, quantidade)
+        : await api.raiz.adicionarCreditosUsuario(id, quantidade)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Falha ao adicionar créditos.'))
+        return
+      }
+      setModal(null)
+      addToast('success', `${fmtNum(quantidade)} crédito(s) adicionado(s).`)
+      loadCreditos()
+    } catch {
+      addToast('error', 'Falha ao adicionar créditos.')
+    }
+  }
+
   const totalTokens = metricas.reduce((acc, m) => acc + (Number(m?.tokens30d) || 0), 0)
   const totalUsuarios = metricas.reduce((acc, m) => acc + (Number(m?.usuariosAtivos) || 0), 0)
 
@@ -396,7 +502,7 @@ export default function RootPainel() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28 }}>
-        {([['escritorios', 'Escritórios'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria']] as [Tab, string][]).map(([t, label]) => (
+        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 2px',
             border: 'none',
@@ -469,6 +575,112 @@ export default function RootPainel() {
                   {escritorios.length === 0 && <EmptyRow colSpan={7} text="Nenhum escritório cadastrado. Clique em “Novo escritório” para começar." />}
                 </tbody>
               </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ===== TAB: CRÉDITOS ===== */}
+      {activeTab === 'creditos' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+            <StatCard label="Escritórios com saldo" value={fmtNum(creditos.filter(c => c.creditosDisponiveis != null).length)} />
+            <StatCard label="Créditos consumidos (mês)" value={fmtNum(creditos.reduce((a, c) => a + (Number(c.consumidosMes) || 0), 0))} />
+            <StatCard label="Créditos restantes" value={fmtNum(creditos.reduce((a, c) => a + (Number(c.restantes) || 0), 0))} />
+          </div>
+
+          {loadingCreditos ? (
+            <div style={{ color: 'var(--color-muted)', fontSize: 13, padding: '24px 0' }}>Carregando…</div>
+          ) : (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-surface-2)' }}>
+                    <Th>Escritório</Th><Th>Plano</Th><Th>Disponível</Th><Th>Consumidos (mês)</Th><Th>Restantes</Th><Th style={{ width: 140 }}>Uso</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditos.map(c => {
+                    const disp = c.creditosDisponiveis
+                    const pct = disp != null && disp > 0 ? Math.round(((Number(c.consumidosMes) || 0) / disp) * 100) : 0
+                    const usoColor = pct > 85 ? 'var(--color-danger)' : pct > 60 ? 'var(--color-warning)' : 'var(--color-success)'
+                    const pm = planoMeta[c.plano] || { label: c.plano, color: 'var(--color-muted)', bg: 'var(--color-surface-2)' }
+                    return (
+                      <tr key={c.id} style={{ borderTop: '1px solid var(--color-border)', verticalAlign: 'top' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-surface-2)'}
+                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
+                      >
+                        <td style={{ padding: '12px 22px', fontSize: 13, fontWeight: 500 }}>
+                          {c.nome}
+                          {c.isDemo && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-accent)', marginLeft: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>demo</span>}
+                        </td>
+                        <td style={{ padding: '12px 22px' }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: 4 }}>{pm.label}</span>
+                        </td>
+                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{disp != null ? fmtNum(disp) : 'Ilimitado'}</td>
+                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtNum(c.consumidosMes)}</td>
+                        <td style={{ padding: '12px 22px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.restantes != null ? fmtNum(c.restantes) : '—'}</td>
+                        <td style={{ padding: '12px 22px' }}>
+                          {disp != null && disp > 0 ? (
+                            <div>
+                              <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: usoColor, borderRadius: 3 }} />
+                              </div>
+                              <div style={{ fontSize: 10, color: usoColor, fontWeight: 600, marginTop: 4 }}>{pct}%</div>
+                            </div>
+                          ) : <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '12px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {c.isDemo && (
+                            <button onClick={() => setExpandedEsc(expandedEsc === c.id ? null : c.id)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11, marginRight: 6 }}>
+                              {expandedEsc === c.id ? 'Ocultar usuários' : 'Ver usuários'}
+                            </button>
+                          )}
+                          <button onClick={() => setModal({ kind: 'addCreditos', alvo: { tipo: 'escritorio', id: c.id, nome: c.nome } })} style={{ ...primaryBtn, padding: '5px 12px', fontSize: 11 }}>
+                            + Créditos
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {creditos.length === 0 && <EmptyRow colSpan={7} text="Nenhum escritório cadastrado." />}
+                </tbody>
+              </table>
+
+              {/* Usuários demo expandidos */}
+              {creditos.filter(c => c.isDemo && expandedEsc === c.id).map(c => (
+                <div key={`users-${c.id}`} style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface-2)' }}>
+                  <div style={{ padding: '12px 22px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)' }}>
+                    Usuários de {c.nome} (créditos individuais)
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <tbody>
+                      {c.usuarios.map(u => {
+                        const dispU = u.creditosDisponiveis
+                        const pctU = dispU != null && dispU > 0 ? Math.round((u.consumidosMes / dispU) * 100) : 0
+                        const usoColorU = pctU > 85 ? 'var(--color-danger)' : pctU > 60 ? 'var(--color-warning)' : 'var(--color-success)'
+                        return (
+                          <tr key={u.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                            <td style={{ padding: '10px 22px', fontSize: 13 }}>
+                              <div style={{ fontWeight: 500 }}>{u.nome}</div>
+                              <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>{u.email}</div>
+                            </td>
+                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Disp: {dispU != null ? fmtNum(dispU) : 'herda esc.'}</td>
+                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Consumidos: {fmtNum(u.consumidosMes)}</td>
+                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: 12, color: usoColorU, fontWeight: 600 }}>Restantes: {u.restantes != null ? fmtNum(u.restantes) : '—'}</td>
+                            <td style={{ padding: '10px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => setModal({ kind: 'addCreditos', alvo: { tipo: 'usuario', id: u.id, nome: u.nome } })} style={{ ...primaryBtn, padding: '5px 12px', fontSize: 11 }}>
+                                + Tokens
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {c.usuarios.length === 0 && <tr><td colSpan={5} style={{ padding: '16px 22px', color: 'var(--color-muted)', fontSize: 12 }}>Nenhum usuário.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
           )}
         </>
@@ -589,6 +801,9 @@ export default function RootPainel() {
             )}
             {modal.kind === 'excluir' && (
               <ExcluirEscritorioModal esc={modal.esc} onCancel={() => setModal(null)} onSubmit={() => handleExcluir(modal.esc)} />
+            )}
+            {modal.kind === 'addCreditos' && (
+              <AddCreditosModal alvo={modal.alvo} onCancel={() => setModal(null)} onSubmit={(q) => handleAddCreditos(modal.alvo.tipo, modal.alvo.id, q)} />
             )}
             {modal.kind === 'tempSenha' && (
               <TempSenhaModal titulo={modal.titulo} senha={modal.senha} onClose={() => setModal(null)} notify={(t, m) => addToast(t, m)} />

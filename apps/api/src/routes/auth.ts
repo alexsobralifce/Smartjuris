@@ -74,17 +74,27 @@ function recordEmailFailure(normalizedEmail: string): void {
 }
 
 /**
- * Limite de tokens mensal do usuário: apenas escritórios demo têm limite.
- * Usuários sem escritório (root) e escritórios não-demo retornam null.
+ * Limite efetivo de créditos mensais (1 crédito = 1 token) do usuário:
+ * - override individual (`usuarios.creditos_mes`) quando definido;
+ * - senão, o saldo do escritório (`escritorios.limite_tokens_mes`);
+ * - sem saldo definido → null (sem restrição).
  */
-async function getLimiteTokensMes(escritorioId: string | null | undefined): Promise<number | null> {
+async function getLimiteEfetivo(userId: string | null | undefined, escritorioId: string | null | undefined): Promise<number | null> {
+  if (userId) {
+    const [u] = await db
+      .select({ creditosMes: usuarios.creditosMes })
+      .from(usuarios)
+      .where(eq(usuarios.id, userId))
+      .limit(1);
+    if (u?.creditosMes != null) return Number(u.creditosMes);
+  }
   if (!escritorioId) return null;
-  const rows = await db
+  const [esc] = await db
     .select({ limiteTokensMes: escritorios.limiteTokensMes })
     .from(escritorios)
-    .where(and(eq(escritorios.id, escritorioId), eq(escritorios.isDemo, true)))
+    .where(eq(escritorios.id, escritorioId))
     .limit(1);
-  return rows[0]?.limiteTokensMes ?? null;
+  return esc?.limiteTokensMes != null ? Number(esc.limiteTokensMes) : null;
 }
 
 router.post('/login', loginRateLimiter, async (req, res) => {
@@ -163,10 +173,9 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     const precisaTrocarSenha = tenantRow?.precisaTrocarSenha ?? false;
 
     // Se o usuário pertence a um escritório, verifica se o escritório está ativo
-    let limiteTokensMes: number | null = null;
     if (escritorioId) {
       const [escritorio] = await db
-        .select({ ativo: escritorios.ativo, isDemo: escritorios.isDemo, limiteTokensMes: escritorios.limiteTokensMes })
+        .select({ ativo: escritorios.ativo })
         .from(escritorios)
         .where(eq(escritorios.id, escritorioId))
         .limit(1);
@@ -181,11 +190,10 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         });
         return res.status(403).json({ error: 'Escritório desativado. Contate o suporte da plataforma.' });
       }
-      // Apenas escritórios demo expõem limite de tokens (demais: null)
-      if (escritorio.isDemo && escritorio.limiteTokensMes != null) {
-        limiteTokensMes = Number(escritorio.limiteTokensMes);
-      }
     }
+
+    // Limite efetivo de créditos mensais (override do usuário ou saldo do escritório)
+    const limiteTokensMes = await getLimiteEfetivo(user.id, escritorioId);
 
     // Consumo de tokens do mês (apenas quando há limite definido)
     let tokensMes = 0;
@@ -254,7 +262,7 @@ router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
   }
   const [tokensMes, limiteTokensMes] = await Promise.all([
     req.user.id ? getTokenUsageMes(req.user.id) : Promise.resolve(0),
-    getLimiteTokensMes(req.user.escritorioId),
+    getLimiteEfetivo(req.user.id, req.user.escritorioId),
   ]);
   res.json({
     user: {

@@ -22,6 +22,7 @@ import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 import agendaRoutes from './routes/agenda.js';
 
 import { authMiddleware } from './middlewares/auth.js';
+import { refreshSession } from './middlewares/refreshSession.js';
 import { requireRoot, requireAdmin } from './middlewares/roleGuard.js';
 import { rejectRoot } from './middlewares/rejectRoot.js';
 import { forcePasswordChange } from './middlewares/forcePasswordChange.js';
@@ -65,25 +66,25 @@ app.use('/api', globalApiLimiter);
 app.use('/api/auth', authRoutes);
 
 // Plataforma — root only
-app.use('/api/root/escritorios', authMiddleware, requireRoot, escritorioRoutes);
-app.use('/api/root', authMiddleware, requireRoot, rootCreditosRoutes);
-app.use('/api/root', authMiddleware, requireRoot, rootStatsRoutes);
+app.use('/api/root/escritorios', authMiddleware, refreshSession, requireRoot, escritorioRoutes);
+app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootCreditosRoutes);
+app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootStatsRoutes);
 
 // Admin do escritório — admin role + tenant internamente + forcePasswordChange
-app.use('/api/admin/escritorio', authMiddleware, requireAdmin, forcePasswordChange, adminEscritorioRoutes);
-app.use('/api/admin/escritorio/permissoes', authMiddleware, requireAdmin, forcePasswordChange, permissoesRoutes);
+app.use('/api/admin/escritorio', authMiddleware, refreshSession, requireAdmin, forcePasswordChange, adminEscritorioRoutes);
+app.use('/api/admin/escritorio/permissoes', authMiddleware, refreshSession, requireAdmin, forcePasswordChange, permissoesRoutes);
 
 // Negócio — root é bloqueado; forcePasswordChange; alguns precisam requireModule
-app.use('/api/processos', authMiddleware, rejectRoot, forcePasswordChange, processosRoutes);
-app.use('/api/pecas', authMiddleware, rejectRoot, forcePasswordChange, pecasRoutes);
-app.use('/api/clientes', authMiddleware, rejectRoot, forcePasswordChange, clientesRoutes);
-app.use('/api/financeiro', authMiddleware, rejectRoot, forcePasswordChange, requireModule('financeiro'), financeiroRoutes);
-app.use('/api/andamentos', authMiddleware, rejectRoot, forcePasswordChange, andamentosRoutes);
-app.use('/api/documentos', authMiddleware, rejectRoot, forcePasswordChange, documentosRoutes);
-app.use('/api/rag', authMiddleware, rejectRoot, forcePasswordChange, requireModule('pecas'), ragRoutes);
-app.use('/api/jurimetria', authMiddleware, rejectRoot, forcePasswordChange, requireModule('jurimetria'), jurimetriaRoutes);
-app.use('/api/jurisprudencias', authMiddleware, rejectRoot, forcePasswordChange, jurisprudenciasRoutes);
-app.use('/api/agenda', authMiddleware, rejectRoot, forcePasswordChange, agendaRoutes);
+app.use('/api/processos', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, processosRoutes);
+app.use('/api/pecas', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, pecasRoutes);
+app.use('/api/clientes', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, clientesRoutes);
+app.use('/api/financeiro', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('financeiro'), financeiroRoutes);
+app.use('/api/andamentos', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, andamentosRoutes);
+app.use('/api/documentos', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, documentosRoutes);
+app.use('/api/rag', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('pecas'), ragRoutes);
+app.use('/api/jurimetria', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('jurimetria'), jurimetriaRoutes);
+app.use('/api/jurisprudencias', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, jurisprudenciasRoutes);
+app.use('/api/agenda', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, agendaRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

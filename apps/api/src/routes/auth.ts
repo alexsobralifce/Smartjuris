@@ -6,6 +6,7 @@ import { usuarios, logins, permissoesUsuario, escritorios, codigosVerificacao } 
 import { and, eq, desc } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth.js';
+import { refreshSession } from '../middlewares/refreshSession.js';
 import { loginRateLimiter, registroRateLimiter } from '../middlewares/rateLimit.js';
 import { revokeToken } from '../middlewares/revocation.js';
 import { recordAudit } from '../middlewares/audit.js';
@@ -594,7 +595,7 @@ router.post('/reenviar-codigo', async (req, res) => {
   }
 });
 
-router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
+router.get('/me', authMiddleware, refreshSession, async (req: AuthenticatedRequest, res) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }

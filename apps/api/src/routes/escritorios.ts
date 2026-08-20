@@ -14,6 +14,7 @@ import {
   escritorioPatchSchema,
   uuidSchema,
 } from '../validation/schemas.js';
+import { sendAccountActivatedEmail } from '../services/email.js';
 
 const router = Router();
 
@@ -196,7 +197,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
 
-    const [existente] = await db.select({ id: escritorios.id }).from(escritorios)
+    const [existente] = await db.select({ id: escritorios.id, ativo: escritorios.ativo, nome: escritorios.nome }).from(escritorios)
       .where(eq(escritorios.id, id)).limit(1);
     if (!existente) {
       return res.status(404).json({ error: 'Escritório não encontrado.' });
@@ -204,6 +205,22 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 
     const [atualizado] = await db.update(escritorios).set(parsed.data)
       .where(eq(escritorios.id, id)).returning();
+
+    // Se o escritório foi ativado agora (era inativo e virou ativo), notifica o admin por e-mail
+    if (parsed.data.ativo === true && existente.ativo === false) {
+      db.select({ email: usuarios.email, nome: usuarios.nome })
+        .from(usuarios)
+        .where(eq(usuarios.escritorioId, id))
+        .limit(1)
+        .then(([admin]) => {
+          if (admin?.email) {
+            sendAccountActivatedEmail(admin.email, admin.nome, atualizado.nome).catch((err) => {
+              console.error('[Escritorios] Erro ao enviar e-mail de ativação:', err);
+            });
+          }
+        })
+        .catch((err) => console.error('[Escritorios] Erro ao buscar admin para e-mail:', err));
+    }
 
     await recordAudit(req, 'UPDATE_ESCRITORIO', { alvoId: id, detalhes: parsed.data });
     res.json(baseEscritorio(atualizado));

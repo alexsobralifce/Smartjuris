@@ -11,6 +11,7 @@ import { revokeToken } from '../middlewares/revocation.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { getTokenUsageMes } from '../services/usage.js';
 import { parseBody, formatZodError, registroSchema } from '../validation/schemas.js';
+import { sendWelcomeEmail } from '../services/email.js';
 
 const router = Router();
 const SECRET = process.env.JWT_SECRET;
@@ -310,6 +311,11 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
     await recordAudit(req, 'REGISTRO_ESCRITORIO', {
       alvoId: esc.id,
       detalhes: { email, escritorioNome },
+    });
+
+    // Envio assíncrono de e-mail de confirmação / boas-vindas
+    sendWelcomeEmail(email, nome, escritorioNome).catch((err) => {
+      console.error('[Auth] Falha no envio de e-mail de boas-vindas:', err);
     });
 
     res.status(201).json({

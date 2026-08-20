@@ -278,6 +278,36 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         return res.status(409).json({ error: 'Este e-mail já está cadastrado.', code: 'EMAIL_DUPLICATE' });
       }
 
+      const autoVerify = process.env.AUTO_VERIFY_EMAIL === 'true';
+
+      // AUTO_VERIFY ativo: usuário que começou o cadastro mas não verificou fica
+      // marcado como verificado direto, sem precisar de código (que não chegaria).
+      if (autoVerify) {
+        const [upd] = await db.update(usuarios)
+          .set({ emailVerificado: true })
+          .where(eq(usuarios.email, email))
+          .returning({ id: usuarios.id, nome: usuarios.nome, escritorioId: usuarios.escritorioId });
+        if (upd?.escritorioId) {
+          const [escritorio] = await db.select().from(escritorios)
+            .where(eq(escritorios.id, upd.escritorioId)).limit(1);
+          sendRootNewUserNotificationEmail({
+            nome: upd.nome,
+            email,
+            oab: oab || 'Não informada',
+            oabUf: oabUf || 'BR',
+            escritorioNome: escritorio?.nome || escritorioNome,
+            telefone: telefone || undefined,
+            cnpj: cnpj || undefined,
+          }).catch((err) => console.error('[Auth] Erro ao notificar root por e-mail:', err));
+        }
+        return res.status(200).json({
+          success: true,
+          step: 'ok',
+          email,
+          message: 'Cadastro finalizado! O administrador será notificado para liberar o acesso.',
+        });
+      }
+
       // Se o usuário iniciou cadastro mas não verificou o e-mail, gera um novo código OTP
       const codigo = String(Math.floor(100000 + Math.random() * 900000));
       const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
@@ -307,6 +337,12 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
 
     const senhaHash = await bcrypt.hash(senha, 12);
 
+    // Flag de ambiente para pular a verificação de e-mail por código OTP.
+    // Quando 'true' (ex.: ainda sem domínio de e-mail em produção), o usuário
+    // já nasce com emailVerificado:true e o cadastro segue direto, sem exigir
+    // um código que não chegaria. Reversível: desligue o flag para reativar o OTP.
+    const autoVerify = process.env.AUTO_VERIFY_EMAIL === 'true';
+
     // CNPJ opcional com validação leve de formato (14 dígitos)
     if (cnpj) {
       const cnpjDigits = cnpj.replace(/\D/g, '');
@@ -315,7 +351,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       }
     }
 
-    // Criação atômica do escritório (pendente de aprovação) + usuário admin (emailVerificado: false)
+    // Criação atômica do escritório (pendente de aprovação) + usuário admin
     const [esc] = await db.transaction(async (tx) => {
       const [escritorioCriado] = await tx.insert(escritorios).values({
         nome: escritorioNome,
@@ -333,7 +369,8 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         senha: senhaHash,
         role: 'admin',
         ativo: false,
-        emailVerificado: false,
+        // Se AUTO_VERIFY_EMAIL, dispensa o OTP e já considera o e-mail verificado.
+        emailVerificado: autoVerify ? true : false,
         oab,
         oabUf,
         escritorioId: escritorioCriado.id,
@@ -343,32 +380,57 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       return [escritorioCriado];
     });
 
-    // Gera código de verificação OTP de 6 dígitos
-    const codigo = String(Math.floor(100000 + Math.random() * 900000));
-    const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
-
-    await db.insert(codigosVerificacao).values({
-      email,
-      codigo,
-      tipo: 'registro',
-      expiraEm,
-    });
-
     await recordAudit(req, 'REGISTRO_ESCRITORIO', {
       alvoId: esc.id,
-      detalhes: { email, escritorioNome },
+      detalhes: { email, escritorioNome, autoVerify },
     });
 
-    // Envio do código de 6 dígitos para o e-mail do usuário
-    sendVerificationCodeEmail(email, nome, codigo).catch((err) => {
-      console.error('[Auth] Falha no envio de código de verificação:', err);
-    });
+    // Se a verificação por código está habilitada, gera e envia o OTP.
+    if (!autoVerify) {
+      const codigo = String(Math.floor(100000 + Math.random() * 900000));
+      const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+      await db.insert(codigosVerificacao).values({
+        email,
+        codigo,
+        tipo: 'registro',
+        expiraEm,
+      });
+
+      // Envio do código de 6 dígitos para o e-mail do usuário
+      sendVerificationCodeEmail(email, nome, codigo).catch((err) => {
+        console.error('[Auth] Falha no envio de código de verificação:', err);
+      });
+
+      return res.status(201).json({
+        success: true,
+        step: 'verificacao',
+        email,
+        message: 'Código de verificação enviado para o seu e-mail.',
+      });
+    }
+
+    // AUTO_VERIFY ativo: dispensa o OTP. Ainda notifica o Root (para liberação)
+    // e envia boas-vindas — ambos fire-and-forget, não bloqueiam o cadastro,
+    // mesmo que o serviço de e-mail esteja indisponível.
+    sendRootNewUserNotificationEmail({
+      nome,
+      email,
+      oab: oab || 'Não informada',
+      oabUf: oabUf || 'BR',
+      escritorioNome: esc?.nome || escritorioNome,
+      telefone: telefone || undefined,
+      cnpj: cnpj || undefined,
+    }).catch((err) => console.error('[Auth] Erro ao notificar root por e-mail:', err));
+
+    sendWelcomeEmail(email, nome, esc?.nome || escritorioNome)
+      .catch((err) => console.error('[Auth] Erro ao enviar boas-vindas:', err));
 
     res.status(201).json({
       success: true,
-      step: 'verificacao',
+      step: 'ok',
       email,
-      message: 'Código de verificação enviado para o seu e-mail.',
+      message: 'Cadastro realizado! O administrador será notificado para liberar o acesso.',
     });
   } catch (error) {
     console.error('Registro error:', error);

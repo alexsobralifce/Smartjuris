@@ -293,9 +293,11 @@ function CadastroVerificacao({
 function CadastroForm({
   isMobile,
   onCodeSent,
+  onAutoVerified,
 }: {
   isMobile: boolean
   onCodeSent: (email: string) => void
+  onAutoVerified: () => void
 }) {
   const [values, setValues] = useState<CadastroValues>(CADASTRO_INICIAL)
   const [errors, setErrors] = useState<Partial<Record<keyof CadastroValues, string>>>({})
@@ -363,7 +365,18 @@ function CadastroForm({
         setSubmitError(await getErrorMessage(res, 'Não foi possível concluir o cadastro. Tente novamente.'))
         return
       }
-      onCodeSent(values.email.trim())
+      // Se o backend retornar step:'ok', a verificação por e-mail foi dispensada
+      // (AUTO_VERIFY_EMAIL) → segue direto para a tela de sucesso, sem OTP.
+      let step = 'verificacao'
+      try {
+        const data = await res.clone().json()
+        step = data?.step || 'verificacao'
+      } catch { /* corpo indisponível; assume verificação por código */ }
+      if (step === 'ok') {
+        onAutoVerified()
+      } else {
+        onCodeSent(values.email.trim())
+      }
     } catch (err: any) {
       setSubmitError(err?.message || 'Não foi possível concluir o cadastro. Tente novamente.')
     } finally {
@@ -862,6 +875,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           ) : (
             <CadastroForm
               isMobile={isMobile}
+              onAutoVerified={() => setCadastroStep('sucesso')}
               onCodeSent={(em) => {
                 setEmailPendente(em)
                 setCadastroStep('otp')

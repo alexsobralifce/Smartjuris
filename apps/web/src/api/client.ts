@@ -46,6 +46,20 @@ export type SearchDecisionsResult = {
   };
 };
 
+export type AgendaItem = {
+  id: string
+  titulo: string
+  tipo: 'audiencia' | 'prazo_processo' | 'prazo_peca' | 'financeiro' | 'aniversario' | 'evento'
+  inicio: string
+  fim?: string
+  diaInteiro: boolean
+  cor: string
+  processoId?: string
+  clienteId?: string
+  cliente?: string
+  origem: 'processo' | 'andamento' | 'peca' | 'financeiro' | 'cliente' | 'manual'
+}
+
 const qs = (params: Record<string, string | undefined>) => {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
   return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
@@ -213,6 +227,12 @@ export const api = {
       body: JSON.stringify(patch)
     }),
     delete: (id: string) => authFetch(`/api/clientes/${id}`, { method: 'DELETE' }),
+  },
+  agenda: {
+    getMes: (mes: string) => authFetch(`/api/agenda?mes=${mes}`).then(r => r.json()),
+    criarEvento: (data: unknown) => authFetch('/api/agenda/eventos', { method: 'POST', body: JSON.stringify(data) }),
+    atualizarEvento: (id: string, data: unknown) => authFetch(`/api/agenda/eventos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deletarEvento: (id: string) => authFetch(`/api/agenda/eventos/${id}`, { method: 'DELETE' }),
   },
   escritorio: {
     getInfo: () => authFetch('/api/admin/escritorio/info').then(r => r.json()),

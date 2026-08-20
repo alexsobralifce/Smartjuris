@@ -50,6 +50,7 @@ router.post('/', async (req, res) => {
       cidade: data.cidade ?? '',
       uf: data.uf ?? '',
       qualificacao: data.qualificacao ?? '',
+      dataNascimento: data.tipo === 'PF' ? data.dataNascimento ?? null : null,
       usuarioId: (req as any).user?.id ?? null,
       escritorioId,
     }).returning();
@@ -83,6 +84,10 @@ router.patch('/:id', async (req, res) => {
     const updateData = { ...parsed.data };
     if (parsed.data.cpfCnpj !== undefined) {
       updateData.cpfCnpj = encryptField(parsed.data.cpfCnpj);
+    }
+    const finalTipo = parsed.data.tipo ?? existente.tipo;
+    if (finalTipo === 'PJ') {
+      updateData.dataNascimento = null; // PJ não possui data de nascimento
     }
     const [updated] = await db.update(clientes)
       .set(updateData)

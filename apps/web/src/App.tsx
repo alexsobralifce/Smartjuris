@@ -15,10 +15,11 @@ import TrocarSenha from './components/TrocarSenha'
 import AdminEscritorio from './components/AdminEscritorio'
 import RootPainel from './components/RootPainel'
 import LandingPage from './components/LandingPage'
+import Agenda from './components/Agenda'
 import { api } from './api/client'
 import { useTheme } from './hooks/useTheme'
 
-type Route = 'dashboard' | 'processos' | 'clientes' | 'pecas' | 'validacao' | 'jurimetria' | 'decisoes' | 'financeiro' | 'contratos' | 'crm' | 'base' | 'documentacao' | 'admin'
+type Route = 'dashboard' | 'agenda' | 'processos' | 'clientes' | 'pecas' | 'validacao' | 'jurimetria' | 'decisoes' | 'financeiro' | 'contratos' | 'crm' | 'base' | 'documentacao' | 'admin'
 
 interface User {
   id?: string
@@ -34,6 +35,7 @@ interface User {
 
 const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
   { id: 'dashboard', label: 'Painel', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+  { id: 'agenda', label: 'Agenda', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { id: 'processos', label: 'Processos', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { id: 'clientes', label: 'Clientes', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
   { id: 'pecas', label: 'Gerar Peças', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
@@ -249,7 +251,7 @@ export default function App() {
             if (!user) return false
             if (user.role === 'admin' || user.role === 'root') return true // admin e root veem todos os módulos
             // user comum: dashboard, documentacao e decisoes sempre liberados; demais só se estiver em permissoes
-            return item.id === 'dashboard' || item.id === 'documentacao' || item.id === 'decisoes' || (user.permissoes ?? []).includes(item.id)
+            return item.id === 'dashboard' || item.id === 'agenda' || item.id === 'documentacao' || item.id === 'decisoes' || (user.permissoes ?? []).includes(item.id)
           }).map(item => (
             <button
               key={item.id}
@@ -443,6 +445,7 @@ export default function App() {
       {/* Main */}
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         {route === 'dashboard' && <Dashboard />}
+        {route === 'agenda' && <Agenda />}
         {route === 'processos' && <Processos />}
         {route === 'clientes' && <Clientes />}
         {route === 'pecas' && <GeradorPecas />}

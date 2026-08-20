@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+function isFutureDate(iso: string): boolean {
+  return Date.parse(iso + 'T00:00:00Z') > Date.now();
+}
+
 // --- Processos ---
 export const processosSchema = z.object({
   tipo: z.string().min(1),
@@ -30,7 +34,10 @@ export const pecasSchema = z.object({
 export const pecasPatchSchema = pecasSchema.partial();
 
 // --- Clientes ---
-export const clienteSchema = z.object({
+const dataNascimentoNaoFutura = (d: { dataNascimento?: string | null }) =>
+  !d.dataNascimento || !isFutureDate(d.dataNascimento);
+
+const clienteBaseSchema = z.object({
   tipo: z.string().min(1),
   nome: z.string().min(1),
   cpfCnpj: z.string().min(1),
@@ -44,8 +51,10 @@ export const clienteSchema = z.object({
   cidade: z.string().optional().default(''),
   uf: z.string().optional().default(''),
   qualificacao: z.string().optional().default(''),
+  dataNascimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data no formato AAAA-MM-DD').optional().nullable(),
 });
-export const clientePatchSchema = clienteSchema.partial();
+export const clienteSchema = clienteBaseSchema.refine(dataNascimentoNaoFutura, { message: 'data de nascimento não pode ser futura', path: ['dataNascimento'] });
+export const clientePatchSchema = clienteBaseSchema.partial().refine(dataNascimentoNaoFutura, { message: 'data de nascimento não pode ser futura', path: ['dataNascimento'] });
 
 // --- Lançamentos financeiros ---
 export const lancamentoSchema = z.object({
@@ -74,6 +83,27 @@ export const andamentoSchema = z.object({
   descricao: z.string().min(1),
   prazoFatal: z.string().nullable().optional(),
 });
+
+// --- Agenda / Eventos manuais ---
+const eventoBaseSchema = z.object({
+  titulo: z.string().min(1, 'obrigatório').max(200, 'máximo 200 caracteres'),
+  descricao: z.string().optional(),
+  tipo: z.enum(['audiencia', 'reuniao', 'prazo', 'diligencia', 'outro']),
+  inicio: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'data de início inválida'),
+  fim: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'data de fim inválida').optional(),
+  diaInteiro: z.boolean().optional().default(false),
+  processoId: z.string().uuid().optional().nullable(),
+  clienteId: z.string().uuid().optional().nullable(),
+  cor: z.string().optional().nullable(),
+});
+export const eventoSchema = eventoBaseSchema.refine(
+  (d) => !d.fim || Date.parse(d.fim) >= Date.parse(d.inicio),
+  { message: 'data de fim deve ser posterior ou igual à data de início', path: ['fim'] },
+);
+export const eventoPatchSchema = eventoBaseSchema.partial().refine(
+  (d) => !d.fim || !d.inicio || Date.parse(d.fim) >= Date.parse(d.inicio),
+  { message: 'data de fim deve ser posterior ou igual à data de início', path: ['fim'] },
+);
 
 // --- Coleção de documentos (RAG) ---
 export const colecaoSchema = z.object({

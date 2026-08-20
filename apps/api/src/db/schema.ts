@@ -178,6 +178,7 @@ export const clientes = pgTable('clientes', {
   cidade: text('cidade'),
   uf: text('uf'),
   qualificacao: text('qualificacao'), // ex: "brasileira, solteira, auxiliar administrativa"
+  dataNascimento: date('data_nascimento'),   // nullable — só para tipo 'PF'
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
   escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
@@ -229,5 +230,25 @@ export const auditLog = pgTable('audit_log', {
   ipAddress: text('ip_address'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
+
+export const eventos = pgTable('eventos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  titulo: text('titulo').notNull(),
+  descricao: text('descricao'),
+  tipo: text('tipo').notNull(),             // 'audiencia' | 'reuniao' | 'prazo' | 'diligencia' | 'outro'
+  inicio: timestamp('inicio', { withTimezone: true }).notNull(),
+  fim: timestamp('fim', { withTimezone: true }),
+  diaInteiro: boolean('dia_inteiro').notNull().default(false),
+  processoId: uuid('processo_id').references(() => processos.id),
+  clienteId: uuid('cliente_id').references(() => clientes.id),
+  cor: text('cor'),
+  usuarioId: uuid('usuario_id').references(() => usuarios.id),
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  escritorioInicioIdx: index('eventos_escritorio_inicio_idx').on(table.escritorioId, table.inicio),
+}));
 
 

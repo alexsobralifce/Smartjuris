@@ -96,6 +96,7 @@ export default function Clientes() {
   const [cidade, setCidade] = useState('')
   const [uf, setUf] = useState('')
   const [qualificacao, setQualificacao] = useState('')
+  const [dataNascimento, setDataNascimento] = useState('')
 
   // Erros de validação inline
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -158,6 +159,9 @@ export default function Clientes() {
 
     // Validação estrita dos campos obrigatórios
     const newErrors: Record<string, string> = {}
+    if (tipo === 'PF' && dataNascimento && new Date(dataNascimento) > new Date()) {
+      newErrors.dataNascimento = 'A data de nascimento não pode ser futura.'
+    }
     if (!nome.trim()) newErrors.nome = 'O Nome / Razão Social é obrigatório.'
     if (!cpfCnpj.trim()) newErrors.cpfCnpj = `O ${tipo === 'PF' ? 'CPF' : 'CNPJ'} é obrigatório.`
     if (email.trim() && !isValidEmail(email)) newErrors.email = 'Insira um e-mail válido.'
@@ -189,7 +193,8 @@ export default function Clientes() {
         bairro,
         cidade,
         uf,
-        qualificacao: qualifText
+        qualificacao: qualifText,
+        dataNascimento: tipo === 'PF' ? dataNascimento : undefined
       })
       if (!res.ok) {
         addToast('error', await getErrorMessage(res, 'Erro ao salvar cliente no banco de dados.'))
@@ -234,6 +239,7 @@ export default function Clientes() {
     setCidade('')
     setUf('')
     setQualificacao('')
+    setDataNascimento('')
     setCepMsg('')
   }
 
@@ -448,6 +454,26 @@ export default function Clientes() {
                   />
                   {errors.email && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.email}</span>}
                 </div>
+
+                {tipo === 'PF' && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 10, fontWeight: 600, color: errors.dataNascimento ? 'var(--color-danger)' : 'var(--color-muted)', display: 'block', marginBottom: 4 }}>Data de Nascimento</label>
+                    <input
+                      type="date"
+                      value={dataNascimento}
+                      onChange={e => {
+                        setDataNascimento(e.target.value)
+                        if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
+                      }}
+                      style={{
+                        width: '100%', padding: '9px 12px',
+                        border: errors.dataNascimento ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
+                        borderRadius: 6, fontSize: 13, background: 'var(--color-surface)'
+                      }}
+                    />
+                    {errors.dataNascimento && <span style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2, display: 'block' }}>⚠️ {errors.dataNascimento}</span>}
+                  </div>
+                )}
               </div>
 
               {/* Seção Endereço com Busca por CEP via ViaCEP */}

@@ -1,9 +1,26 @@
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
 const resendApiKey = process.env.RESEND_API_KEY;
-const defaultFrom = process.env.RESEND_FROM_EMAIL || 'SmartJuris <onboarding@resend.dev>';
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+
+const defaultFrom = process.env.EMAIL_FROM || process.env.RESEND_FROM_EMAIL || (smtpUser ? `SmartJuris <${smtpUser}>` : 'SmartJuris <onboarding@resend.dev>');
 
 export const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
+export const smtpTransporter = (smtpUser && smtpPass)
+  ? nodemailer.createTransport({
+      service: process.env.SMTP_SERVICE || 'gmail',
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 465,
+      secure: (process.env.SMTP_SECURE === 'true' || !process.env.SMTP_PORT || process.env.SMTP_PORT === '465'),
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    })
+  : null;
 
 export interface SendEmailOptions {
   to: string | string[];
@@ -126,35 +143,59 @@ function emailWrapper(title: string, bodyContent: string): string {
 }
 
 /**
- * Envia um e-mail genérico via Resend
+ * Envia um e-mail transacional via Nodemailer (SMTP / Gmail) ou Resend
  */
 export async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
-  if (!resend) {
-    console.warn('[Email] RESEND_API_KEY não configurada. E-mail não enviado:', options.subject, 'para:', options.to);
-    return { success: false, error: 'RESEND_API_KEY não configurada no servidor.' };
-  }
+  const recipient = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+  const fromAddress = options.from || defaultFrom;
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: options.from || defaultFrom,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      replyTo: options.replyTo,
-    });
+  // 1. Se o transportador SMTP estiver configurado (ex.: Gmail com Senha de App)
+  if (smtpTransporter) {
+    try {
+      const info = await smtpTransporter.sendMail({
+        from: fromAddress,
+        to: recipient,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+      });
 
-    if (error) {
-      console.error('[Email] Erro ao enviar e-mail via Resend:', error);
-      return { success: false, error: error.message };
+      console.log(`[Email-SMTP] E-mail enviado com sucesso: ID=${info.messageId}, Para=${recipient}, Assunto="${options.subject}"`);
+      return { success: true, id: info.messageId };
+    } catch (smtpErr: any) {
+      console.error('[Email-SMTP] Erro ao enviar e-mail via SMTP:', smtpErr);
+      return { success: false, error: smtpErr?.message || 'Falha no envio via SMTP.' };
     }
-
-    console.log(`[Email] E-mail enviado com sucesso: ID=${data?.id}, Para=${options.to}, Assunto="${options.subject}"`);
-    return { success: true, id: data?.id };
-  } catch (err: any) {
-    console.error('[Email] Falha de comunicação com Resend:', err);
-    return { success: false, error: err?.message || 'Erro de comunicação ao enviar e-mail.' };
   }
+
+  // 2. Caso contrário, se o Resend estiver configurado
+  if (resend) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: fromAddress,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+      });
+
+      if (error) {
+        console.error('[Email-Resend] Erro ao enviar e-mail via Resend:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log(`[Email-Resend] E-mail enviado com sucesso: ID=${data?.id}, Para=${recipient}, Assunto="${options.subject}"`);
+      return { success: true, id: data?.id };
+    } catch (err: any) {
+      console.error('[Email-Resend] Falha de comunicação com Resend:', err);
+      return { success: false, error: err?.message || 'Erro de comunicação ao enviar e-mail via Resend.' };
+    }
+  }
+
+  console.warn('[Email] Nem SMTP (SMTP_USER/SMTP_PASS) nem RESEND_API_KEY estão configurados. E-mail não enviado:', options.subject);
+  return { success: false, error: 'Serviço de e-mail não configurado (configure SMTP ou Resend).' };
 }
 
 /**

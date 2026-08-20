@@ -395,17 +395,35 @@ async function ensureDemoDataset(demoId: string, adminUserId: string | null) {
 async function ensureRootUser() {
   try {
     const rootEmail = process.env.ROOT_EMAIL || 'alexandresobral2004@gmail.com';
-    const existingRoots = await db.select().from(usuarios).where(eq(usuarios.role, 'root'));
     
-    if (existingRoots.length > 0) {
-      const root = existingRoots[0];
-      if (root.email !== rootEmail) {
-        await db.update(usuarios).set({ email: rootEmail }).where(eq(usuarios.id, root.id));
-        console.log(`👑 Root user email updated to: ${rootEmail}`);
+    // 1. Se já existe usuário com este e-mail, garante que é root e está ativo
+    const [existingByEmail] = await db.select().from(usuarios).where(eq(usuarios.email, rootEmail)).limit(1);
+    if (existingByEmail) {
+      if (existingByEmail.role !== 'root' || !existingByEmail.ativo || !existingByEmail.emailVerificado) {
+        await db.update(usuarios).set({
+          role: 'root',
+          ativo: true,
+          emailVerificado: true,
+        }).where(eq(usuarios.id, existingByEmail.id));
+        console.log(`👑 Usuário ${rootEmail} promovido para Root e ativado.`);
       }
       return;
     }
 
+    // 2. Se existe outro usuário com role 'root' mas outro e-mail, atualiza para rootEmail
+    const existingRoots = await db.select().from(usuarios).where(eq(usuarios.role, 'root'));
+    if (existingRoots.length > 0) {
+      const root = existingRoots[0];
+      await db.update(usuarios).set({
+        email: rootEmail,
+        ativo: true,
+        emailVerificado: true,
+      }).where(eq(usuarios.id, root.id));
+      console.log(`👑 Root user email updated to: ${rootEmail}`);
+      return;
+    }
+
+    // 3. Caso não exista nenhum root, cria um novo
     const configuredRootPassword = process.env.ROOT_PASSWORD;
 
     let rootPassword: string;
@@ -428,6 +446,8 @@ async function ensureRootUser() {
       email: rootEmail,
       senha: hashed,
       role: 'root',
+      ativo: true,
+      emailVerificado: true,
     });
     console.log(`👑 Root user created: ${rootEmail}`);
   } catch (e) {

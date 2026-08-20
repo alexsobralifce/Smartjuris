@@ -6,10 +6,11 @@ import { usuarios, logins, permissoesUsuario, escritorios } from '../db/schema.j
 import { and, eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth.js';
-import { loginRateLimiter } from '../middlewares/rateLimit.js';
+import { loginRateLimiter, registroRateLimiter } from '../middlewares/rateLimit.js';
 import { revokeToken } from '../middlewares/revocation.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { getTokenUsageMes } from '../services/usage.js';
+import { parseBody, formatZodError, registroSchema } from '../validation/schemas.js';
 
 const router = Router();
 const SECRET = process.env.JWT_SECRET;
@@ -188,7 +189,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
           sucesso: false,
           motivoFalha: 'Escritório desativado',
         });
-        return res.status(403).json({ error: 'Escritório desativado. Contate o suporte da plataforma.' });
+        return res.status(403).json({ error: 'Seu cadastro ainda não foi ativado pelo administrador da plataforma. Aguarde a habilitação do seu escritório.' });
       }
     }
 
@@ -253,6 +254,70 @@ router.post('/login', loginRateLimiter, async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Erro interno do servidor.' });
+  }
+});
+
+router.post('/registro', registroRateLimiter, async (req, res) => {
+  try {
+    const parsed = parseBody(registroSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { nome, email, senha, oab, oabUf, escritorioNome, cnpj, telefone } = parsed.data;
+
+    // Duplicidade de e-mail (já normalizado em minúsculas pelo Zod)
+    const [existing] = await db.select({ id: usuarios.id }).from(usuarios)
+      .where(eq(usuarios.email, email)).limit(1);
+    if (existing) {
+      return res.status(409).json({ error: 'Este e-mail já está cadastrado.', code: 'EMAIL_DUPLICATE' });
+    }
+
+    const senhaHash = await bcrypt.hash(senha, 12);
+
+    // CNPJ opcional com validação leve de formato (14 dígitos)
+    if (cnpj) {
+      const cnpjDigits = cnpj.replace(/\D/g, '');
+      if (cnpjDigits.length !== 14) {
+        return res.status(400).json({ error: 'CNPJ inválido.' });
+      }
+    }
+
+    // Criação atômica do escritório (pendente de aprovação) + usuário admin
+    const [esc] = await db.transaction(async (tx) => {
+      const [escritorioCriado] = await tx.insert(escritorios).values({
+        nome: escritorioNome,
+        plano: 'basico',
+        isDemo: true,
+        limiteTokensMes: 10000,
+        ativo: false,
+        ...(cnpj ? { cnpj } : {}),
+        ...(telefone ? { telefone } : {}),
+      }).returning();
+      await tx.insert(usuarios).values({
+        nome,
+        email,
+        senha: senhaHash,
+        role: 'admin',
+        ativo: true,
+        oab,
+        oabUf,
+        escritorioId: escritorioCriado.id,
+        precisaTrocarSenha: false,
+      });
+      return [escritorioCriado];
+    });
+
+    await recordAudit(req, 'REGISTRO_ESCRITORIO', {
+      alvoId: esc.id,
+      detalhes: { email, escritorioNome },
+    });
+
+    res.status(201).json({
+      message: 'Cadastro recebido com sucesso. Seu acesso será habilitado em breve pelo administrador da plataforma.',
+    });
+  } catch (error) {
+    console.error('Registro error:', error);
+    res.status(500).json({ error: 'Erro ao realizar o cadastro.' });
   }
 });
 

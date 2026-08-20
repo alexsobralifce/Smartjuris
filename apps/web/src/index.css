@@ -90,3 +90,11 @@ body::-webkit-scrollbar {
   border-radius: 2px;
 }
 
+/* Foco visível acessível — anel âmbar discreto sobre a borda do controle */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+

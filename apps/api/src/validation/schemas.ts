@@ -20,7 +20,7 @@ export const processosPatchSchema = processosSchema.partial();
 
 // --- Peças ---
 export const pecasSchema = z.object({
-  processoId: z.string().optional(),
+  processoId: z.string().optional().nullable(),
   tipo: z.string().min(1),
   area: z.string().min(1),
   cliente: z.string().min(1),
@@ -208,6 +208,18 @@ export const escritorioIdentitySchema = z.object({
   email: z.string().optional(),
   site: z.string().optional(),
   logoUrl: z.string().optional(),
+});
+
+// --- Cadastro self-service (advogado + escritório) ---
+export const registroSchema = z.object({
+  nome: z.string().trim().min(2, 'mínimo 2 caracteres').max(120),
+  email: z.string().trim().toLowerCase().email('e-mail inválido'),
+  senha: z.string().min(8, 'mínimo 8 caracteres').max(72),
+  oab: z.string().trim().min(4, 'OAB obrigatória').max(20),
+  oabUf: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'UF inválida'),
+  escritorioNome: z.string().trim().min(2, 'nome do escritório obrigatório').max(120),
+  cnpj: z.string().trim().optional(),
+  telefone: z.string().trim().optional(),
 });
 
 // --- Créditos (root): adicionar saldo a escritório ou usuário ---

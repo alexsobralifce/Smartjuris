@@ -147,6 +147,8 @@ export const api = {
       sessionStorage.removeItem(RELOAD_GUARD_KEY);
       return authFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     },
+    registro: (data: { nome: string; email: string; senha: string; oab: string; oabUf: string; escritorioNome: string; cnpj?: string; telefone?: string }) =>
+      authFetch('/api/auth/registro', { method: 'POST', body: JSON.stringify(data) }),
     logout: () => authFetch('/api/auth/logout', { method: 'POST' }),
     trocarSenha: (senhaAtual: string, novaSenha: string) =>
       authFetch('/api/auth/trocar-senha', { method: 'POST', body: JSON.stringify({ senhaAtual, novaSenha }) }),
@@ -261,6 +263,8 @@ export const api = {
       bufferedResponse(await authFetch('/api/root/escritorios', { method: 'POST', body: JSON.stringify(data) })),
     editarEscritorio: async (id: string, patch: any) =>
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })),
+    ativarEscritorio: async (id: string) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${id}`, { method: 'PATCH', body: JSON.stringify({ ativo: true }) })),
     desativarEscritorio: async (id: string) =>
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}`, { method: 'DELETE' })),
     excluirEscritorioPermanente: async (id: string) =>

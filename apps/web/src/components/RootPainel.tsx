@@ -11,7 +11,7 @@ interface Escritorio {
   plano: string
   limiteUsuarios: number
   usuariosAtivos: number
-  status: 'ativo' | 'inativo'
+  ativo: boolean
   tokens30d: number
   limiteTokensMes?: number | null
   usoPercentual?: number
@@ -390,6 +390,20 @@ export default function RootPainel() {
     }
   }
 
+  const handleAtivar = async (esc: Escritorio) => {
+    try {
+      const res = await api.raiz.ativarEscritorio(esc.id)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Falha ao ativar escritório.'))
+        return
+      }
+      addToast('success', 'Escritório ativado.')
+      loadEscritorios()
+    } catch {
+      addToast('error', 'Falha ao ativar escritório.')
+    }
+  }
+
   const handleExcluir = async (esc: Escritorio) => {
     try {
       const res = await api.raiz.excluirEscritorioPermanente(esc.id)
@@ -495,13 +509,16 @@ export default function RootPainel() {
                         <Td>
                           <span style={{
                             fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip,
-                            color: esc.status === 'ativo' ? 'var(--color-success)' : 'var(--color-muted)',
-                            background: esc.status === 'ativo' ? 'var(--color-success-light)' : 'var(--color-surface-2)',
-                          }}>{esc.status === 'ativo' ? 'Ativo' : 'Inativo'}</span>
+                            color: esc.ativo ? 'var(--color-success)' : 'var(--color-muted)',
+                            background: esc.ativo ? 'var(--color-success-light)' : 'var(--color-surface-2)',
+                          }}>{esc.ativo ? 'Ativo' : 'Inativo'}</span>
                         </Td>
                         <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {!esc.ativo && (
+                            <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => handleAtivar(esc)}>Ativar</Button>
+                          )}
                           <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
-                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={esc.status !== 'ativo'} onClick={() => setModal({ kind: 'desativar', esc })}>
+                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={!esc.ativo} onClick={() => setModal({ kind: 'desativar', esc })}>
                             Desativar
                           </Button>
                           <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)', marginLeft: 6 }} title="Excluir permanentemente (irreversível)" onClick={() => setModal({ kind: 'excluir', esc })}>
@@ -626,7 +643,7 @@ export default function RootPainel() {
       {activeTab === 'metricas' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14, marginBottom: SPACE.xxl }}>
-            <StatCard label="Escritórios" value={fmtNum(escritorios.length)} sub={`${fmtNum(escritorios.filter(e => e.status === 'ativo').length)} ativos`} />
+            <StatCard label="Escritórios" value={fmtNum(escritorios.length)} sub={`${fmtNum(escritorios.filter(e => e.ativo).length)} ativos`} />
             <StatCard label="Tokens totais (30d)" value={fmtNum(totalTokens)} />
             <StatCard label="Usuários ativos" value={fmtNum(totalUsuarios)} />
           </div>

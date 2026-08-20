@@ -54,6 +54,13 @@ export const loginRateLimiter = createRateLimiter({
   message: 'Muitas tentativas de login. Tente novamente em 15 minutos.',
 });
 
+export const registroRateLimiter = createRateLimiter({
+  prefix: 'registro:',
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: 'Muitas tentativas de cadastro. Tente novamente em 15 minutos.',
+});
+
 export const globalApiLimiter = createRateLimiter({
   prefix: 'global:',
   windowMs: 5 * 60 * 1000, // 5 minutes

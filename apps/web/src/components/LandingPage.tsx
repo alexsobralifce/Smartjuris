@@ -83,10 +83,10 @@ function CadastroSucesso({ onBackToLogin }: { onBackToLogin: () => void }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-foreground)' }}>
-          E-mail Verificado com Sucesso!
+          Cadastro concluído!
         </div>
         <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-          Seu cadastro foi registrado e o administrador da plataforma já foi notificado para liberar seu acesso e creditar seus tokens de IA.
+          Seu escritório foi registrado. O administrador da plataforma vai liberar seu acesso e creditar seus tokens de IA.
         </div>
       </div>
 
@@ -101,8 +101,8 @@ function CadastroSucesso({ onBackToLogin }: { onBackToLogin: () => void }) {
         textAlign: 'left',
         width: '100%',
       }}>
-        <div style={{ fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>📧 Próximo Passo:</div>
-        Você receberá um e-mail assim que seu escritório for aprovado com a quantidade de créditos disponíveis para geração de peças e consultas no sistema.
+        <div style={{ fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>📧 Acompanhe a liberação:</div>
+        Assim que o administrador aprovar seu escritório e creditar os tokens, você poderá entrar. Verifique sua caixa de entrada para saber quando seu acesso for liberado.
       </div>
 
       <Button onClick={onBackToLogin} style={{ width: '100%', padding: '12px' }}>
@@ -468,7 +468,7 @@ function CadastroForm({
       </section>
 
       <Button type="submit" disabled={loading} style={{ width: '100%', padding: '13px' }}>
-        {loading ? 'Enviando código de confirmação…' : 'Avançar e Receber Código por E-mail →'}
+        {loading ? 'Cadastrando…' : 'Concluir Cadastro →'}
       </Button>
 
       <p style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5, margin: 0, textAlign: 'center' }}>

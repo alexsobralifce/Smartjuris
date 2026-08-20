@@ -2,22 +2,27 @@
  * Renderização de peças jurídicas em PDF (pdfkit) e DOCX (docx) com papel
  * timbrado do escritório. As funções sempre retornam um Buffer não-vazio e
  * nunca lançam exceção por causa de logo inválido (imagem é ignorada).
+ *
+ * O corpo é renderizado a partir do modelo intermediário `BlocoRico[]`
+ * (paragraph/heading/listItem com runs formatados: negrito, itálico,
+ * sublinhado, tamanho e alinhamento), preservando o papel timbrado.
  */
 import PDFDocument from 'pdfkit';
 import {
+  AlignmentType,
   Document,
+  Footer,
+  Header,
+  HeadingLevel,
+  ImageRun,
+  LevelFormat,
+  Packer,
+  PageNumber,
   Paragraph,
   TextRun,
-  Header,
-  Footer,
-  Packer,
-  AlignmentType,
-  PageNumber,
-  ImageRun,
-  HeadingLevel,
-  TabStopType,
+  convertInchesToTwip,
 } from 'docx';
-import type { EscritorioIdentity, PecaDocumento } from './letterhead.js';
+import type { AlinhamentoRico, EscritorioIdentity, PecaDocumento, RunRico } from './letterhead.js';
 
 const MARGEM_ESQUERDA = 64;
 const MARGEM_DIREITA = 64;
@@ -51,6 +56,59 @@ function nomePapelTimbrado(esc: EscritorioIdentity): string {
 function base64DeDataUri(logoUrl: string | null | undefined): string {
   if (typeof logoUrl !== 'string' || !logoUrl.startsWith('data:image')) return '';
   return logoUrl.split(',')[1] ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de formatação rica
+// ---------------------------------------------------------------------------
+
+/** Fonte Times correspondente às marcas do run (bold/italic). */
+function fonteRica(run: RunRico): string {
+  if (run.bold && run.italic) return 'Times-BoldItalic';
+  if (run.bold) return 'Times-Bold';
+  if (run.italic) return 'Times-Italic';
+  return 'Times-Roman';
+}
+
+/** Mapeia alinhamento do editor para o enum do docx (undefined → LEFT). */
+function mapAlign(a?: AlinhamentoRico): (typeof AlignmentType)[keyof typeof AlignmentType] {
+  if (a === 'center') return AlignmentType.CENTER;
+  if (a === 'right') return AlignmentType.RIGHT;
+  if (a === 'justify') return AlignmentType.JUSTIFIED;
+  return AlignmentType.LEFT;
+}
+
+/** Converte um run rico em TextRun do docx (size em half-points). */
+function toTextRun(r: RunRico): TextRun {
+  return new TextRun({
+    text: r.text,
+    bold: r.bold,
+    italics: r.italic,
+    underline: r.underline ? {} : undefined,
+    size: (r.size ?? 12) * 2,
+  });
+}
+
+/**
+ * Expande os runs de um bloco em TextRuns do docx, quebrando '\n'
+ * (proveniente de hardBreak no editor) em quebras de linha reais.
+ */
+function textRunsDoBloco(runs: RunRico[]): TextRun[] {
+  const resultado: TextRun[] = [];
+  for (const r of runs) {
+    const partes = r.text.split('\n');
+    partes.forEach((parte, i) => {
+      if (i > 0) resultado.push(new TextRun({ break: 1 }));
+      resultado.push(toTextRun({ ...r, text: parte }));
+    });
+  }
+  return resultado;
+}
+
+/** HeadingLevel do docx para o nível 1-6 do editor. */
+function headingDeNivel(nivel: number): (typeof HeadingLevel)[keyof typeof HeadingLevel] {
+  const nivelLimitado = Math.max(1, Math.min(6, nivel));
+  return HeadingLevel[`HEADING_${nivelLimitado}` as keyof typeof HeadingLevel];
 }
 
 // ---------------------------------------------------------------------------
@@ -139,25 +197,55 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
   pdf.text(doc.titulo, MARGEM_ESQUERDA, pdf.y, { width: larguraUtil, align: 'center' });
   pdf.moveDown(0.8);
 
-  // Endereçamento (negrito, caixa alta)
-  if (doc.enderecamento) {
-    pdf.font('Times-Bold').fontSize(12);
-    pdf.text(doc.enderecamento.toUpperCase(), MARGEM_ESQUERDA, pdf.y, {
-      width: larguraUtil,
-      align: 'justify',
-      lineGap: 6,
-    });
-    pdf.moveDown(0.6);
-  }
+  // Corpo (blocos ricos)
+  for (const bloco of doc.blocos) {
+    const runs = bloco.runs.length > 0 ? bloco.runs : [{ text: '' }];
 
-  // Corpo
-  pdf.font('Times-Roman').fontSize(12);
-  for (const paragrafo of doc.corpo) {
-    pdf.text(paragrafo, MARGEM_ESQUERDA, pdf.y, {
-      width: larguraUtil,
-      align: 'justify',
-      lineGap: 6,
-    });
+    if (bloco.type === 'heading') {
+      pdf.moveDown(0.5);
+      const tamanho = bloco.level === 1 ? 16 : bloco.level === 2 ? 14 : 13;
+      runs.forEach((run, idx) => {
+        const isLast = idx === runs.length - 1;
+        pdf.font('Times-Bold').fontSize(run.size ?? tamanho);
+        pdf.text(run.text, MARGEM_ESQUERDA, pdf.y, {
+          continued: !isLast,
+          underline: run.underline,
+          width: larguraUtil,
+          ...(bloco.align ? { align: bloco.align } : {}),
+        });
+      });
+    } else if (bloco.type === 'listItem') {
+      const prefixo = bloco.ordered ? `${bloco.index ?? 1}. ` : '• ';
+      pdf.font('Times-Roman').fontSize(12);
+      pdf.text(prefixo, MARGEM_ESQUERDA, pdf.y, { continued: true, width: larguraUtil });
+      runs.forEach((run, idx) => {
+        const isLast = idx === runs.length - 1;
+        pdf.font(fonteRica(run)).fontSize(run.size ?? 12);
+        pdf.text(run.text, MARGEM_ESQUERDA, pdf.y, {
+          continued: !isLast,
+          underline: run.underline,
+          lineGap: 6,
+          width: larguraUtil,
+          indent: isLast ? 18 : undefined,
+          ...(bloco.align ? { align: bloco.align } : {}),
+        });
+      });
+    } else {
+      // paragraph
+      runs.forEach((run, idx) => {
+        const isLast = idx === runs.length - 1;
+        pdf.font(fonteRica(run)).fontSize(run.size ?? 12);
+        pdf.text(run.text, MARGEM_ESQUERDA, pdf.y, {
+          continued: !isLast,
+          underline: run.underline,
+          lineGap: 6,
+          width: larguraUtil,
+          ...(bloco.align ? { align: bloco.align } : {}),
+        });
+      });
+    }
+
+    pdf.moveDown(0.3);
   }
 
   // Assinatura (alinhada à direita)
@@ -248,25 +336,81 @@ export async function renderDocx(doc: PecaDocumento): Promise<Buffer> {
     })
   );
 
-  // Endereçamento (negrito, caixa alta)
-  if (doc.enderecamento) {
-    children.push(
-      new Paragraph({
-        children: [new TextRun({ text: doc.enderecamento.toUpperCase(), bold: true })],
-        spacing: { after: 200 },
-      })
-    );
-  }
+  // Numeração real (apenas se houver ao menos uma lista ordenada)
+  const temListaNumerada = doc.blocos.some((b) => b.type === 'listItem' && b.ordered);
+  const configNumbering = temListaNumerada
+    ? {
+        config: [
+          {
+            reference: 'lista-numerada',
+            levels: [
+              {
+                level: 0,
+                format: LevelFormat.DECIMAL,
+                text: '%1.',
+                alignment: AlignmentType.START,
+                style: {
+                  paragraph: {
+                    indent: {
+                      left: convertInchesToTwip(0.5),
+                      hanging: convertInchesToTwip(0.25),
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      }
+    : undefined;
 
-  // Corpo
-  for (const paragrafo of doc.corpo) {
-    children.push(
-      new Paragraph({
-        children: [new TextRun({ text: paragrafo })],
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 200, line: 360 },
-      })
-    );
+  // Corpo (blocos ricos)
+  let instanciaLista = 0;
+  let listaOrdenadaAtiva = false;
+  for (const bloco of doc.blocos) {
+    if (bloco.type === 'heading') {
+      listaOrdenadaAtiva = false;
+      children.push(
+        new Paragraph({
+          heading: headingDeNivel(bloco.level ?? 1),
+          alignment: mapAlign(bloco.align),
+          children: textRunsDoBloco(bloco.runs),
+        })
+      );
+    } else if (bloco.type === 'listItem') {
+      if (bloco.ordered) {
+        if (!listaOrdenadaAtiva) {
+          instanciaLista += 1;
+          listaOrdenadaAtiva = true;
+        }
+        children.push(
+          new Paragraph({
+            numbering: { reference: 'lista-numerada', level: 0, instance: instanciaLista },
+            children: textRunsDoBloco(bloco.runs),
+            spacing: { after: 80 },
+          })
+        );
+      } else {
+        listaOrdenadaAtiva = false;
+        children.push(
+          new Paragraph({
+            bullet: { level: bloco.level ?? 0 },
+            children: textRunsDoBloco(bloco.runs),
+            spacing: { after: 80 },
+          })
+        );
+      }
+    } else {
+      // paragraph
+      listaOrdenadaAtiva = false;
+      children.push(
+        new Paragraph({
+          alignment: mapAlign(bloco.align),
+          children: textRunsDoBloco(bloco.runs),
+          spacing: { after: 200, line: 360 },
+        })
+      );
+    }
   }
 
   // Assinatura (alinhada à direita)
@@ -288,6 +432,7 @@ export async function renderDocx(doc: PecaDocumento): Promise<Buffer> {
   }
 
   const documento = new Document({
+    numbering: configNumbering,
     sections: [
       {
         properties: {},

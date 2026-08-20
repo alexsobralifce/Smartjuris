@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
-import { api, getErrorMessage } from '../api/client'
+import { api, getErrorMessage, Decision } from '../api/client'
 import { getApiBaseUrl } from '../api/config'
 import Toast, { ToastMessage } from './Toast'
+import Decisoes from './Decisoes'
+import EditorRico, { plainToHtml } from './EditorRico'
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
 
@@ -109,19 +111,62 @@ export default function GeradorPecas() {
   const [textoEmGeracao, setTextoEmGeracao] = useState('')
   const [fontesRecuperadas, setFontesRecuperadas] = useState<any[]>([])
 
+  // Catálogo de modelos do RAG e edição rica da peça
+  const [modelos, setModelos] = useState<any[]>([])
+  const [pecaSalvaId, setPecaSalvaId] = useState('')
+  const [editJson, setEditJson] = useState<any>(null)
+
   const etapas = ['Selecionar Tipo', 'Dados do Caso', 'Geração IA', 'Revisão']
   const etapaIndex = ['tipo', 'dados', 'gerando', 'revisao'].indexOf(step)
 
-  // Carrega lista de processos e clientes ao iniciar
+  // Catálogo de modelos: tipos por área vêm da API (cada item tem `.tipo` e `.modelo`).
+  const areaCatalogo = modelos.find(a => a.nome === area)
+  const tiposDaArea: any[] = (areaCatalogo?.tipos && areaCatalogo.tipos.length > 0)
+    ? areaCatalogo.tipos
+    : (tiposPorArea[area] || []).map(t => ({ tipo: t }))
+  const modeloSelecionado = areaCatalogo?.tipos?.find((t: any) => t.tipo === tipo)?.modelo
+
+  // Carrega lista de processos, clientes e catálogo de modelos ao iniciar
   useEffect(() => {
     Promise.all([
       api.processos.list(),
-      api.clientes.list()
-    ]).then(([pData, cData]) => {
+      api.clientes.list(),
+      api.rag.modelos(),
+    ]).then(([pData, cData, mData]) => {
       if (Array.isArray(pData)) setProcessosList(pData)
       if (Array.isArray(cData)) setClientesList(cData)
+      const areas = (mData as any)?.areas
+      if (Array.isArray(areas)) setModelos(areas)
     }).catch(err => console.error('Erro ao carregar dados:', err))
   }, [])
+
+  const [showDecisoesModal, setShowDecisoesModal] = useState(false)
+
+  // Importa jurisprudência selecionada da busca externa
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('smartjuris_selected_jurisprudencia')
+      if (stored) {
+        const arr: Decision[] = JSON.parse(stored)
+        if (arr.length > 0) {
+          const item = arr[arr.length - 1]
+          const citation = `\n\n[JURISPRUDÊNCIA / PRECEDENTE - ${item.court?.toUpperCase() || 'TRIBUNAL'}]:\n${item.process_type || 'Decisão'} nº ${item.process_number} (Rel. ${item.rapporteur || 'N/A'}, Julg. ${item.trial_date || 'N/A'})\nEmenta: "${item.excerpt || item.summary || ''}"`
+          setDadosCaso(prev => prev.includes(item.process_number) ? prev : (prev ? prev + citation : citation))
+          localStorage.removeItem('smartjuris_selected_jurisprudencia')
+          addToast('info', `Jurisprudência do ${item.court?.toUpperCase() || 'Tribunal'} anexada ao caso.`)
+        }
+      }
+    } catch (e) {
+      console.warn(e)
+    }
+  }, [])
+
+  const handleSelectJurisprudenciaParaCaso = (d: Decision) => {
+    const citation = `\n\n[JURISPRUDÊNCIA / PRECEDENTE - ${d.court?.toUpperCase() || 'TRIBUNAL'}]:\n${d.process_type || 'Decisão'} nº ${d.process_number} (Rel. ${d.rapporteur || 'N/A'}, Julg. ${d.trial_date || 'N/A'})\nEmenta: "${d.excerpt || d.summary || ''}"`
+    setDadosCaso(prev => prev.includes(d.process_number) ? prev : (prev ? prev + citation : citation))
+    setShowDecisoesModal(false)
+    addToast('success', 'Jurisprudência anexada aos fatos e fundamentação!')
+  }
 
   // Quando o usuário seleciona um processo, preenche os campos automaticamente
   const handleSelectProcesso = (procId: string) => {
@@ -143,10 +188,37 @@ export default function GeradorPecas() {
     setDadosCaso(tese.texto)
   }
 
+  const handleBaixar = async (format: 'pdf' | 'docx') => {
+    if (!pecaSalvaId) return
+    try {
+      await api.pecas.export(pecaSalvaId, format)
+    } catch (e) {
+      console.error(e)
+      addToast('error', 'Falha ao baixar o arquivo.')
+    }
+  }
+
+  const handleSalvarEdicoes = async () => {
+    if (!pecaSalvaId || !editJson) return
+    try {
+      const res = await api.pecas.update(pecaSalvaId, { conteudoRico: editJson })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao salvar edições.'))
+        return
+      }
+      addToast('success', 'Edições salvas.')
+    } catch (e) {
+      console.error(e)
+      addToast('error', 'Erro ao salvar edições.')
+    }
+  }
+
   useEffect(() => {
     if (step === 'gerando') {
       const run = async () => {
         setTextoEmGeracao('');
+        setPecaSalvaId('');
+        setEditJson(null);
         try {
           const apiBase = getApiBaseUrl();
           const response = await fetch(`${apiBase}/api/rag/generate`, {
@@ -231,6 +303,8 @@ export default function GeradorPecas() {
                   if (!res.ok) {
                     throw new Error(await getErrorMessage(res, 'Erro ao salvar a peça gerada.'));
                   }
+                  const created = await res.json().catch(() => ({}));
+                  setPecaSalvaId(created?.id ?? '');
                   setTimeout(() => setStep('revisao'), 800);
                 }
               }
@@ -331,18 +405,38 @@ export default function GeradorPecas() {
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>Tipo de Peça — {area}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {(tiposPorArea[area] || []).map(t => (
-                  <button key={t} onClick={() => setTipo(t)} style={{
-                    padding: '16px 18px', borderRadius: 8, textAlign: 'left',
-                    border: '1px solid', cursor: 'pointer',
-                    borderColor: tipo === t ? 'var(--color-primary)' : 'var(--color-border)',
-                    background: tipo === t ? 'var(--color-badge-tint)' : 'var(--color-surface)',
-                    color: tipo === t ? 'var(--color-primary)' : 'var(--color-foreground)',
-                    fontWeight: tipo === t ? 600 : 400, fontSize: 13,
-                    transition: 'all 0.12s',
-                  }}>{t}</button>
-                ))}
+                {tiposDaArea.map(t => {
+                  const tName = t.tipo ?? t
+                  return (
+                    <button key={tName} onClick={() => setTipo(tName)} style={{
+                      padding: '16px 18px', borderRadius: 8, textAlign: 'left',
+                      border: '1px solid', cursor: 'pointer',
+                      borderColor: tipo === tName ? 'var(--color-primary)' : 'var(--color-border)',
+                      background: tipo === tName ? 'var(--color-badge-tint)' : 'var(--color-surface)',
+                      color: tipo === tName ? 'var(--color-primary)' : 'var(--color-foreground)',
+                      fontWeight: tipo === tName ? 600 : 400, fontSize: 13,
+                      transition: 'all 0.12s',
+                    }}>{tName}</button>
+                  )
+                })}
               </div>
+
+              {/* Prévia da estrutura do modelo selecionado */}
+              {modeloSelecionado && (
+                <div style={{ marginTop: 18, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>
+                    📚 Estrutura do modelo
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(modeloSelecionado.secoes || []).map((s: any, idx: number) => (
+                      <div key={idx} style={{ fontSize: 12, lineHeight: 1.5 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{s.titulo}</div>
+                        {s.instrucao && <div style={{ color: 'var(--color-muted)', fontSize: 11, marginTop: 2 }}>{s.instrucao}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Playbooks / Teses Rápidas Sugeridas */}
               {tesesPlaybook[area] && tesesPlaybook[area].length > 0 && (
@@ -490,11 +584,32 @@ export default function GeradorPecas() {
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)' }}>
                   Fatos do Caso e Fundamentação
                 </label>
-                {tesesPlaybook[area] && (
-                  <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>
-                    💡 Dica: Modelos disponíveis
-                  </span>
-                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowDecisoesModal(true)}
+                    style={{
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-accent)',
+                      color: 'var(--color-primary)',
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <span>🏛️ Pesquisar Decisões nos Tribunais</span>
+                  </button>
+                  {tesesPlaybook[area] && (
+                    <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 500 }}>
+                      💡 Dica: Modelos disponíveis
+                    </span>
+                  )}
+                </div>
               </div>
               <textarea 
                 value={dadosCaso}
@@ -579,7 +694,7 @@ export default function GeradorPecas() {
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(pecaConteudo)
@@ -594,11 +709,47 @@ export default function GeradorPecas() {
               >
                 {copied ? '✓ Copiado!' : '📋 Copiar Texto'}
               </button>
+              <button
+                onClick={() => handleBaixar('pdf')}
+                disabled={!pecaSalvaId}
+                style={{
+                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                  padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: pecaSalvaId ? 'pointer' : 'not-allowed',
+                  opacity: pecaSalvaId ? 1 : 0.5
+                }}
+              >
+                Baixar PDF
+              </button>
+              <button
+                onClick={() => handleBaixar('docx')}
+                disabled={!pecaSalvaId}
+                style={{
+                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                  padding: '8px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: pecaSalvaId ? 'pointer' : 'not-allowed',
+                  opacity: pecaSalvaId ? 1 : 0.5
+                }}
+              >
+                Baixar DOCX
+              </button>
+              <button
+                onClick={handleSalvarEdicoes}
+                disabled={!pecaSalvaId || !editJson}
+                style={{
+                  background: 'var(--color-success)', color: '#fff', border: 'none',
+                  padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  cursor: pecaSalvaId && editJson ? 'pointer' : 'not-allowed',
+                  opacity: pecaSalvaId && editJson ? 1 : 0.5
+                }}
+              >
+                Salvar edições
+              </button>
               <button 
                 onClick={() => {
                   setStep('tipo')
                   setDadosCaso('')
                   setProcessoSelecionadoId('')
+                  setPecaSalvaId('')
+                  setEditJson(null)
                 }}
                 style={{
                   background: 'var(--color-primary)', color: '#fff', border: 'none',
@@ -611,12 +762,12 @@ export default function GeradorPecas() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'start' }}>
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 8, padding: 32, fontFamily: 'var(--font-sans)', fontSize: 14,
-              lineHeight: 1.7, color: 'var(--color-foreground)', whiteSpace: 'pre-wrap', maxHeight: '650px', overflowY: 'auto'
-            }}>
-              {pecaConteudo}
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
+              <EditorRico
+                initialContent={editJson ?? plainToHtml(pecaConteudo)}
+                onChange={setEditJson}
+                minHeight={420}
+              />
             </div>
 
             {/* Painel Lateral: Fontes e Conformidade */}
@@ -647,6 +798,50 @@ export default function GeradorPecas() {
           </div>
         </div>
       )}
+      {/* Modal de Pesquisa de Decisões dos Tribunais */}
+      {showDecisoesModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.65)',
+          zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+          backdropFilter: 'blur(3px)',
+        }}>
+          <div style={{
+            background: 'var(--color-background)',
+            width: '100%', maxWidth: 1050, maxHeight: '90vh',
+            borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            border: '1px solid var(--color-border)',
+          }}>
+            <div style={{
+              padding: '16px 24px',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'var(--color-surface)',
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>Pesquisar Jurisprudência nos Tribunais</div>
+                <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>Busque decisões nos 16 tribunais e clique em "Usar na Peça" para anexar aos fatos</div>
+              </div>
+              <button
+                onClick={() => setShowDecisoesModal(false)}
+                style={{
+                  background: 'var(--color-surface-2)', border: 'none',
+                  width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
+                  fontWeight: 700, fontSize: 14, color: 'var(--color-foreground)',
+                }}
+              >✕</button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
+              <Decisoes onSelectForPeca={handleSelectJurisprudenciaParaCaso} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Componente Toast de Mensageria Flutuante */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>

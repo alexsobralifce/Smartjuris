@@ -20,10 +20,32 @@ export interface EscritorioIdentity {
   logoUrl?: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Modelo intermediário de blocos ricos (proveniente do editor TipTap)
+// ---------------------------------------------------------------------------
+
+export interface RunRico {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  size?: number; // size em pontos (pt)
+}
+
+export type AlinhamentoRico = 'left' | 'center' | 'right' | 'justify';
+
+export interface BlocoRico {
+  type: 'paragraph' | 'heading' | 'listItem';
+  align?: AlinhamentoRico;
+  level?: number; // heading: 1-6; listItem: aninhamento (use 0)
+  ordered?: boolean; // listItem numerada (true) vs marcador (false)
+  index?: number; // listItem numerada: número a exibir
+  runs: RunRico[];
+}
+
 export interface PecaDocumento {
   titulo: string;
-  enderecamento: string;
-  corpo: string[];
+  blocos: BlocoRico[];
   numeroProcesso?: string;
   valorCausa?: string;
   dataLocal: string;
@@ -101,39 +123,125 @@ function mapearEscritorio(r: any): EscritorioIdentity {
 }
 
 /**
+ * Extrai os runs formatados de um nó de conteúdo ProseMirror/TipTap.
+ * - nós `text` → run com marcas bold/italic/underline e tamanho (textStyle).
+ * - nós `hardBreak` → '\n' (anexado ao run anterior ou como run próprio).
+ */
+function runsDoConteudo(content: any[] | undefined): RunRico[] {
+  if (!Array.isArray(content)) return [];
+  const runs: RunRico[] = [];
+  for (const node of content) {
+    if (!node || typeof node !== 'object') continue;
+    if (node.type === 'text') {
+      const text = typeof node.text === 'string' ? node.text : '';
+      const marks: any[] = Array.isArray(node.marks) ? node.marks : [];
+      const temMarca = (t: string): boolean => marks.some((m) => m?.type === t);
+      const textStyle = marks.find((m) => m?.type === 'textStyle');
+      let size: number | undefined;
+      const fontSize: unknown = textStyle?.attrs?.fontSize;
+      if (typeof fontSize === 'string') {
+        const num = Number.parseInt(fontSize, 10);
+        if (!Number.isNaN(num)) size = num;
+      }
+      runs.push({
+        text,
+        bold: temMarca('bold'),
+        italic: temMarca('italic'),
+        underline: temMarca('underline'),
+        size,
+      });
+    } else if (node.type === 'hardBreak') {
+      if (runs.length > 0) {
+        runs[runs.length - 1].text += '\n';
+      } else {
+        runs.push({ text: '\n' });
+      }
+    } else if (node.type === 'bulletList' || node.type === 'orderedList') {
+      // Não achata sublistas aninhadas dentro de um item — ignoradas aqui.
+      continue;
+    } else if (Array.isArray(node.content)) {
+      // Desce em blocos intermediários (ex.: `paragraph` que embrulha o texto
+      // dentro de um `listItem`), coletando os runs de texto recursivamente.
+      runs.push(...runsDoConteudo(node.content));
+    }
+  }
+  return runs;
+}
+
+/**
+ * Converte o JSON do editor TipTap (ProseMirror) em `BlocoRico[]`.
+ * Suporta paragraph, heading (1-6), bulletList e orderedList (com `start`).
+ */
+export function tipTapParaBlocos(json: any): BlocoRico[] {
+  if (!json || !Array.isArray(json.content)) return [];
+  const blocos: BlocoRico[] = [];
+  for (const node of json.content) {
+    if (!node || typeof node !== 'object') continue;
+    const type: string = node.type;
+    const align = node.attrs?.textAlign as AlinhamentoRico | undefined;
+    if (type === 'paragraph') {
+      blocos.push({ type: 'paragraph', align, runs: runsDoConteudo(node.content) });
+    } else if (type === 'heading') {
+      blocos.push({
+        type: 'heading',
+        level: node.attrs?.level ?? 1,
+        align,
+        runs: runsDoConteudo(node.content),
+      });
+    } else if (type === 'bulletList' || type === 'orderedList') {
+      const ordered = type === 'orderedList';
+      const start = ordered ? Number(node.attrs?.start ?? 1) : 1;
+      const items: any[] = Array.isArray(node.content) ? node.content : [];
+      items.forEach((item, i) => {
+        if (!item || typeof item !== 'object') return;
+        blocos.push({
+          type: 'listItem',
+          ordered,
+          level: 0,
+          index: ordered ? start + i : undefined,
+          runs: runsDoConteudo(item.content),
+        });
+      });
+    }
+  }
+  return blocos;
+}
+
+/**
  * Monta o objeto `PecaDocumento` usado pelos renderizadores PDF/DOCX.
  * Recebe rows crus do Drizzle (qualquer formato) e normaliza.
+ * - Se `args.conteudoRico` (JSON do TipTap) existir, gera `blocos` ricos.
+ * - Senão, converte o texto puro `peca.conteudo` em blocos paragraph.
  */
 export function montarPecaDocumento(args: {
   peca: any;
   escritorio: any;
   advogado: any;
   processo?: any;
+  conteudoRico?: any;
 }): PecaDocumento {
   const { peca, escritorio, advogado, processo } = args;
   const titulo = String(peca?.tipo || 'Petição').toUpperCase();
 
-  const conteudo = String(peca?.conteudo ?? '');
-  const paragrafos = conteudo
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-
-  let enderecamento = '';
-  let corpo: string[];
-  if (paragrafos.length >= 2) {
-    enderecamento = paragrafos[0];
-    corpo = paragrafos.slice(1);
-  } else if (paragrafos.length === 1) {
-    corpo = [paragrafos[0]];
+  let blocos: BlocoRico[];
+  const conteudoRico = args.conteudoRico ?? peca?.conteudoRico;
+  if (conteudoRico && typeof conteudoRico === 'object' && Array.isArray(conteudoRico.content)) {
+    blocos = tipTapParaBlocos(conteudoRico);
   } else {
-    corpo = [];
+    const conteudo = String(peca?.conteudo ?? '');
+    blocos = conteudo
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .map((paragrafo) => ({
+        type: 'paragraph' as const,
+        runs: [{ text: paragrafo }],
+      }));
   }
 
   const doc: PecaDocumento = {
     titulo,
-    enderecamento,
-    corpo,
+    blocos,
     dataLocal: formatarDataLocal(escritorio?.cidade),
     advogadoNome: advogado?.nome || 'Advogado',
     advogadoOab:

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import type { Peca } from '@lexia/shared'
 import Toast, { ToastMessage } from './Toast'
+import EditorRico, { plainToHtml } from './EditorRico'
 
 const pecaTexto = `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA 3ª VARA DO TRABALHO...
 
@@ -20,6 +21,7 @@ export default function Validacao() {
   const [selected, setSelected] = useState<Peca | null>(null)
   const [comment, setComment] = useState('')
   const [downloading, setDownloading] = useState<'pdf' | 'docx' | null>(null)
+  const [editJson, setEditJson] = useState<any>(null)
 
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
@@ -42,6 +44,9 @@ export default function Validacao() {
   }
 
   useEffect(() => { reload() }, [])
+
+  // Ao trocar de peça, descarta edições do editor anterior.
+  useEffect(() => { setEditJson(null) }, [selected?.id])
 
   const handle = async (action: 'aprovado' | 'reprovado') => {
     if (!selected) return
@@ -73,6 +78,40 @@ export default function Validacao() {
       setDownloading(null)
     }
   }
+
+  const handleSalvarEdicoes = async () => {
+    if (!selected || !editJson) return
+    try {
+      const res = await api.pecas.update(selected.id, { conteudoRico: editJson })
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao salvar edições.'))
+        return
+      }
+      addToast('success', 'Edições salvas.')
+    } catch (e) {
+      console.error(e)
+      addToast('error', 'Erro ao salvar edições.')
+    }
+  }
+
+  const renderDownloadButtons = () => (
+    <>
+      <button
+        onClick={() => handleDownload('pdf')}
+        disabled={downloading !== null}
+        style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: downloading !== null ? 'not-allowed' : 'pointer', opacity: downloading !== null ? 0.5 : 1 }}
+      >
+        {downloading === 'pdf' ? 'Baixando…' : 'Baixar PDF'}
+      </button>
+      <button
+        onClick={() => handleDownload('docx')}
+        disabled={downloading !== null}
+        style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-foreground)', fontSize: 12, fontWeight: 600, cursor: downloading !== null ? 'not-allowed' : 'pointer', opacity: downloading !== null ? 0.5 : 1 }}
+      >
+        {downloading === 'docx' ? 'Baixando…' : 'Baixar DOCX'}
+      </button>
+    </>
+  )
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -122,13 +161,21 @@ export default function Validacao() {
               </div>
             </div>
             {selected.status === 'revisao' && (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button onClick={() => handle('reprovado')} style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', fontSize: 12, cursor: 'pointer', color: 'var(--color-danger)' }}>
                   ✕ Reprovar
+                </button>
+                <button
+                  onClick={handleSalvarEdicoes}
+                  disabled={!editJson}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--color-success)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: editJson ? 'pointer' : 'not-allowed', opacity: editJson ? 1 : 0.5 }}
+                >
+                  Salvar edições
                 </button>
                 <button onClick={() => handle('aprovado')} style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   ✓ Aprovar para Protocolo
                 </button>
+                {renderDownloadButtons()}
               </div>
             )}
             {(selected.status === 'aprovado' || selected.status === 'protocolado') && (
@@ -136,20 +183,7 @@ export default function Validacao() {
                 {selected.status === 'aprovado' && (
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-success)', background: 'var(--color-success-light)', padding: '6px 14px', borderRadius: 6 }}>✓ Aprovado</span>
                 )}
-                <button
-                  onClick={() => handleDownload('pdf')}
-                  disabled={downloading !== null}
-                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: downloading !== null ? 'not-allowed' : 'pointer', opacity: downloading !== null ? 0.5 : 1 }}
-                >
-                  {downloading === 'pdf' ? 'Baixando…' : 'Baixar PDF'}
-                </button>
-                <button
-                  onClick={() => handleDownload('docx')}
-                  disabled={downloading !== null}
-                  style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-foreground)', fontSize: 12, fontWeight: 600, cursor: downloading !== null ? 'not-allowed' : 'pointer', opacity: downloading !== null ? 0.5 : 1 }}
-                >
-                  {downloading === 'docx' ? 'Baixando…' : 'Baixar DOCX'}
-                </button>
+                {renderDownloadButtons()}
               </div>
             )}
           </div>
@@ -162,11 +196,14 @@ export default function Validacao() {
                   <span><strong>Revisão humana obrigatória.</strong> Esta minuta foi gerada por IA e deve ser revisada antes do protocolo.</span>
                 </div>
               )}
-              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '28px 32px', fontFamily: 'Georgia, serif', fontSize: 13, lineHeight: 2, whiteSpace: 'pre-wrap' }}>
-                {selected.conteudo || pecaTexto}
-                <div style={{ marginTop: 24, borderTop: '1px dashed var(--color-border)', paddingTop: 16, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-muted)' }}>
-                  [Gerado por IA — modelo={selected.modelo}, fontes={selected.fontes}, status={selected.status}]
-                </div>
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20 }}>
+                <EditorRico
+                  key={selected.id}
+                  initialContent={(selected as any).conteudoRico ?? plainToHtml(selected.conteudo || pecaTexto)}
+                  onChange={setEditJson}
+                  readOnly={selected.status !== 'revisao'}
+                  minHeight={360}
+                />
               </div>
               {selected.status === 'revisao' && (
                 <div style={{ marginTop: 16 }}>

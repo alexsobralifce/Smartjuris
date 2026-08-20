@@ -43,6 +43,7 @@ router.post('/', async (req, res) => {
       modelo: data.modelo,
       fontes: data.fontes,
       conteudo: data.conteudo,
+      conteudoRico: data.conteudoRico ?? null,
       usuarioId: (req as any).user?.id ?? null,
       escritorioId,
     }).returning();
@@ -89,8 +90,8 @@ router.get('/:id/export', async (req, res) => {
     if (!canMutateTenant(req, peca.escritorioId, peca.usuarioId)) {
       return res.status(403).json({ error: 'Acesso negado.' });
     }
-    if (peca.status !== 'aprovado' && peca.status !== 'protocolado') {
-      return res.status(403).json({ error: 'Apenas peças aprovadas podem ser exportadas.' });
+    if (peca.status === 'reprovado') {
+      return res.status(403).json({ error: 'Peça reprovada não pode ser exportada.' });
     }
 
     const format = req.query.format === 'docx' ? 'docx' : 'pdf';
@@ -120,7 +121,7 @@ router.get('/:id/export', async (req, res) => {
       if (row) processo = row;
     }
 
-    const doc = montarPecaDocumento({ peca, escritorio: escritorio ?? {}, advogado, processo });
+    const doc = montarPecaDocumento({ peca, escritorio: escritorio ?? {}, advogado, processo, conteudoRico: peca.conteudoRico });
     const buffer = format === 'docx' ? await renderDocx(doc) : await renderPdf(doc);
 
     if (format === 'docx') {
@@ -154,7 +155,7 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     // Peças aprovadas/protocoladas são congeladas: conteúdo não pode ser alterado
-    if ((existente.status === 'aprovado' || existente.status === 'protocolado') && parsed.data.conteudo !== undefined) {
+    if ((existente.status === 'aprovado' || existente.status === 'protocolado') && (parsed.data.conteudo !== undefined || parsed.data.conteudoRico !== undefined)) {
       return res.status(403).json({ error: 'Peça aprovada ou protocolada não pode ter conteúdo alterado.' });
     }
     const atualizada = await db.update(pecas).set({

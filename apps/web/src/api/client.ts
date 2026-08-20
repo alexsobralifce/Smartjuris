@@ -12,6 +12,40 @@ export type User = {
   limiteTokensMes?: number | null;
 };
 
+export type Court = {
+  id: string;
+  name: string;
+  abbreviation: string;
+  decisions_count: number;
+};
+
+export type Decision = {
+  process_number: string;
+  process_type: string;
+  rapporteur: string;
+  adjudicating_body: string;
+  publication_date: string;
+  trial_date: string;
+  excerpt?: string;
+  summary?: string;
+  url: string;
+  court?: string;
+};
+
+export type SearchDecisionsResult = {
+  data: Decision[];
+  meta: {
+    page: number;
+    per_page: number;
+    has_next_page: boolean;
+  };
+  links?: {
+    self: string;
+    first: string;
+    next?: string;
+  };
+};
+
 const qs = (params: Record<string, string | undefined>) => {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
   return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
@@ -142,6 +176,9 @@ export const api = {
   jurimetria: {
     stats: () => authFetch('/api/jurimetria/stats').then(r => r.json()),
   },
+  rag: {
+    modelos: () => authFetch('/api/rag/modelos').then(r => r.json()),
+  },
   financeiro: {
     listLancamentos: () => authFetch('/api/financeiro/lancamentos').then(r => r.json()),
     createLancamento: (data: any) => authFetch('/api/financeiro/lancamentos', {
@@ -209,5 +246,46 @@ export const api = {
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}/permanente`, { method: 'DELETE' })),
     getMetricasAgregadas: () => authFetch('/api/root/metricas').then(r => r.json()),
     getAuditoria: () => authFetch('/api/root/auditoria').then(r => r.json()),
-  }
+  },
+  jurisprudencias: {
+    listCourts: (): Promise<{ data: Court[] }> =>
+      authFetch('/api/jurisprudencias/courts').then(r => r.json()),
+    search: (params: {
+      court?: string;
+      q: string;
+      page?: number;
+      pub_from?: string;
+      pub_to?: string;
+      trial_from?: string;
+      trial_to?: string;
+    }): Promise<SearchDecisionsResult> => {
+      const query = qs({
+        court: params.court,
+        q: params.q,
+        page: params.page !== undefined ? String(params.page) : undefined,
+        pub_from: params.pub_from,
+        pub_to: params.pub_to,
+        trial_from: params.trial_from,
+        trial_to: params.trial_to,
+      });
+      return authFetch(`/api/jurisprudencias/search${query}`).then(async r => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ error: 'Falha na busca de jurisprudência.' }));
+          throw new Error(err.error || 'Falha na busca de jurisprudência.');
+        }
+        return r.json();
+      });
+    },
+    lookup: (court: string, processNumber: string): Promise<{ data: Decision }> => {
+      const query = qs({ court, n: processNumber });
+      return authFetch(`/api/jurisprudencias/lookup${query}`).then(async r => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ error: 'Decisão não encontrada.' }));
+          throw new Error(err.error || 'Decisão não encontrada.');
+        }
+        return r.json();
+      });
+    },
+  },
 };
+

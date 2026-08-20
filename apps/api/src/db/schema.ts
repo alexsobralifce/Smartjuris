@@ -46,6 +46,7 @@ export const pecas = pgTable('pecas', {
   modelo: text('modelo').notNull(),
   fontes: integer('fontes').notNull(),
   conteudo: text('conteudo').notNull(),
+  conteudoRico: jsonb('conteudo_rico'),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   updatedBy: uuid('updated_by').references(() => usuarios.id),

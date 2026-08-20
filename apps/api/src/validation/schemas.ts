@@ -25,6 +25,7 @@ export const pecasSchema = z.object({
   modelo: z.string().min(1),
   fontes: z.number().int(),
   conteudo: z.string().min(1),
+  conteudoRico: z.any().optional(),
 });
 export const pecasPatchSchema = pecasSchema.partial();
 

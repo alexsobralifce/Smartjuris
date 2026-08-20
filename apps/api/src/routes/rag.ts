@@ -8,8 +8,21 @@ import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { cosineDistance, sql, desc, or } from 'drizzle-orm';
 import { parseBody, formatZodError, ragGenerateSchema } from '../validation/schemas.js';
+import { AREAS, MODELOS_PECA, buscarModelo } from '../services/modelosPeca.js';
 
 const router = Router();
+
+router.get('/modelos', async (_req, res) => {
+  try {
+    const areas = AREAS.map(nome => ({
+      nome,
+      tipos: MODELOS_PECA.filter(m => m.area === nome).map(m => ({ tipo: m.tipo, modelo: m })),
+    }));
+    res.json({ areas });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao listar modelos.' });
+  }
+});
 
 router.post('/generate', aiRateLimiter, async (req, res) => {
   const controller = new AbortController();
@@ -28,6 +41,12 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const { tipo, area, dadosCaso } = parsed.data;
+
+    // Estrutura obrigatória da peça a partir do catálogo de modelos
+    const modelo = buscarModelo(tipo, area);
+    const estrutura = modelo
+      ? modelo.secoes.map((s, i) => `${i + 1}. ${s.titulo} — ${s.instrucao}`).join('\n')
+      : '';
 
     // Cota de tokens do modo demo (antes de iniciar o stream SSE)
     const quota = await checkTokenQuota(req as AuthenticatedRequest);
@@ -121,6 +140,8 @@ Contexto (Precedentes e Leis relevantes):
 ${contexto}
 
 Gere o documento final estruturado e formal. Apenas o conteúdo do documento, sem explicações extras.
+${estrutura ? `Estrutura obrigatória da peça (siga EXATAMENTE estas seções, nesta ordem, usando CAIXA ALTA para os títulos de cada seção):
+${estrutura}` : ''}
 CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para destacar títulos, cabeçalhos ou seções. Se precisar destacar algo, use CAIXA ALTA (letras maiúsculas). O texto deve ser inteiramente limpo, sem caracteres de marcação.`;
 
     const stream = await deepseekClient.chat.completions.create({

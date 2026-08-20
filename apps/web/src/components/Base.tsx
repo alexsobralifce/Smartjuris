@@ -3,6 +3,7 @@ import { api, getErrorMessage } from '../api/client'
 import type { Documento } from '@lexia/shared'
 import Pagination, { usePagination } from './Pagination'
 import Toast, { ToastMessage } from './Toast'
+import Decisoes from './Decisoes'
 
 const colecoes = [
   { id: 'previdenciario', nome: 'Legislação Previdenciária', lastSync: '19/08/2026 14:15', status: 'ok', desc: 'Lei 8.213/91, Lei 8.212/91, Decreto 3.048/99 (RPS), IN 128/22 INSS, Súmulas TNU e CRPS' },
@@ -13,6 +14,7 @@ const colecoes = [
 ]
 
 export default function Base() {
+  const [baseTab, setBaseTab] = useState<'tribunais' | 'documentos'>('tribunais')
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -87,18 +89,67 @@ export default function Base() {
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1100 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28 }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '-0.02em' }}>Base de Conhecimento (RAG)</div>
-          <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>{documentos.length} documentos indexados · Motor: FAISS + BM25 hybrid · BGE-M3</div>
-        </div>
-        <button onClick={handleUpload} disabled={uploading} style={{
-          background: 'var(--color-primary)', color: '#fff',
-          border: 'none', padding: '9px 18px', borderRadius: 6,
-          fontSize: 13, fontWeight: 500, cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.7 : 1,
-        }}>+ Indexar Documentos</button>
+    <div style={{ padding: '32px 40px', maxWidth: 1180, margin: '0 auto' }}>
+      {/* Top Tab Switcher */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, borderBottom: '1px solid var(--color-border)', paddingBottom: 16 }}>
+        <button
+          onClick={() => setBaseTab('tribunais')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: 'none',
+            background: baseTab === 'tribunais' ? 'var(--color-primary)' : 'var(--color-surface)',
+            color: baseTab === 'tribunais' ? '#fff' : 'var(--color-foreground)',
+            boxShadow: baseTab === 'tribunais' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>🏛️</span>
+          <span>Pesquisa nos Tribunais (Jurisprudências.ai Live)</span>
+        </button>
+
+        <button
+          onClick={() => setBaseTab('documentos')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: 'none',
+            background: baseTab === 'documentos' ? 'var(--color-primary)' : 'var(--color-surface)',
+            color: baseTab === 'documentos' ? '#fff' : 'var(--color-foreground)',
+            boxShadow: baseTab === 'documentos' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>📁</span>
+          <span>Base de Documentos & RAG Local ({documentos.length})</span>
+        </button>
       </div>
+
+      {baseTab === 'tribunais' ? (
+        <Decisoes />
+      ) : (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28 }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: '-0.02em' }}>Documentos & Coleções RAG</div>
+              <div style={{ color: 'var(--color-muted)', fontSize: 13, marginTop: 2 }}>{documentos.length} documentos indexados · Motor: PostgreSQL (pgvector) + BM25 · BGE-M3</div>
+            </div>
+            <button onClick={handleUpload} disabled={uploading} style={{
+              background: 'var(--color-primary)', color: '#fff',
+              border: 'none', padding: '9px 18px', borderRadius: 6,
+              fontSize: 13, fontWeight: 500, cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.7 : 1,
+            }}>+ Indexar Documentos</button>
+          </div>
 
       {(uploading || done) && (
         <div style={{
@@ -208,6 +259,8 @@ export default function Base() {
       </div>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
+        </>
+      )}
     </div>
   )
 }

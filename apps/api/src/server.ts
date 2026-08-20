@@ -17,6 +17,7 @@ import escritorioRoutes from './routes/escritorios.js';
 import adminEscritorioRoutes from './routes/adminEscritorio.js';
 import permissoesRoutes from './routes/permissoes.js';
 import rootStatsRoutes from './routes/rootStats.js';
+import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 
 import { authMiddleware } from './middlewares/auth.js';
 import { requireRoot, requireAdmin } from './middlewares/roleGuard.js';
@@ -78,6 +79,7 @@ app.use('/api/andamentos', authMiddleware, rejectRoot, forcePasswordChange, anda
 app.use('/api/documentos', authMiddleware, rejectRoot, forcePasswordChange, documentosRoutes);
 app.use('/api/rag', authMiddleware, rejectRoot, forcePasswordChange, requireModule('pecas'), ragRoutes);
 app.use('/api/jurimetria', authMiddleware, rejectRoot, forcePasswordChange, requireModule('jurimetria'), jurimetriaRoutes);
+app.use('/api/jurisprudencias', authMiddleware, rejectRoot, forcePasswordChange, jurisprudenciasRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

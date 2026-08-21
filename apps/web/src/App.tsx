@@ -416,7 +416,7 @@ export default function App() {
 
           <button
             onClick={toggleTheme}
-            title={theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+            title={theme === 'dark' ? 'Tema atual: Escuro. Clique para mudar para Modo Claro.' : 'Tema atual: Claro. Clique para mudar para Modo Escuro.'}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '8px 10px', borderRadius: 6,
@@ -433,7 +433,7 @@ export default function App() {
                 <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
               )}
             </svg>
-            {sidebarOpen && <span style={{ fontSize: 12 }}>{theme === 'dark' ? 'Tema Claro' : 'Tema Escuro'}</span>}
+            {sidebarOpen && <span style={{ fontSize: 12 }}>{theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}</span>}
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px 2px', justifyContent: sidebarOpen ? 'flex-start' : 'center' }}>

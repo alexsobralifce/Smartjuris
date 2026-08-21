@@ -6,18 +6,18 @@
   --font-sans: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --color-background: #f4f3f0;
-  --color-surface: #ffffff;
-  --color-surface-2: #eeede9;
-  --color-border: #d8d6d0;
-  --color-foreground: #18170f;
-  --color-muted: #7a7870;
+  --color-background: #edf0f3;
+  --color-surface: #f8fafc;
+  --color-surface-2: #e4e7ec;
+  --color-border: #d0d5dd;
+  --color-foreground: #1d2939;
+  --color-muted: #667085;
   --color-primary: #1a2744;
   --color-primary-hover: #243560;
   --color-on-primary: #ffffff;
   --color-accent: #c8a84b;
   --color-on-accent: #18170f;
-  --color-accent-light: #f5edd6;
+  --color-accent-light: #f4ecdb;
   --color-success: #2d6a4f;
   --color-success-light: #d8ede4;
   --color-warning: #92400e;
@@ -28,7 +28,41 @@
   --color-danger-light: #fee2e2;
   --color-sidebar: #18170f;
 
-  --color-badge-tint: #e8eaf0;
+  --color-badge-tint: #eaecf0;
+  --color-overlay: rgba(0, 0, 0, 0.5);
+
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+/* Light theme — anti-glare soft matte */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-background: #edf0f3;
+  --color-surface: #f8fafc;
+  --color-surface-2: #e4e7ec;
+  --color-border: #d0d5dd;
+  --color-foreground: #1d2939;
+  --color-muted: #667085;
+  --color-primary: #1a2744;
+  --color-primary-hover: #243560;
+  --color-on-primary: #ffffff;
+  --color-accent: #c8a84b;
+  --color-on-accent: #18170f;
+  --color-accent-light: #f4ecdb;
+  --color-success: #2d6a4f;
+  --color-success-light: #d8ede4;
+  --color-warning: #92400e;
+  --color-warning-light: #fef3c7;
+  --color-peca: #5b4fcf;
+  --color-aniversario: #c2185b;
+  --color-danger: #7f1d1d;
+  --color-danger-light: #fee2e2;
+  --color-sidebar: #18170f;
+  --color-badge-tint: #eaecf0;
   --color-overlay: rgba(0, 0, 0, 0.5);
 
   --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.08);
@@ -36,6 +70,7 @@
 
 /* Dark theme — "elegant dim ink" */
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --color-background: #0f1115;
   --color-surface: #161a21;
   --color-surface-2: #1d222b;
@@ -58,6 +93,7 @@
   --color-danger-light: #3a1e1e;
   --color-sidebar: #0c0b08;
   --color-badge-tint: #232b3e;
+  --color-overlay: rgba(0, 0, 0, 0.5);
 
   --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.4);
 }

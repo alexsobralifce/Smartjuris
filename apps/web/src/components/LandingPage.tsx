@@ -479,6 +479,312 @@ function CadastroForm({
   )
 }
 
+function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
+  const [step, setStep] = useState<'email' | 'codigo' | 'sucesso'>('email')
+  const [email, setEmail] = useState('')
+  const [codigo, setCodigo] = useState('')
+  const [novaSenha, setNovaSenha] = useState('')
+  const [confirmar, setConfirmar] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; codigo?: string; novaSenha?: string; confirmar?: string }>({})
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setInterval(() => setCooldown(c => c - 1), 1000)
+    return () => clearInterval(timer)
+  }, [cooldown])
+
+  const validaEmail = (v: string): string | undefined => {
+    if (!v.trim()) return 'Informe seu e-mail.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) return 'E-mail inválido.'
+    return undefined
+  }
+
+  const enviarCodigo = async (): Promise<boolean> => {
+    setError('')
+    try {
+      const res = await api.auth.solicitarResetSenha(email.trim())
+      if (!res.ok) {
+        setError(await getErrorMessage(res, 'Falha ao enviar o código de recuperação.'))
+        return false
+      }
+      return true
+    } catch (err: any) {
+      setError(err?.message || 'Falha ao enviar o código de recuperação.')
+      return false
+    }
+  }
+
+  const handleEnviar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const emailErr = validaEmail(email)
+    setFieldErrors({ email: emailErr })
+    if (emailErr) return
+    setLoading(true)
+    const ok = await enviarCodigo()
+    setLoading(false)
+    if (ok) {
+      setNotice('Se o e-mail estiver cadastrado, enviaremos um código de recuperação.')
+      setStep('codigo')
+      setCooldown(60)
+    }
+  }
+
+  const handleResend = async () => {
+    if (cooldown > 0 || resending) return
+    setResending(true)
+    setNotice('')
+    const ok = await enviarCodigo()
+    setResending(false)
+    if (ok) {
+      setNotice('Novo código enviado. Verifique sua caixa de entrada.')
+      setCooldown(60)
+    }
+  }
+
+  const validateRedefinir = (c: string, n: string, cf: string) => {
+    const fe: typeof fieldErrors = {}
+    if (c.replace(/\D/g, '').length !== 6) fe.codigo = 'Digite o código de 6 dígitos.'
+    if (!n) fe.novaSenha = 'Informe uma nova senha.'
+    else if (n.length < 8) fe.novaSenha = 'A senha deve ter no mínimo 8 caracteres.'
+    if (!cf) fe.confirmar = 'Confirme a nova senha.'
+    else if (cf !== n) fe.confirmar = 'As senhas não coincidem.'
+    return fe
+  }
+
+  const handleRedefinir = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const fe = validateRedefinir(codigo, novaSenha, confirmar)
+    setFieldErrors(fe)
+    if (Object.keys(fe).length) return
+    setLoading(true)
+    try {
+      const res = await api.auth.redefinirSenha(email.trim(), codigo.replace(/\D/g, ''), novaSenha)
+      if (!res.ok) {
+        setError(await getErrorMessage(res, 'Falha ao redefinir a senha.'))
+        return
+      }
+      setStep('sucesso')
+    } catch (err: any) {
+      setError(err?.message || 'Falha ao redefinir a senha.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const errorBlock = error ? (
+    <div style={{
+      background: 'var(--color-danger-light)',
+      color: 'var(--color-danger)',
+      border: '1px solid var(--color-border)',
+      borderRadius: RADIUS.control,
+      padding: '12px 14px',
+      fontSize: FONT.base,
+      fontWeight: 500,
+    }}>
+      ⚠️ {error}
+    </div>
+  ) : null
+
+  const noticeBlock = notice ? (
+    <div style={{
+      background: 'var(--color-success-light)',
+      color: 'var(--color-success)',
+      border: '1px solid var(--color-success)',
+      borderRadius: RADIUS.control,
+      padding: '10px 14px',
+      fontSize: FONT.sm,
+      fontWeight: 500,
+    }}>
+      ✓ {notice}
+    </div>
+  ) : null
+
+  if (step === 'sucesso') {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+        padding: '12px 0 4px', gap: SPACE.lg,
+      }}>
+        <div style={{
+          width: 60, height: 60, borderRadius: '50%',
+          background: 'var(--color-success-light)',
+          border: '1px solid var(--color-success)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 13l4 4L19 7" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, letterSpacing: '-0.02em', margin: 0 }}>
+          Senha redefinida
+        </h3>
+        <p style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.6, margin: 0 }}>
+          Senha redefinida com sucesso. Faça login com a nova senha.
+        </p>
+        <Button onClick={onBackToLogin} style={{ width: '100%', padding: '12px', marginTop: SPACE.xs }}>
+          Voltar ao login
+        </Button>
+      </div>
+    )
+  }
+
+  if (step === 'email') {
+    return (
+      <form onSubmit={handleEnviar} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '36px', marginBottom: 8 }}>🔑</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, fontWeight: 700, letterSpacing: '-0.02em' }}>
+            Recuperar senha
+          </div>
+          <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginTop: 4, lineHeight: 1.5 }}>
+            Informe seu e-mail e enviaremos um código de recuperação.
+          </div>
+        </div>
+
+        {errorBlock}
+
+        <Field label="E-mail" error={fieldErrors.email} required>
+          <input
+            type="email"
+            autoComplete="email"
+            placeholder="voce@escritorio.com"
+            value={email}
+            onChange={e => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors(f => ({ ...f, email: undefined })) }}
+            onBlur={() => setFieldErrors(f => ({ ...f, email: validaEmail(email) }))}
+            autoFocus
+            style={{ ...inputStyle(!!fieldErrors.email), fontFamily: 'var(--font-mono)' }}
+          />
+        </Field>
+
+        <Button type="submit" disabled={loading} style={{ width: '100%', padding: '13px' }}>
+          {loading ? 'Enviando…' : 'Enviar código de recuperação'}
+        </Button>
+
+        <button
+          type="button"
+          onClick={onBackToLogin}
+          style={{
+            background: 'transparent', border: 'none', color: 'var(--color-muted)',
+            cursor: 'pointer', padding: 0, fontSize: FONT.sm, fontWeight: 500, alignSelf: 'center',
+          }}
+        >
+          ← Voltar ao login
+        </button>
+      </form>
+    )
+  }
+
+  // Etapa código + nova senha
+  return (
+    <form onSubmit={handleRedefinir} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '36px', marginBottom: 8 }}>📩</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Redefinir senha
+        </div>
+        <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginTop: 4, lineHeight: 1.5 }}>
+          Enviamos um código de 6 dígitos para:<br />
+          <strong style={{ color: 'var(--color-foreground)', fontFamily: 'var(--font-mono)' }}>{email}</strong>
+        </div>
+      </div>
+
+      {noticeBlock}
+      {errorBlock}
+
+      <Field label="Código de 6 dígitos" error={fieldErrors.codigo} required>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={6}
+          autoComplete="one-time-code"
+          placeholder="000000"
+          value={codigo}
+          onChange={e => {
+            const val = e.target.value.replace(/\D/g, '').slice(0, 6)
+            setCodigo(val)
+            if (fieldErrors.codigo) setFieldErrors(f => ({ ...f, codigo: undefined }))
+          }}
+          onBlur={() => setFieldErrors(f => ({ ...f, codigo: validateRedefinir(codigo, novaSenha, confirmar).codigo }))}
+          autoFocus
+          style={{
+            ...inputStyle(!!fieldErrors.codigo),
+            fontFamily: 'var(--font-mono)',
+            fontSize: '24px',
+            textAlign: 'center',
+            letterSpacing: '0.35em',
+            padding: '12px',
+            fontWeight: 700,
+          }}
+        />
+      </Field>
+
+      <Field label="Nova senha" error={fieldErrors.novaSenha} required>
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="Mínimo 8 caracteres"
+          value={novaSenha}
+          onChange={e => { setNovaSenha(e.target.value); if (fieldErrors.novaSenha) setFieldErrors(f => ({ ...f, novaSenha: undefined })) }}
+          onBlur={() => setFieldErrors(f => ({ ...f, novaSenha: validateRedefinir(codigo, novaSenha, confirmar).novaSenha }))}
+          style={inputStyle(!!fieldErrors.novaSenha)}
+        />
+      </Field>
+
+      <Field label="Confirmar nova senha" error={fieldErrors.confirmar} required>
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="Repita a nova senha"
+          value={confirmar}
+          onChange={e => { setConfirmar(e.target.value); if (fieldErrors.confirmar) setFieldErrors(f => ({ ...f, confirmar: undefined })) }}
+          onBlur={() => setFieldErrors(f => ({ ...f, confirmar: validateRedefinir(codigo, novaSenha, confirmar).confirmar }))}
+          style={inputStyle(!!fieldErrors.confirmar)}
+        />
+      </Field>
+
+      <Button type="submit" disabled={loading} style={{ width: '100%', padding: '13px' }}>
+        {loading ? 'Redefinindo…' : 'Redefinir senha'}
+      </Button>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: FONT.sm, marginTop: 4, flexWrap: 'wrap', gap: 8 }}>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={cooldown > 0 || resending}
+          style={{
+            background: 'transparent', border: 'none',
+            color: cooldown > 0 ? 'var(--color-muted)' : 'var(--color-primary)',
+            fontWeight: 600,
+            cursor: cooldown > 0 ? 'not-allowed' : 'pointer',
+            padding: 0,
+          }}
+        >
+          {resending ? 'Reenviando…' : cooldown > 0 ? `Reenviar código em ${cooldown}s` : '🔄 Reenviar código'}
+        </button>
+
+        <button
+          type="button"
+          onClick={onBackToLogin}
+          style={{
+            background: 'transparent', border: 'none', color: 'var(--color-muted)',
+            cursor: 'pointer', padding: 0,
+          }}
+        >
+          ← Voltar ao login
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const breakpoint = useBreakpoint()
   const isMobile = breakpoint === 'mobile'
@@ -491,11 +797,13 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [cadastroStep, setCadastroStep] = useState<'form' | 'otp' | 'sucesso'>('form')
   const [emailPendente, setEmailPendente] = useState('')
+  const [esqueciSenha, setEsqueciSenha] = useState(false)
 
   const switchMode = (m: 'login' | 'signup') => {
     setMode(m)
     setCadastroStep('form')
     setEmailPendente('')
+    setEsqueciSenha(false)
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -755,6 +1063,9 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
 
           {mode === 'login' ? (
+            esqueciSenha ? (
+              <EsqueciSenha onBackToLogin={() => setEsqueciSenha(false)} />
+            ) : (
             <>
               <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
                 {error && (
@@ -795,6 +1106,25 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                   />
                 </div>
 
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -SPACE.sm }}>
+                  <button
+                    type="button"
+                    onClick={() => setEsqueciSenha(true)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      fontSize: FONT.sm,
+                      fontWeight: 500,
+                      color: 'var(--color-primary)',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Esqueci minha senha?
+                  </button>
+                </div>
+
                 <Button
                   type="submit"
                   disabled={loading}
@@ -822,6 +1152,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 </div>
               </div>
             </>
+            )
           ) : cadastroStep === 'otp' ? (
             <CadastroVerificacao
               email={emailPendente}

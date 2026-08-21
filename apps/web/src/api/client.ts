@@ -166,6 +166,10 @@ export const api = {
       authFetch('/api/auth/verificar-codigo', { method: 'POST', body: JSON.stringify({ email, codigo }) }),
     reenviarCodigo: (email: string) =>
       authFetch('/api/auth/reenviar-codigo', { method: 'POST', body: JSON.stringify({ email }) }),
+    solicitarResetSenha: (email: string) =>
+      authFetch('/api/auth/solicitar-reset-senha', { method: 'POST', body: JSON.stringify({ email }) }),
+    redefinirSenha: (email: string, codigo: string, novaSenha: string) =>
+      authFetch('/api/auth/redefinir-senha', { method: 'POST', body: JSON.stringify({ email, codigo, novaSenha }) }),
     logout: () => authFetch('/api/auth/logout', { method: 'POST' }),
     trocarSenha: (senhaAtual: string, novaSenha: string) =>
       authFetch('/api/auth/trocar-senha', { method: 'POST', body: JSON.stringify({ senhaAtual, novaSenha }) }),

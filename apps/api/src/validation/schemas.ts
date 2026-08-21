@@ -247,6 +247,17 @@ export const reenviarCodigoSchema = z.object({
   email: z.string().trim().toLowerCase().email('e-mail inválido'),
 });
 
+// --- Recuperação de senha (esqueci minha senha) ---
+export const solicitarResetSenhaSchema = z.object({
+  email: z.string().trim().toLowerCase().email('e-mail inválido'),
+});
+
+export const redefinirSenhaSchema = z.object({
+  email: z.string().trim().toLowerCase().email('e-mail inválido'),
+  codigo: z.string().trim().regex(/^\d{6}$/, 'código de 6 dígitos numéricos'),
+  novaSenha: z.string().min(8, 'mínimo 8 caracteres').max(72),
+});
+
 // --- Créditos (root): adicionar saldo a escritório ou usuário ---
 export const creditosAddSchema = z.object({
   quantidade: z.number().int().positive().max(1_000_000_000),

@@ -11,8 +11,8 @@ import { loginRateLimiter, registroRateLimiter } from '../middlewares/rateLimit.
 import { revokeToken } from '../middlewares/revocation.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { getTokenUsageMes } from '../services/usage.js';
-import { parseBody, formatZodError, registroSchema, verificarCodigoSchema, reenviarCodigoSchema } from '../validation/schemas.js';
-import { sendVerificationCodeEmail, sendRootNewUserNotificationEmail, sendWelcomeEmail } from '../services/email.js';
+import { parseBody, formatZodError, registroSchema, verificarCodigoSchema, reenviarCodigoSchema, solicitarResetSenhaSchema, redefinirSenhaSchema } from '../validation/schemas.js';
+import { sendVerificationCodeEmail, sendRootNewUserNotificationEmail, sendWelcomeEmail, sendPasswordResetCodeEmail } from '../services/email.js';
 
 const router = Router();
 const SECRET = process.env.JWT_SECRET;
@@ -311,7 +311,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
 
       // Se o usuário iniciou cadastro mas não verificou o e-mail, gera um novo código OTP
       const codigo = String(Math.floor(100000 + Math.random() * 900000));
-      const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+      const expiraEm = new Date(Date.now() + 60 * 1000); // 1 minuto
 
       await db.update(codigosVerificacao)
         .set({ utilizado: true })
@@ -389,7 +389,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
     // Somente se opcionalmente exigido (REQUIRE_EMAIL_OTP=true), gera e envia o OTP.
     if (requereOtp) {
       const codigo = String(Math.floor(100000 + Math.random() * 900000));
-      const expiraEm = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+      const expiraEm = new Date(Date.now() + 60 * 1000); // 1 minuto
 
       await db.insert(codigosVerificacao).values({
         email,
@@ -572,7 +572,7 @@ router.post('/reenviar-codigo', async (req, res) => {
 
     // Gera novo código
     const novoCodigo = String(Math.floor(100000 + Math.random() * 900000));
-    const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
+    const expiraEm = new Date(Date.now() + 60 * 1000);
 
     await db.insert(codigosVerificacao).values({
       email,
@@ -592,6 +592,147 @@ router.post('/reenviar-codigo', async (req, res) => {
   } catch (error) {
     console.error('Erro ao reenviar código:', error);
     res.status(500).json({ error: 'Erro ao reenviar código.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/solicitar-reset-senha — solicita código de recuperação de senha
+// Público. Resposta SEMPRE genérica (anti-enumeração de contas cadastradas).
+// ---------------------------------------------------------------------------
+router.post('/solicitar-reset-senha', async (req, res) => {
+  try {
+    const parsed = parseBody(solicitarResetSenhaSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { email } = parsed.data;
+
+    // Cooldown de 60 segundos (espelha o padrão do /reenviar-codigo)
+    const [ultimoCodigo] = await db.select()
+      .from(codigosVerificacao)
+      .where(and(eq(codigosVerificacao.email, email), eq(codigosVerificacao.tipo, 'reset_senha')))
+      .orderBy(desc(codigosVerificacao.createdAt))
+      .limit(1);
+
+    if (ultimoCodigo?.createdAt) {
+      const segundosDesdeUltimo = (Date.now() - new Date(ultimoCodigo.createdAt).getTime()) / 1000;
+      if (segundosDesdeUltimo < 60) {
+        const restante = Math.ceil(60 - segundosDesdeUltimo);
+        return res.status(429).json({ error: `Aguarde ${restante}s antes de solicitar um novo código.` });
+      }
+    }
+
+    const [user] = await db.select({
+      id: usuarios.id,
+      nome: usuarios.nome,
+    }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
+
+    // Só gera e envia o código se o e-mail existir; caso contrário, responde o mesmo sucesso genérico.
+    if (user) {
+      // Invalida códigos de recuperação anteriores
+      await db.update(codigosVerificacao)
+        .set({ utilizado: true })
+        .where(and(eq(codigosVerificacao.email, email), eq(codigosVerificacao.tipo, 'reset_senha')));
+
+      const codigo = String(Math.floor(100000 + Math.random() * 900000));
+      const expiraEm = new Date(Date.now() + 60 * 1000); // 1 minuto
+
+      await db.insert(codigosVerificacao).values({
+        email,
+        codigo,
+        tipo: 'reset_senha',
+        expiraEm,
+      });
+
+      sendPasswordResetCodeEmail(email, user.nome, codigo).catch((err) => {
+        console.error('[Auth] Falha no envio de código de recuperação:', err);
+      });
+    }
+
+    // Resposta genérica: não revela se o e-mail está cadastrado.
+    res.json({
+      success: true,
+      message: 'Se o e-mail estiver cadastrado, enviaremos um código de recuperação.',
+    });
+  } catch (error) {
+    console.error('Erro ao solicitar redefinição de senha:', error);
+    res.status(500).json({ error: 'Erro ao solicitar redefinição de senha.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/redefinir-senha — redefine a senha com o código de recuperação
+// Público. Valida o código, aplica a nova senha e invalida o código usado.
+// ---------------------------------------------------------------------------
+router.post('/redefinir-senha', async (req, res) => {
+  try {
+    const parsed = parseBody(redefinirSenhaSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { email, codigo, novaSenha } = parsed.data;
+
+    // Busca o código ativo mais recente de recuperação
+    const [registroCodigo] = await db.select()
+      .from(codigosVerificacao)
+      .where(and(
+        eq(codigosVerificacao.email, email),
+        eq(codigosVerificacao.tipo, 'reset_senha'),
+        eq(codigosVerificacao.utilizado, false),
+      ))
+      .orderBy(desc(codigosVerificacao.createdAt))
+      .limit(1);
+
+    if (!registroCodigo) {
+      return res.status(400).json({ error: 'Nenhum código de recuperação pendente para este e-mail.' });
+    }
+
+    if (new Date() > new Date(registroCodigo.expiraEm)) {
+      return res.status(400).json({ error: 'Código expirado. Solicite um novo código.' });
+    }
+
+    if (registroCodigo.tentativas >= 5) {
+      return res.status(400).json({ error: 'Número máximo de tentativas excedido. Solicite um novo código.' });
+    }
+
+    if (registroCodigo.codigo !== codigo) {
+      await db.update(codigosVerificacao)
+        .set({ tentativas: registroCodigo.tentativas + 1 })
+        .where(eq(codigosVerificacao.id, registroCodigo.id));
+      return res.status(400).json({ error: 'Código incorreto.' });
+    }
+
+    const [user] = await db.select({
+      id: usuarios.id,
+      nome: usuarios.nome,
+    }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 12);
+    await db.update(usuarios)
+      .set({ senha: senhaHash, precisaTrocarSenha: false })
+      .where(eq(usuarios.id, user.id));
+
+    // Marca o código como utilizado
+    await db.update(codigosVerificacao)
+      .set({ utilizado: true })
+      .where(eq(codigosVerificacao.id, registroCodigo.id));
+
+    await recordAudit(req, 'PASSWORD_RESET_SELF', {
+      alvoId: user.id,
+      alvoEmail: email,
+    });
+
+    res.json({
+      success: true,
+      message: 'Senha redefinida com sucesso. Faça login com a nova senha.',
+    });
+  } catch (error) {
+    console.error('Erro ao redefinir senha:', error);
+    res.status(500).json({ error: 'Erro ao redefinir a senha.' });
   }
 });
 

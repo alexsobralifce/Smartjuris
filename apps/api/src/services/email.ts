@@ -238,7 +238,7 @@ export async function sendVerificationCodeEmail(to: string, nome: string, codigo
           ${codigo}
         </span>
       </div>
-      <p style="font-size: 12px; color: #7a7870; margin-top: 8px;">Este código é válido por <strong>15 minutos</strong>.</p>
+      <p style="font-size: 12px; color: #7a7870; margin-top: 8px;">Este código é válido por <strong>1 minuto</strong>.</p>
     </div>
 
     <p style="font-size: 14px; color: #555;">Se você não solicitou este cadastro, por favor desconsidere esta mensagem.</p>
@@ -248,6 +248,32 @@ export async function sendVerificationCodeEmail(to: string, nome: string, codigo
     to,
     subject: `${codigo} é o seu código de verificação — SmartJuris`,
     html: emailWrapper('Código de Verificação SmartJuris', body),
+  });
+}
+
+/**
+ * E-mail com Código de Recuperação de Senha (OTP de 6 dígitos)
+ */
+export async function sendPasswordResetCodeEmail(to: string, nome: string, codigo: string): Promise<EmailResult> {
+  const body = `
+    <span class="badge" style="background: #fef3c7; color: #92400e; border-color: #fcd34d;">Recuperação de Senha</span>
+    <h2 style="margin: 0 0 12px; color: #1a2744; font-size: 20px;">Olá, ${nome}!</h2>
+    <p>Recebemos uma solicitação para redefinir a senha da sua conta no <strong>SmartJuris</strong>. Utilize o código abaixo:</p>
+    <div style="text-align: center; margin: 28px 0;">
+      <div style="display: inline-block; background: #f4f3f0; border: 2px dashed #c8a84b; border-radius: 8px; padding: 16px 36px;">
+        <span style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 700; letter-spacing: 0.25em; color: #1a2744;">
+          ${codigo}
+        </span>
+      </div>
+      <p style="font-size: 12px; color: #7a7870; margin-top: 8px;">Este código é válido por <strong>1 minuto</strong>.</p>
+    </div>
+    <p style="font-size: 14px; color: #555;">Se você não solicitou esta redefinição, por favor desconsidere esta mensagem e mantenha sua senha atual.</p>
+  `;
+
+  return sendEmail({
+    to,
+    subject: `${codigo} é o seu código de recuperação — SmartJuris`,
+    html: emailWrapper('Recuperação de Senha — SmartJuris', body),
   });
 }
 

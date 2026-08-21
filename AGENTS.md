@@ -272,3 +272,100 @@ pnpm --filter @lexia/web verify:ui  # valida zero cores hardcoded
 - **Backend**: Docker multi-stage (node:22-alpine); `startup.ts` executa auto-migrations SQL e seed de admin/root/escritórios demo.
 - **Frontend**: build Vite + `serve` estático (porta via `$PORT`).
 - **Observação**: `.env*` está no `.gitignore`; variáveis de ambiente são configuradas no painel do Railway.
+
+---
+
+## Configuração de Domínio, DNS e E-mail (Registro.br + Railway + Resend)
+
+> Material didático — fluxo completo de infraestrutura do SmartJuris: domínio `.com.br`, DNS, hospedagem no Railway e e-mail transacional via Resend.
+
+### Visão geral (arquitetura de rede)
+
+```
+┌──────────────────────────────┐      ┌──────────────────────────────────┐
+│  www.smartjuris.com.br       │      │  smartjuris-api-production.      │
+│  (smartjuris-web no Railway) │ ───► │  up.railway.app (smartjuris-api) │
+│  SPA + proxy nginx /api      │      │  Express + Postgres (pgvector)   │
+└──────────────────────────────┘      └──────────────┬───────────────────┘
+                                                     │
+                              ┌──────────────────────▼──────────────────────┐
+                              │  Resend (e-mail transacional)              │
+                              │  Remetente verificado: suporte@smartjuris. │
+                              │  com.br (domínio verificado + DKIM/DMARC)  │
+                              └────────────────────────────────────────────┘
+```
+
+- **Web** e **API** são serviços **separados** no Railway, mas a API é acessada **pela mesma origem** via proxy nginx (`/api` → API) — isso garante cookie `first-party` (evita logout por bloqueio de cookies de terceiros).
+- **E-mail** transacional (código OTP, boas-vindas, notificações) vai via **Resend**, com domínio verificado.
+
+### 1) Registro.br — registro e DNS do domínio `.com.br`
+
+**NS padrão:** `a.sec.dns.br` e `b.sec.dns.br` (o DNS do `.br` é gerenciado pelo Registro.br).
+
+**Onde mexer:** https://registro.br → login → **Domínios** → `smartjuris.com.br` → **Zona DNS** (serviço de DNS gratuito do Registro.br).
+
+**Tipos de registro** (o campo "Nome" recebe o host **completo**, ex.: `www.smartjuris.com.br`):
+
+| Tipo | Nome (exemplo) | Dados | Uso |
+|---|---|---|---|
+| A | `smartjuris.com.br` | IP do servidor | Aponta o domínio raiz |
+| CNAME | `www.smartjuris.com.br` | `0nem6tj4.up.railway.app` | Alias p/ o serviço web |
+| TXT | `_railway-verify.www.smartjuris.com.br` | `railway-verify=...` | Valida posse do domínio no Railway |
+| TXT | `resend._domainkey.smartjuris.com.br` | `p=MIGf...` | DKIM do Resend |
+| TXT | `_dmarc.smartjuris.com.br` | `"v=DMARC1; p=none;"` | DMARC |
+| MX | `send.smartjuris.com.br` | `10 feedback-smtp...amazonses.com` | MX p/ envio |
+
+**Regra de ouro (conflito CNAME):** um **CNAME não pode coexistir com outros registros no mesmo nome** (RFC). Ex.: para `api.smartjuris.com.br`, um CNAME (roteamento) e um TXT no **mesmo** nome conflitam — por isso os TXT de verificação usam `_railway-verify.<sub>` (nome diferente), evitando o conflito.
+
+**Verificação / propagação:**
+```bash
+dig @a.sec.dns.br www.smartjuris.com.br CNAME +short   # consulta direto no autoritativo
+dig api.smartjuris.com.br CNAME +short
+```
+A propagação no Registro.br costuma ser rápida (minutos); global pode levar até 72h.
+
+### 2) Railway — hospedagem e domínios
+
+**Serviços:** `smartjuris-web` (frontend estático/nginx) e `smartjuris-api` (Express).
+
+**Deploy:** push para `main` dispara deploy automático (integração GitHub). CLI úteis: `railway up -s <serviço>`, `railway status`, `railway deployment list -s <serviço>`, `railway logs -s <serviço>`.
+
+**Custom domain:**
+- Painel: serviço → **Settings → Networking → Domains** → adicionar (ex.: `www.smartjuris.com.br`).
+- CLI: `railway domain api.smartjuris.com.br -s smartjuris-api` → retorna os **registros DNS** (CNAME + TXT `_railway-verify`) para criar no Registro.br. Remover: `railway domain delete <domínio> -s <serviço> --yes`.
+
+**Variáveis de ambiente:**
+```bash
+railway variable set KEY=value -s smartjuris-api                  # seta e dispara redeploy
+railway variable set KEY=value -s smartjuris-api --skip-deploys   # só seta (sem redeploy)
+railway variable list -s smartjuris-api
+```
+> Alterar variável exige **redeploy** para o processo reler o env. Dica: use `--skip-deploys` ao setar várias e faça um único redeploy no final.
+
+**Cookie cross-site e proxy nginx (caso real deste projeto):**
+- Problema: web em domínio próprio + API em `*.railway.app` = **sites diferentes** → cookie de terceiros → bloqueado pelo navegador → **401/logout**.
+- `NODE_ENV=production` é necessário para o cookie sair `Secure; SameSite=None` (mas **não** resolve o bloqueio de cookies de terceiros no navegador).
+- **Solução aplicada:** o `smartjuris-web` usa **nginx** que serve o SPA **e** faz proxy de `/api` para a API (mesma origem → cookie first-party). Arquivos: `apps/web/Dockerfile`, `apps/web/nginx.conf`, e `getApiBaseUrl()` retorna base **relativa** em produção (`apps/web/src/api/config.ts`).
+- Detalhe: a rede privada do Railway (`smartjuris-api.railway.internal`) **não roteou** neste projeto — o `proxy_pass` usa a **URL pública** da API (`https://smartjuris-api-production.up.railway.app`).
+
+### 3) Resend — e-mail transacional
+
+**Chaves/remetente (env da API):**
+- `RESEND_API_KEY` — chave de API (ex.: `re_...`).
+- `RESEND_FROM_EMAIL` — remetente verificado (ex.: `SmartJuris <suporte@smartjuris.com.br>`). **Não usar** `EMAIL_FROM`/Gmail no Resend: domínio não verificado → erro `domain not verified`.
+
+**Verificação de domínio no Resend:** painel Resend → **Domains** → adicionar `smartjuris.com.br` → o Resend lista os **registros DNS** (principalmente **DKIM** `resend._domainkey`) → criar no Registro.br → aguardar status **Verified**.
+
+**DNS de e-mail típico:** DKIM (TXT `resend._domainkey`), DMARC (TXT `_dmarc`), SPF (TXT `v=spf1 ...` no host de envio).
+
+**Serviço `services/email.ts`:** Resend como transporte **primário**; fallback **SMTP** (Nodemailer/Gmail) se o Resend falhar. Logs: `[Email-Resend] E-mail enviado com sucesso: ID=...` / `[Email-SMTP] ...`.
+
+**Como testar:** cadastrar um usuário (código OTP de 6 dígitos, válido por 1 minuto) → conferir no log `[Email-Resend] E-mail enviado com sucesso` e no painel Resend → **Logs** (status de entrega). O código de confirmação fica na tabela `codigos_verificacao`.
+
+### 4) Checklist (ordem para reproduzir em aula)
+
+1. **Registro.br**: domínio registrado; NS padrão (`a.sec.dns.br` / `b.sec.dns.br`); Zona DNS ativa.
+2. **Railway**: serviços web/api; custom domains; `NODE_ENV=production`; variáveis de ambiente configuradas.
+3. **Resend**: domínio verificado (DKIM etc.); `RESEND_API_KEY` + `RESEND_FROM_EMAIL` no env da API.
+4. **Web com proxy nginx** (same-origin) para sessão estável (cookie first-party).
+5. **Testes**: cadastro → OTP → e-mail chega; login persiste (sem logout); `dig` confirma os registros DNS.

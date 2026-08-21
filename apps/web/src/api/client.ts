@@ -295,6 +295,8 @@ export const api = {
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),
     adicionarCreditosUsuario: async (id: string, quantidade: number) =>
       bufferedResponse(await authFetch(`/api/root/usuarios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),
+    resetarSenhaUsuario: async (id: string) =>
+      bufferedResponse(await authFetch(`/api/root/usuarios/${id}/reset-password`, { method: 'POST' })),
   },
   jurisprudencias: {
     listCourts: (): Promise<{ data: Court[] }> =>

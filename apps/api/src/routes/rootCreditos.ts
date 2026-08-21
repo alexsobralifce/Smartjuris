@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { db } from '../db/client.js';
 import { sql, eq, asc } from 'drizzle-orm';
 import { escritorios, usuarios } from '../db/schema.js';
@@ -189,6 +191,53 @@ router.post('/usuarios/:id/creditos', async (req: AuthenticatedRequest, res) => 
   } catch (error) {
     console.error('Error adding user credits:', error);
     res.status(500).json({ error: 'Erro ao adicionar créditos ao usuário.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /usuarios/:id/reset-password — redefine a senha de um usuário (root).
+// Gera senha temporária, marca para troca no próximo login e registra auditoria.
+// Não revoga tokens (convenção atual do adminEscritorio).
+// ---------------------------------------------------------------------------
+router.post('/usuarios/:id/reset-password', async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    if (!uuidSchema.safeParse(id).success) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
+
+    const [target] = await db
+      .select({
+        id: usuarios.id,
+        nome: usuarios.nome,
+        email: usuarios.email,
+        escritorioId: usuarios.escritorioId,
+      })
+      .from(usuarios)
+      .where(eq(usuarios.id, id))
+      .limit(1);
+
+    if (!target) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const senhaTemporaria = randomBytes(12).toString('base64url');
+    const senhaHash = await bcrypt.hash(senhaTemporaria, 12);
+
+    await db.update(usuarios)
+      .set({ senha: senhaHash, precisaTrocarSenha: true })
+      .where(eq(usuarios.id, id));
+
+    await recordAudit(req, 'PASSWORD_RESET', {
+      alvoId: id,
+      alvoEmail: target.email,
+      detalhes: { escritorioId: target.escritorioId },
+    });
+
+    res.json({ success: true, senhaTemporaria, email: target.email, nome: target.nome });
+  } catch (error) {
+    console.error('Error resetting user password:', error);
+    res.status(500).json({ error: 'Erro ao redefinir senha.' });
   }
 });
 

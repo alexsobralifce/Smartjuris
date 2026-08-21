@@ -39,6 +39,10 @@ const mapEscritorio = (r: any) => ({
   ...baseEscritorio(r),
   usuariosAtivos: r.usuarios_ativos !== undefined ? Number(r.usuarios_ativos) : undefined,
   tokens30d: r.tokens_30d !== undefined ? Number(r.tokens_30d) : undefined,
+  usuarios: (() => {
+    if (typeof r.usuarios === 'string') { try { return JSON.parse(r.usuarios); } catch { return []; } }
+    return r.usuarios ?? [];
+  })(),
 });
 
 // ---------------------------------------------------------------------------
@@ -109,7 +113,11 @@ router.get('/', async (_req, res) => {
   try {
     const rows = (await db.execute(sql`
       SELECT e.*,
-        (SELECT COUNT(*) FROM usuarios u WHERE u.escritorio_id = e.id AND u.ativo = true) AS usuarios_ativos
+        (SELECT COUNT(*) FROM usuarios u WHERE u.escritorio_id = e.id AND u.ativo = true) AS usuarios_ativos,
+        (SELECT COALESCE(json_agg(json_build_object(
+            'id', u.id, 'nome', u.nome, 'email', u.email,
+            'role', u.role, 'ativo', u.ativo) ORDER BY u.created_at), '[]')
+           FROM usuarios u WHERE u.escritorio_id = e.id) AS usuarios
       FROM escritorios e
       ORDER BY e.created_at DESC
     `)) as any[];

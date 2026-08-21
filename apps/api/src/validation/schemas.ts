@@ -141,6 +141,8 @@ export const ragGenerateSchema = z.object({
   tipo: z.string().min(1),
   area: z.string().min(1),
   dadosCaso: z.string().min(1),
+  // Peça complexa => roteia para o modelo Pro (DeepSeek V4-Pro) em vez do Flash.
+  isComplex: z.boolean().optional().default(false),
 });
 
 export const uuidSchema = z.string().uuid();

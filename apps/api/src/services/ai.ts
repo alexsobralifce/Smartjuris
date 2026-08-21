@@ -9,27 +9,48 @@ export const deepseekClient = new OpenAI({
 export const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'deepseek-v4-pro';
 
+// Seleção dinâmica de modelo por complexidade da peça:
+// peças complexas (Recurso/Contestação) usam o Pro; demais usam o Flash.
+export function selecionarModeloDeepSeek(isComplex: boolean): string {
+  return isComplex ? deepseekModelPro : deepseekModel;
+}
+
 export async function generatePecaWithDeepSeek(
   tipo: string,
   area: string,
   dadosCaso: string,
   contexto: string
 ): Promise<string> {
-  const prompt = `Você é um assistente jurídico experiente.
-Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
+  const prompt = `Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica.
+
+DIRETRIZES DE REDAÇÃO E CORREÇÃO (AUTOCORRETOR):
+1. Linguagem Jurídica: Utilize o padrão culto da língua portuguesa e o jargão jurídico adequado (ex: vênia, exordial, proêmio). Evite coloquialismos.
+2. Correção Gramatical: Atue como um revisor ortográfico implacável. Certifique-se de que há estrita concordância verbal e nominal, regência correta e pontuação impecável.
+3. Clareza e Concisão: Apesar da formalidade, evite o "juridiquês" excessivo ou prolixo que dificulte a compreensão do juízo.
+
+Tarefa: Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
+
 Os dados do caso são:
 ${dadosCaso}
 
 Contexto (Precedentes e Leis relevantes):
 ${contexto}
 
-Gere o documento final estruturado e formal.`;
+DIRETRIZES DE FUNDAMENTAÇÃO (RAG):
+1. Você receberá blocos de contexto (chunks) contendo teses, jurisprudência e fatos do caso.
+2. É OBRIGATÓRIO fundamentar todos os pedidos e alegações exclusivamente nas leis, doutrinas e jurisprudências fornecidas no contexto.
+3. Não invente ou alucine precedentes, números de processos ou artigos de lei que não estejam nos documentos de suporte.
+4. Se o contexto fornecido for insuficiente para fundamentar uma tese complexa, adicione uma nota ao advogado sugerindo a inclusão de mais documentos comprobatórios.
+
+REGRAS DE FORMAÇÃO DO SISTEMA:
+- Retorne APENAS o texto da peça.
+- Não inclua saudações, explicações ou texto em Markdown, pois o sistema processará a saída via streaming SSE diretamente para o editor rico.`;
 
   try {
     const completion = await deepseekClient.chat.completions.create({
       model: deepseekModel,
       messages: [
-        { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças.' },
+        { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.3,
@@ -54,23 +75,39 @@ export async function generateStreamWithDeepSeek(
   tipo: string,
   area: string,
   dadosCaso: string,
-  contexto: string
+  contexto: string,
+  isComplex: boolean = false
 ) {
-  const prompt = `Você é um assistente jurídico experiente.
-Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
+  const prompt = `Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica.
+
+DIRETRIZES DE REDAÇÃO E CORREÇÃO (AUTOCORRETOR):
+1. Linguagem Jurídica: Utilize o padrão culto da língua portuguesa e o jargão jurídico adequado (ex: vênia, exordial, proêmio). Evite coloquialismos.
+2. Correção Gramatical: Atue como um revisor ortográfico implacável. Certifique-se de que há estrita concordância verbal e nominal, regência correta e pontuação impecável.
+3. Clareza e Concisão: Apesar da formalidade, evite o "juridiquês" excessivo ou prolixo que dificulte a compreensão do juízo.
+
+Tarefa: Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
+
 Os dados do caso são:
 ${dadosCaso}
 
 Contexto (Precedentes e Leis relevantes):
 ${contexto}
 
-Gere o documento final estruturado e formal.`;
+DIRETRIZES DE FUNDAMENTAÇÃO (RAG):
+1. Você receberá blocos de contexto (chunks) contendo teses, jurisprudência e fatos do caso.
+2. É OBRIGATÓRIO fundamentar todos os pedidos e alegações exclusivamente nas leis, doutrinas e jurisprudências fornecidas no contexto.
+3. Não invente ou alucine precedentes, números de processos ou artigos de lei que não estejam nos documentos de suporte.
+4. Se o contexto fornecido for insuficiente para fundamentar uma tese complexa, adicione uma nota ao advogado sugerindo a inclusão de mais documentos comprobatórios.
+
+REGRAS DE FORMAÇÃO DO SISTEMA:
+- Retorne APENAS o texto da peça.
+- Não inclua saudações, explicações ou texto em Markdown, pois o sistema processará a saída via streaming SSE diretamente para o editor rico.`;
 
   try {
     const stream = await deepseekClient.chat.completions.create({
-      model: deepseekModel,
+      model: selecionarModeloDeepSeek(isComplex),
       messages: [
-        { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças.' },
+        { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.3,

@@ -81,6 +81,8 @@ export default function GeradorPecas() {
   const [step, setStep] = useState<Step>('tipo')
   const [area, setArea] = useState('Trabalhista')
   const [tipo, setTipo] = useState('')
+  // Peça complexa (Recurso/Contestação) => roteia para o modelo Pro.
+  const [isComplex, setIsComplex] = useState(false)
   const [progresso, setProgresso] = useState(0)
   const [progressoLabel, setProgressoLabel] = useState('')
   const [copied, setCopied] = useState(false)
@@ -112,6 +114,8 @@ export default function GeradorPecas() {
   const [pecaConteudo, setPecaConteudo] = useState('')
   const [textoEmGeracao, setTextoEmGeracao] = useState('')
   const [fontesRecuperadas, setFontesRecuperadas] = useState<any[]>([])
+  const [promptUsado, setPromptUsado] = useState('')
+  const [verPrompt, setVerPrompt] = useState(false)
 
   // Catálogo de modelos do RAG e edição rica da peça
   const [modelos, setModelos] = useState<any[]>([])
@@ -141,6 +145,13 @@ export default function GeradorPecas() {
       if (Array.isArray(areas)) setModelos(areas)
     }).catch(err => console.error('Erro ao carregar dados:', err))
   }, [])
+
+  // Regra de negócio: tipo Recurso/Contestação => peça complexa (modelo Pro).
+  // A heurística de "mais de 5 documentos" não é auto-detectável aqui (os
+  // documentos vivem na Base RAG); o toggle da Etapa 2 cobre esse caso manualmente.
+  useEffect(() => {
+    setIsComplex(tipo === 'Recurso' || tipo === 'Contestação')
+  }, [tipo])
 
   const [showDecisoesModal, setShowDecisoesModal] = useState(false)
 
@@ -230,6 +241,7 @@ export default function GeradorPecas() {
             body: JSON.stringify({ 
               tipo, 
               area, 
+              isComplex,
               dadosCaso: `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.` 
             })
           });
@@ -289,6 +301,7 @@ export default function GeradorPecas() {
                   setTextoEmGeracao(acc);
                   setPecaConteudo(data.conteudo);
                   setFontesRecuperadas(data.fontes || []);
+                  setPromptUsado(data.prompt || '');
                   
                   // Salva a peça no banco
                   const res = await api.pecas.create({
@@ -597,6 +610,31 @@ export default function GeradorPecas() {
             </div>
           </div>
 
+          <div style={{
+            marginTop: SPACE.lg,
+            display: 'flex',
+            alignItems: 'center',
+            gap: SPACE.md,
+            flexWrap: 'wrap',
+            padding: '12px 14px',
+            background: 'var(--color-surface-2)',
+            border: '1px solid var(--color-border)',
+            borderRadius: RADIUS.control,
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', fontSize: FONT.base, color: 'var(--color-foreground)', fontWeight: 500 }}>
+              <input
+                type="checkbox"
+                checked={isComplex}
+                onChange={e => setIsComplex(e.target.checked)}
+                style={{ width: 16, height: 16, cursor: 'pointer' }}
+              />
+              Peça complexa — usar modelo Pro (DeepSeek V4-Pro)
+            </label>
+            <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+              Recomendado para Recursos e Contestações. O modelo Pro consome mais tokens.
+            </span>
+          </div>
+
           <div style={{ marginTop: SPACE.xxl, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <Button variant="secondary" onClick={() => setStep('tipo')}>← Voltar</Button>
             <Button
@@ -745,6 +783,38 @@ export default function GeradorPecas() {
                     </div>
                   ))}
                 </div>
+
+                {promptUsado && (
+                  <div style={{ marginTop: SPACE.md, display: 'flex', flexDirection: 'column', gap: SPACE.sm }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setVerPrompt(v => !v)}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      {verPrompt ? 'Ocultar prompt enviado à IA' : 'Ver prompt enviado à IA'}
+                    </Button>
+                    {verPrompt && (
+                      <pre style={{
+                        margin: 0,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: FONT.sm,
+                        lineHeight: 1.6,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        background: 'var(--color-surface-2)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: RADIUS.control,
+                        padding: '12px 14px',
+                        maxHeight: 320,
+                        overflowY: 'auto',
+                        color: 'var(--color-foreground)',
+                      }}>
+                        {promptUsado}
+                      </pre>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

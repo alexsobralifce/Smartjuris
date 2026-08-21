@@ -4,7 +4,7 @@ import { db } from '../db/client.js';
 import { chunks } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
-import { deepseekClient, deepseekModel, deepseekModelPro } from '../services/ai.js';
+import { deepseekClient, deepseekModel, deepseekModelPro, selecionarModeloDeepSeek } from '../services/ai.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { cosineDistance, sql, desc, or } from 'drizzle-orm';
@@ -14,16 +14,19 @@ import { AREAS, MODELOS_PECA, buscarModelo } from '../services/modelosPeca.js';
 const router = Router();
 
 async function criarStreamComFallback(
+  isComplex: boolean,
   params: Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming, 'model'>,
   signal: AbortSignal
 ) {
+  const principal = selecionarModeloDeepSeek(isComplex);
+  const reserva = isComplex ? deepseekModel : deepseekModelPro;
   try {
-    const stream = await deepseekClient.chat.completions.create({ ...params, model: deepseekModel }, { signal });
-    return { stream, modelUsado: deepseekModel };
+    const stream = await deepseekClient.chat.completions.create({ ...params, model: principal }, { signal });
+    return { stream, modelUsado: principal };
   } catch (err: any) {
-    console.warn('[RAG] DeepSeek Flash falhou, tentando Pro:', err?.message);
-    const stream = await deepseekClient.chat.completions.create({ ...params, model: deepseekModelPro }, { signal });
-    return { stream, modelUsado: deepseekModelPro };
+    console.warn(`[RAG] ${principal} falhou, tentando ${reserva}:`, err?.message);
+    const stream = await deepseekClient.chat.completions.create({ ...params, model: reserva }, { signal });
+    return { stream, modelUsado: reserva };
   }
 }
 
@@ -55,7 +58,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
-    const { tipo, area, dadosCaso } = parsed.data;
+    const { tipo, area, dadosCaso, isComplex } = parsed.data;
 
     // Estrutura obrigatória da peça a partir do catálogo de modelos
     const modelo = buscarModelo(tipo, area);
@@ -63,11 +66,15 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       ? modelo.secoes.map((s, i) => `${i + 1}. ${s.titulo} — ${s.instrucao}`).join('\n')
       : '';
 
-    // Cota de tokens do modo demo (antes de iniciar o stream SSE)
+    // Cota de tokens (antes de iniciar o stream SSE). O modelo Pro custa ~3x mais,
+    // então exige margem de segurança maior (bloqueia a 70% em vez de 100%).
     const quota = await checkTokenQuota(req as AuthenticatedRequest);
-    if (quota.status === 'blocked') {
+    const pctLimiteSeguro = isComplex ? 70 : 100;
+    if (quota.limite != null && quota.pct >= pctLimiteSeguro) {
       return res.status(403).json({
-        error: 'Limite de tokens do modo demonstração atingido para este mês. Contate o suporte para aumentar o limite.',
+        error: isComplex
+          ? 'Saldo de tokens insuficiente para geração com o modelo Pro. Aguarde o próximo ciclo mensal ou contate o suporte.'
+          : 'Limite de tokens do modo demonstração atingido para este mês. Contate o suporte para aumentar o limite.',
         code: 'TOKEN_LIMIT_EXCEEDED',
         usado: quota.usado,
         limite: quota.limite,
@@ -146,22 +153,36 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 
     if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 50, label: 'Enviando para o modelo DeepSeek...' })}\n\n`);
 
-    const prompt = `Você é um assistente jurídico experiente.
-Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
+    const prompt = `Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica.
+
+DIRETRIZES DE REDAÇÃO E CORREÇÃO (AUTOCORRETOR):
+1. Linguagem Jurídica: Utilize o padrão culto da língua portuguesa e o jargão jurídico adequado (ex: vênia, exordial, proêmio). Evite coloquialismos.
+2. Correção Gramatical: Atue como um revisor ortográfico implacável. Certifique-se de que há estrita concordância verbal e nominal, regência correta e pontuação impecável.
+3. Clareza e Concisão: Apesar da formalidade, evite o "juridiquês" excessivo ou prolixo que dificulte a compreensão do juízo.
+
+Tarefa: Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
+
 Os dados do caso são:
 ${dadosCaso}
 
 Contexto (Precedentes e Leis relevantes):
 ${contexto}
 
-Gere o documento final estruturado e formal. Apenas o conteúdo do documento, sem explicações extras.
-${estrutura ? `Estrutura obrigatória da peça (siga EXATAMENTE estas seções, nesta ordem, usando CAIXA ALTA para os títulos de cada seção):
-${estrutura}` : ''}
-CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para destacar títulos, cabeçalhos ou seções. Se precisar destacar algo, use CAIXA ALTA (letras maiúsculas). O texto deve ser inteiramente limpo, sem caracteres de marcação.`;
+DIRETRIZES DE FUNDAMENTAÇÃO (RAG):
+1. Você receberá blocos de contexto (chunks) contendo teses, jurisprudência e fatos do caso.
+2. É OBRIGATÓRIO fundamentar todos os pedidos e alegações exclusivamente nas leis, doutrinas e jurisprudências fornecidas no contexto.
+3. Não invente ou alucine precedentes, números de processos ou artigos de lei que não estejam nos documentos de suporte.
+4. Se o contexto fornecido for insuficiente para fundamentar uma tese complexa, adicione uma nota ao advogado sugerindo a inclusão de mais documentos comprobatórios.
 
-    const { stream, modelUsado } = await criarStreamComFallback({
+REGRAS DE FORMAÇÃO DO SISTEMA:
+- Retorne APENAS o texto da peça.
+- Não inclua saudações, explicações ou texto em Markdown, pois o sistema processará a saída via streaming SSE diretamente para o editor rico.
+${estrutura ? `Estrutura obrigatória da peça (siga EXATAMENTE estas seções, nesta ordem, usando CAIXA ALTA para os títulos de cada seção):
+${estrutura}` : ''}`;
+
+    const { stream, modelUsado } = await criarStreamComFallback(isComplex, {
       messages: [
-        { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
+        { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.3,
@@ -200,7 +221,8 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
         trecho: c.texto.substring(0, 100) + '...',
         relevancia: Math.round(Number(c.similarity) * 100) / 100,
       })),
-      conteudo: fullText
+      conteudo: fullText,
+      prompt,
     };
     
     if (!res.writableEnded) {

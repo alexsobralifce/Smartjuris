@@ -24,13 +24,16 @@ export function THeadRow({ children }: { children: ReactNode }) {
   return <tr style={{ background: 'var(--color-surface-2)' }}>{children}</tr>
 }
 
-export function Th({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
+export function Th({ children, style, ...props }: { children?: ReactNode; style?: CSSProperties; [key: string]: any }) {
   return (
-    <th style={{
-      padding: '12px 18px', textAlign: 'left', fontSize: FONT.xs, fontWeight: 600,
-      letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)',
-      fontFamily: 'var(--font-mono)', ...style,
-    }}>
+    <th
+      style={{
+        padding: '12px 18px', textAlign: 'left', fontSize: FONT.xs, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)',
+        fontFamily: 'var(--font-mono)', ...style,
+      }}
+      {...props}
+    >
       {children}
     </th>
   )
@@ -60,8 +63,8 @@ export function Tr({ children, style, onClick, selected = false }: {
   )
 }
 
-export function Td({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
-  return <td style={{ padding: '14px 18px', fontSize: FONT.md, ...style }}>{children}</td>
+export function Td({ children, style, ...props }: { children?: ReactNode; style?: CSSProperties; [key: string]: any }) {
+  return <td style={{ padding: '14px 18px', fontSize: FONT.md, ...style }} {...props}>{children}</td>
 }
 
 export function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {

@@ -185,6 +185,19 @@ export const escritorioUserPatchSchema = z.object({
   oabUf: z.string().optional(),
 });
 
+export const rootUserCreateSchema = z.object({
+  nome: z.string().min(1),
+  email: z.string().email(),
+  role: z.enum(['admin', 'user']).default('user'),
+});
+
+export const rootUserPatchSchema = z.object({
+  nome: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(['admin', 'user']).optional(),
+  ativo: z.boolean().optional(),
+});
+
 // --- Multi-tenant: Permissões por módulo ---
 export const permissoesUpdateSchema = z.object({
   permissoes: z.array(z.object({

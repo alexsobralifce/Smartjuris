@@ -297,6 +297,10 @@ export const api = {
       bufferedResponse(await authFetch(`/api/root/usuarios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),
     resetarSenhaUsuario: async (id: string) =>
       bufferedResponse(await authFetch(`/api/root/usuarios/${id}/reset-password`, { method: 'POST' })),
+    adicionarUsuario: async (escritorioId: string, data: { nome: string; email: string; role: string }) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${escritorioId}/usuarios`, { method: 'POST', body: JSON.stringify(data) })),
+    atualizarUsuario: async (escritorioId: string, userId: string, patch: { ativo?: boolean; role?: string; nome?: string; email?: string }) =>
+      bufferedResponse(await authFetch(`/api/root/escritorios/${escritorioId}/usuarios/${userId}`, { method: 'PATCH', body: JSON.stringify(patch) })),
   },
   jurisprudencias: {
     listCourts: (): Promise<{ data: Court[] }> =>

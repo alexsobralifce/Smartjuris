@@ -46,6 +46,8 @@ type ModalState =
   | { kind: 'excluir'; esc: Escritorio }
   | { kind: 'tempSenha'; titulo: string; senha: string }
   | { kind: 'addCreditos'; alvo: { tipo: 'escritorio' | 'usuario'; id: string; nome: string } }
+  | { kind: 'novoUsuario'; esc: Escritorio }
+  | { kind: 'editarUsuario'; esc: Escritorio; user: Escritorio['usuarios'][number] }
   | null
 
 const PLANOS = [
@@ -417,6 +419,37 @@ export default function RootPainel() {
     }
   }
 
+  const handleCriarUsuario = async (escId: string, data: { nome: string; email: string; role: string }) => {
+    try {
+      const res = await api.raiz.adicionarUsuario(escId, data)
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Falha ao adicionar usuário.'))
+        return
+      }
+      const senha = json?.senhaTemporaria || json?.senha || json?.password
+      setModal({ kind: 'tempSenha', titulo: 'Usuário adicionado', senha: senha || '—' })
+      loadEscritorios()
+    } catch {
+      addToast('error', 'Falha ao adicionar usuário.')
+    }
+  }
+
+  const handleEditarUsuario = async (escId: string, userId: string, patch: { nome?: string; email?: string; role?: string; ativo?: boolean }) => {
+    try {
+      const res = await api.raiz.atualizarUsuario(escId, userId, patch)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Falha ao atualizar usuário.'))
+        return
+      }
+      setModal(null)
+      addToast('success', 'Usuário atualizado.')
+      loadEscritorios()
+    } catch {
+      addToast('error', 'Falha ao atualizar usuário.')
+    }
+  }
+
   const handleAtivarSubmit = async (escId: string, data: { plano: string; limiteTokensMes: number }) => {
     try {
       const res = await api.raiz.atualizarEscritorio(escId, {
@@ -536,10 +569,17 @@ export default function RootPainel() {
                 </thead>
                 <tbody>
                   {(() => {
-                    const linhas = escritorios.flatMap(esc =>
+                    interface LinhaTabela {
+                      esc: Escritorio
+                      user: Escritorio['usuarios'][number] | null
+                      isFirst: boolean
+                      rowspan: number
+                    }
+
+                    const linhas: LinhaTabela[] = escritorios.flatMap(esc =>
                       esc.usuarios?.length
-                        ? esc.usuarios.map((user, idx) => ({ esc, user, isFirst: idx === 0, rowspan: esc.usuarios.length }))
-                        : [{ esc, user: null, isFirst: true, rowspan: 1 }]
+                        ? esc.usuarios.map((user, idx) => ({ esc, user: user as Escritorio['usuarios'][number] | null, isFirst: idx === 0, rowspan: esc.usuarios.length }))
+                        : [{ esc, user: null as Escritorio['usuarios'][number] | null, isFirst: true, rowspan: 1 }]
                     )
 
                     return linhas.map((linha, idx) => {
@@ -564,6 +604,13 @@ export default function RootPainel() {
                                   }}>
                                     {user.role === 'admin' ? 'Admin' : 'Advogado'}
                                   </span>
+                                  <span style={{
+                                    fontSize: FONT.xs, fontWeight: 600, padding: '1px 6px', borderRadius: RADIUS.chip,
+                                    color: user.ativo ? 'var(--color-success)' : 'var(--color-muted)',
+                                    background: user.ativo ? 'var(--color-success-light)' : 'var(--color-surface-2)',
+                                  }}>
+                                    {user.ativo ? 'Ativo' : 'Inativo'}
+                                  </span>
                                 </div>
                                 <div style={{ color: 'var(--color-muted)', marginTop: 2 }}>{user.email}</div>
                               </div>
@@ -573,14 +620,24 @@ export default function RootPainel() {
                           </Td>
                           <Td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                             {user ? (
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                style={{ padding: '4px 8px', fontSize: FONT.sm, color: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
-                                onClick={() => handleResetSenha(user)}
-                              >
-                                Resetar senha
-                              </Button>
+                              <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  style={{ padding: '4px 8px', fontSize: FONT.sm, color: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
+                                  onClick={() => handleResetSenha(user)}
+                                >
+                                  Resetar senha
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  style={{ padding: '4px 8px', fontSize: FONT.sm }}
+                                  onClick={() => setModal({ kind: 'editarUsuario', esc, user })}
+                                >
+                                  Editar
+                                </Button>
+                              </div>
                             ) : (
                               <span style={{ color: 'var(--color-muted)' }}>—</span>
                             )}
@@ -604,6 +661,7 @@ export default function RootPainel() {
                                 {!esc.ativo && (
                                   <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'ativar', esc })}>Ativar</Button>
                                 )}
+                                <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'novoUsuario', esc })} title="Adicionar usuário a este escritório">+ Usuário</Button>
                                 <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
                                 <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={!esc.ativo} onClick={() => setModal({ kind: 'desativar', esc })}>
                                   Desativar
@@ -830,7 +888,12 @@ export default function RootPainel() {
       {modal?.kind === 'editar' && (
         <EditarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={handleEditar} />
       )}
-      {/* ResetSenhaModal removido em favor do reset direto por linha */}
+      {modal?.kind === 'novoUsuario' && (
+        <NovoUsuarioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={(data: { nome: string; email: string; role: string }) => handleCriarUsuario(modal.esc.id, data)} />
+      )}
+      {modal?.kind === 'editarUsuario' && (
+        <EditarUsuarioModal open esc={modal.esc} user={modal.user} onClose={() => setModal(null)} onSubmit={(patch: { nome?: string; email?: string; role?: string; ativo?: boolean }) => handleEditarUsuario(modal.esc.id, modal.user.id, patch)} />
+      )}
       {modal?.kind === 'desativar' && (
         <Modal
           open
@@ -1067,6 +1130,155 @@ function AtivarEscritorioModal({
               {sug.toLocaleString('pt-BR')} créditos
             </Button>
           ))}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function NovoUsuarioModal({
+  open,
+  esc,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  esc: Escritorio
+  onClose: () => void
+  onSubmit: (data: { nome: string; email: string; role: string }) => Promise<void>
+}) {
+  const [nome, setNome] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('user')
+  const [errors, setErrors] = useState<{ nome?: string; email?: string }>({})
+  const [submitting, setSubmitting] = useState(false)
+
+  const valid = nome.trim() && email.trim()
+
+  const submit = async () => {
+    const next: typeof errors = {}
+    if (!nome.trim()) next.nome = 'Informe o nome do usuário.'
+    if (!email.trim()) next.email = 'Informe o e-mail.'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = 'E-mail inválido.'
+    setErrors(next)
+    if (Object.keys(next).length > 0) return
+
+    setSubmitting(true)
+    try {
+      await onSubmit({ nome: nome.trim(), email: email.trim(), role })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Adicionar usuário a ${esc.nome}`}
+      width={440}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>Cancelar</Button>
+          <Button disabled={!valid || submitting} onClick={submit}>
+            {submitting ? 'Adicionando…' : 'Adicionar usuário'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>
+        Adicione um novo usuário diretamente neste escritório. O usuário receberá uma senha temporária.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <Field label="Nome completo" error={errors.nome}>
+          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
+        </Field>
+        <Field label="E-mail de acesso" error={errors.email}>
+          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
+        </Field>
+        <Field label="Perfil (Função)">
+          <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
+            <option value="user">Advogado</option>
+            <option value="admin">Administrador (Gestor)</option>
+          </select>
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+function EditarUsuarioModal({
+  open,
+  esc,
+  user,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  esc: Escritorio
+  user: Escritorio['usuarios'][number]
+  onClose: () => void
+  onSubmit: (patch: { nome?: string; email?: string; role?: string; ativo?: boolean }) => Promise<void>
+}) {
+  const [nome, setNome] = useState(user.nome || '')
+  const [email, setEmail] = useState(user.email || '')
+  const [role, setRole] = useState(user.role || 'user')
+  const [ativo, setAtivo] = useState(user.ativo ?? true)
+  const [errors, setErrors] = useState<{ nome?: string; email?: string }>({})
+  const [submitting, setSubmitting] = useState(false)
+
+  const valid = nome.trim() && email.trim()
+
+  const submit = async () => {
+    const next: typeof errors = {}
+    if (!nome.trim()) next.nome = 'Informe o nome.'
+    if (!email.trim()) next.email = 'Informe o e-mail.'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = 'E-mail inválido.'
+    setErrors(next)
+    if (Object.keys(next).length > 0) return
+
+    setSubmitting(true)
+    try {
+      await onSubmit({ nome: nome.trim(), email: email.trim(), role, ativo })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Editar usuário de ${esc.nome}`}
+      width={440}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>Cancelar</Button>
+          <Button disabled={!valid || submitting} onClick={submit}>
+            {submitting ? 'Salvando…' : 'Salvar alterações'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <Field label="Nome completo" error={errors.nome}>
+          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
+        </Field>
+        <Field label="E-mail de acesso" error={errors.email}>
+          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
+        </Field>
+        <Field label="Perfil (Função)">
+          <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
+            <option value="user">Advogado</option>
+            <option value="admin">Administrador (Gestor)</option>
+          </select>
+        </Field>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: SPACE.sm }}>
+          <input type="checkbox" id="user-ativo-check" checked={ativo} onChange={e => setAtivo(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+          <label htmlFor="user-ativo-check" style={{ fontSize: FONT.md, color: 'var(--color-foreground)', cursor: 'pointer', userSelect: 'none' }}>
+            Usuário com acesso ativo
+          </label>
         </div>
       </div>
     </Modal>

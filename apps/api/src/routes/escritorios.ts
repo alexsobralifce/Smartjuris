@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and, ne, count } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { escritorios, usuarios } from '../db/schema.js';
 import { requireRoot } from '../middlewares/roleGuard.js';
@@ -13,6 +13,8 @@ import {
   escritorioCreateSchema,
   escritorioPatchSchema,
   uuidSchema,
+  rootUserCreateSchema,
+  rootUserPatchSchema,
 } from '../validation/schemas.js';
 import { sendAccountActivatedEmail } from '../services/email.js';
 
@@ -335,6 +337,144 @@ router.delete('/:id/permanente', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Error hard-deleting escritorio:', error);
     res.status(500).json({ error: 'Erro ao excluir escritório permanentemente.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /:id/usuarios — cria usuário no escritório (apenas root)
+// ---------------------------------------------------------------------------
+router.post('/:id/usuarios', async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id: escritorioId } = req.params;
+    if (!uuidSchema.safeParse(escritorioId).success) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
+
+    const parsed = parseBody(rootUserCreateSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { nome, email, role } = parsed.data;
+
+    // Verificar se escritório existe e obter limite de usuários
+    const [esc] = await db.select({ limiteUsuarios: escritorios.limiteUsuarios, nome: escritorios.nome }).from(escritorios)
+      .where(eq(escritorios.id, escritorioId)).limit(1);
+    if (!esc) {
+      return res.status(404).json({ error: 'Escritório não encontrado.' });
+    }
+
+    // Verificar limite de usuários ativos
+    const [cnt] = await db.select({ total: count() }).from(usuarios)
+      .where(and(eq(usuarios.escritorioId, escritorioId), eq(usuarios.ativo, true)));
+    if (Number(cnt?.total ?? 0) >= Number(esc.limiteUsuarios)) {
+      return res.status(403).json({ error: `Limite de usuários ativos do escritório (${esc.limiteUsuarios}) atingido.` });
+    }
+
+    // Verificar e-mail duplicado
+    const [existing] = await db.select({ id: usuarios.id }).from(usuarios)
+      .where(eq(usuarios.email, email)).limit(1);
+    if (existing) {
+      return res.status(409).json({ error: 'Email já cadastrado.' });
+    }
+
+    const senhaTemporaria = randomBytes(12).toString('base64url');
+    const senhaHash = await bcrypt.hash(senhaTemporaria, 12);
+
+    const [created] = await db.insert(usuarios).values({
+      nome,
+      email,
+      senha: senhaHash,
+      role,
+      escritorioId,
+      precisaTrocarSenha: true,
+      createdBy: req.user?.id ?? null,
+    }).returning();
+
+    await recordAudit(req, 'CREATE_ESCRITORIO_USER', {
+      alvoId: created.id,
+      detalhes: { email, escritorioId, escritorioNome: esc.nome },
+    });
+
+    res.status(201).json({
+      user: {
+        id: created.id,
+        nome: created.nome,
+        email: created.email,
+        role: created.role,
+        ativo: created.ativo,
+        precisaTrocarSenha: created.precisaTrocarSenha,
+        createdAt: created.createdAt,
+      },
+      senhaTemporaria,
+    });
+  } catch (error) {
+    console.error('Error creating user by root:', error);
+    res.status(500).json({ error: 'Erro ao criar usuário.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /:id/usuarios/:userId — atualiza usuário no escritório (apenas root)
+// ---------------------------------------------------------------------------
+router.patch('/:id/usuarios/:userId', async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id: escritorioId, userId } = req.params;
+    if (!uuidSchema.safeParse(escritorioId).success || !uuidSchema.safeParse(userId).success) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
+
+    const parsed = parseBody(rootUserPatchSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const { nome, email, role, ativo } = parsed.data;
+
+    // Verificar se o usuário existe e pertence ao escritório
+    const [target] = await db.select().from(usuarios)
+      .where(and(eq(usuarios.id, userId), eq(usuarios.escritorioId, escritorioId))).limit(1);
+    if (!target) {
+      return res.status(404).json({ error: 'Usuário não encontrado ou não pertence a este escritório.' });
+    }
+
+    // Verificar duplicidade de e-mail se estiver alterando
+    if (email !== undefined && email !== target.email) {
+      const [dup] = await db.select({ id: usuarios.id }).from(usuarios)
+        .where(and(eq(usuarios.email, email), ne(usuarios.id, userId))).limit(1);
+      if (dup) {
+        return res.status(409).json({ error: 'Email já cadastrado para outro usuário.' });
+      }
+    }
+
+    const updates: Record<string, any> = {};
+    if (nome !== undefined) updates.nome = nome;
+    if (email !== undefined) updates.email = email;
+    if (role !== undefined) updates.role = role;
+    if (ativo !== undefined) updates.ativo = ativo;
+
+    let updated = target;
+    if (Object.keys(updates).length > 0) {
+      const [row] = await db.update(usuarios).set(updates).where(eq(usuarios.id, userId)).returning();
+      updated = row;
+    }
+
+    await recordAudit(req, 'UPDATE_ESCRITORIO_USER', {
+      alvoId: userId,
+      alvoEmail: target.email,
+      detalhes: { ...updates, escritorioId },
+    });
+
+    res.json({
+      id: updated.id,
+      nome: updated.nome,
+      email: updated.email,
+      role: updated.role,
+      ativo: updated.ativo,
+      precisaTrocarSenha: updated.precisaTrocarSenha,
+      createdAt: updated.createdAt,
+    });
+  } catch (error) {
+    console.error('Error updating user by root:', error);
+    res.status(500).json({ error: 'Erro ao atualizar usuário.' });
   }
 });
 

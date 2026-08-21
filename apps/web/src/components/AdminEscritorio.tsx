@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
 import {
-  Button, EmptyRow, EmptyState, Field, FONT, inputStyle, Loading, Modal,
+  Button, EmptyRow, EmptyState, Field, FONT, FormGrid, FormRow, inputStyle, Loading, Modal,
   PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile,
 } from '../ui'
 
@@ -427,8 +427,8 @@ export default function AdminEscritorio() {
               <Button onClick={() => setModal({ kind: 'novoUsuario' })}>+ Novo usuário</Button>
             </div>
 
-            <TableShell>
-              <Table style={{ minWidth: 720 }}>
+            <TableShell minWidth={700}>
+              <Table>
                 <THeadRow>
                   <Th>Nome</Th><Th>E-mail</Th><Th>Perfil</Th><Th>Último login</Th><Th>Status</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
                 </THeadRow>
@@ -736,7 +736,6 @@ export default function AdminEscritorio() {
 }
 
 function NovoUsuarioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (data: { nome: string; email: string; permissoes: string[] }) => void }) {
-  const isMobile = useIsMobile()
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [permissoes, setPermissoes] = useState<string[]>(['documentacao'])
@@ -777,25 +776,26 @@ function NovoUsuarioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubm
         Cadastre um membro da equipe e defina seus módulos de acesso.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
+      <FormGrid>
+        <FormRow>
           <Field label="Nome" error={errors.nome} required>
             <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={inputStyle(!!errors.nome)} placeholder="Nome completo" autoFocus />
           </Field>
+        </FormRow>
+        <FormRow>
           <Field label="E-mail" error={errors.email} required>
             <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={inputStyle(!!errors.email)} type="email" placeholder="usuario@escritorio.com" />
           </Field>
-        </div>
-
-        <div>
+        </FormRow>
+        <FormRow span>
           <Field label="Módulos de acesso">
             <ModuleCheckboxGrid selected={permissoes} onChange={setPermissoes} />
           </Field>
           <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: SPACE.sm }}>
             Documentação vem marcada por padrão. A senha temporária será gerada automaticamente ao criar.
           </div>
-        </div>
-      </div>
+        </FormRow>
+      </FormGrid>
     </Modal>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { api, getErrorMessage, type AgendaItem } from '../api/client'
 import Toast, { type ToastMessage } from './Toast'
-import { Button, EmptyState, Field, FONT, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, useIsMobile } from '../ui'
+import { Button, EmptyState, Field, FONT, FormGrid, FormRow, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, useIsMobile } from '../ui'
 
 // ---------------------------------------------------------------------------
 // Constantes de domínio (tipos de evento, legendas, nomes de meses/semana)
@@ -314,8 +314,8 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
       }
     >
       <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
-          <div style={{ gridColumn: '1 / -1' }}>
+        <FormGrid>
+          <FormRow span>
             <Field label="Título" required error={showError('titulo') ? errors.titulo : undefined}>
               <input
                 type="text"
@@ -327,104 +327,120 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
                 style={inputStyle(!!showError('titulo'))}
               />
             </Field>
-          </div>
+          </FormRow>
 
-          <Field label="Tipo">
-            <select
-              value={form.tipo}
-              onChange={e => setField('tipo', e.target.value)}
-              style={inputStyle()}
-            >
-              {TIPOS_EVENTO.map(t => (
-                <option key={t} value={t}>
-                  {t === 'audiencia' ? 'Audiência' : t === 'reuniao' ? 'Reunião' : t === 'prazo' ? 'Prazo' : t === 'diligencia' ? 'Diligência' : 'Outro'}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <FormRow>
+            <Field label="Tipo">
+              <select
+                value={form.tipo}
+                onChange={e => setField('tipo', e.target.value)}
+                style={inputStyle()}
+              >
+                {TIPOS_EVENTO.map(t => (
+                  <option key={t} value={t}>
+                    {t === 'audiencia' ? 'Audiência' : t === 'reuniao' ? 'Reunião' : t === 'prazo' ? 'Prazo' : t === 'diligencia' ? 'Diligência' : 'Outro'}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FormRow>
 
-          <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 20 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', minHeight: 44 }}>
+          <FormRow>
+            <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', minHeight: 44 }}>
+                <input
+                  type="checkbox"
+                  checked={form.diaInteiro}
+                  onChange={e => setField('diaInteiro', e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }}
+                />
+                <span style={{ fontSize: FONT.md, fontWeight: 500 }}>Dia inteiro</span>
+              </label>
+            </div>
+          </FormRow>
+
+          <FormRow>
+            <Field label="Data Início" required error={showError('dataInicio') ? errors.dataInicio : undefined}>
               <input
-                type="checkbox"
-                checked={form.diaInteiro}
-                onChange={e => setField('diaInteiro', e.target.checked)}
-                style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }}
+                type="date"
+                value={form.dataInicio}
+                onChange={e => setField('dataInicio', e.target.value)}
+                onBlur={() => markTouched('dataInicio')}
+                style={inputStyle(!!showError('dataInicio'))}
               />
-              <span style={{ fontSize: FONT.md, fontWeight: 500 }}>Dia inteiro</span>
-            </label>
-          </div>
-
-          <Field label="Data Início" required error={showError('dataInicio') ? errors.dataInicio : undefined}>
-            <input
-              type="date"
-              value={form.dataInicio}
-              onChange={e => setField('dataInicio', e.target.value)}
-              onBlur={() => markTouched('dataInicio')}
-              style={inputStyle(!!showError('dataInicio'))}
-            />
-          </Field>
+            </Field>
+          </FormRow>
 
           {!form.diaInteiro ? (
-            <Field label="Hora início">
+            <FormRow>
+              <Field label="Hora início">
+                <input
+                  type="time"
+                  value={form.horaInicio}
+                  onChange={e => setField('horaInicio', e.target.value)}
+                  style={inputStyle()}
+                />
+              </Field>
+            </FormRow>
+          ) : <FormRow />}
+
+          <FormRow>
+            <Field label="Data Fim (opcional)">
               <input
-                type="time"
-                value={form.horaInicio}
-                onChange={e => setField('horaInicio', e.target.value)}
+                type="date"
+                value={form.dataFim}
+                onChange={e => setField('dataFim', e.target.value)}
                 style={inputStyle()}
               />
             </Field>
-          ) : <div />}
-
-          <Field label="Data Fim (opcional)">
-            <input
-              type="date"
-              value={form.dataFim}
-              onChange={e => setField('dataFim', e.target.value)}
-              style={inputStyle()}
-            />
-          </Field>
+          </FormRow>
 
           {!form.diaInteiro ? (
-            <Field label="Hora fim (opcional)">
-              <input
-                type="time"
-                value={form.horaFim}
-                onChange={e => setField('horaFim', e.target.value)}
+            <FormRow>
+              <Field label="Hora fim (opcional)">
+                <input
+                  type="time"
+                  value={form.horaFim}
+                  onChange={e => setField('horaFim', e.target.value)}
+                  style={inputStyle()}
+                />
+              </Field>
+            </FormRow>
+          ) : <FormRow />}
+
+          <FormRow>
+            <Field label="Processo vinculado">
+              <select
+                value={form.processoId}
+                onChange={e => setField('processoId', e.target.value)}
                 style={inputStyle()}
-              />
+              >
+                <option value="">Nenhum</option>
+                {processos.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.id.slice(0, 8)} • {p.cliente ?? ''} ({p.tipo ?? ''})
+                  </option>
+                ))}
+              </select>
             </Field>
-          ) : <div />}
+          </FormRow>
 
-          <Field label="Processo vinculado">
-            <select
-              value={form.processoId}
-              onChange={e => setField('processoId', e.target.value)}
-              style={inputStyle()}
-            >
-              <option value="">Nenhum</option>
-              {processos.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.id.slice(0, 8)} • {p.cliente ?? ''} ({p.tipo ?? ''})
-                </option>
-              ))}
-            </select>
-          </Field>
+          <FormRow>
+            <Field label="Cliente vinculado">
+              <select
+                value={form.clienteId}
+                onChange={e => setField('clienteId', e.target.value)}
+                style={inputStyle()}
+              >
+                <option value="">Nenhum</option>
+                {clientes.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome ?? ''}</option>
+                ))}
+              </select>
+            </Field>
+          </FormRow>
 
-          <Field label="Cliente vinculado">
-            <select
-              value={form.clienteId}
-              onChange={e => setField('clienteId', e.target.value)}
-              style={inputStyle()}
-            >
-              <option value="">Nenhum</option>
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>{c.nome ?? ''}</option>
-              ))}
-            </select>
-          </Field>
-
-          <div style={{ gridColumn: '1 / -1' }}>
+          <FormRow span>
             <Field label="Descrição (opcional)">
               <textarea
                 value={form.descricao}
@@ -434,8 +450,8 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
                 style={{ ...inputStyle(), resize: 'vertical', minHeight: 70 }}
               />
             </Field>
-          </div>
-        </div>
+          </FormRow>
+        </FormGrid>
       </form>
     </Modal>
   )

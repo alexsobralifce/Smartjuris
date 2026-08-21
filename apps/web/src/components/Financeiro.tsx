@@ -5,7 +5,7 @@ import Toast, { ToastMessage } from './Toast'
 import Pagination, { usePagination } from './Pagination'
 import {
   FONT, SPACE, RADIUS, Z,
-  PageContainer, PageHeader, Button, inputStyle, Field,
+  PageContainer, PageHeader, Button, inputStyle, Field, FormGrid, FormRow,
   TableShell, Table, THeadRow, Th, Tr, Td, EmptyRow,
   Modal, useIsMobile,
 } from '../ui'
@@ -442,8 +442,8 @@ export default function Financeiro() {
         width={560}
       >
         <form onSubmit={handleCreateLancamento} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
-            <div style={{ gridColumn: '1 / -1' }}>
+          <FormGrid>
+            <FormRow span>
               <Field label="Nome do cliente" required>
                 <div ref={clienteSearchRef} style={{ position: 'relative' }}>
                   <input
@@ -492,31 +492,37 @@ export default function Financeiro() {
                   )}
                 </div>
               </Field>
-            </div>
+            </FormRow>
 
-            <Field label="Tipo de honorário">
-              <select value={novoTipo} onChange={e => setNovoTipo(e.target.value)} style={inputStyle()}>
-                <option value="Honorário Fixo">Honorário Fixo</option>
-                <option value="Êxito (Ad Exitum)">Êxito (Ad Exitum)</option>
-                <option value="Partido Mensal">Partido Mensal</option>
-              </select>
-            </Field>
+            <FormRow>
+              <Field label="Tipo de honorário">
+                <select value={novoTipo} onChange={e => setNovoTipo(e.target.value)} style={inputStyle()}>
+                  <option value="Honorário Fixo">Honorário Fixo</option>
+                  <option value="Êxito (Ad Exitum)">Êxito (Ad Exitum)</option>
+                  <option value="Partido Mensal">Partido Mensal</option>
+                </select>
+              </Field>
+            </FormRow>
 
-            <Field label="Valor monetário" required>
-              <input
-                required
-                type="text"
-                placeholder="R$ 0,00"
-                value={novoValor}
-                onChange={e => setNovoValor(maskCurrency(e.target.value))}
-                style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }}
-              />
-            </Field>
+            <FormRow>
+              <Field label="Valor monetário" required>
+                <input
+                  required
+                  type="text"
+                  placeholder="R$ 0,00"
+                  value={novoValor}
+                  onChange={e => setNovoValor(maskCurrency(e.target.value))}
+                  style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }}
+                />
+              </Field>
+            </FormRow>
 
-            <Field label="Data de vencimento" required>
-              <input required type="date" value={novoVencimento} onChange={e => setNovoVencimento(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
-            </Field>
-          </div>
+            <FormRow>
+              <Field label="Data de vencimento" required>
+                <input required type="date" value={novoVencimento} onChange={e => setNovoVencimento(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
+              </Field>
+            </FormRow>
+          </FormGrid>
 
           <div style={{ display: 'flex', gap: SPACE.sm, justifyContent: 'flex-end', marginTop: SPACE.md }}>
             <Button variant="secondary" onClick={() => setShowNovoLancamento(false)}>Cancelar</Button>

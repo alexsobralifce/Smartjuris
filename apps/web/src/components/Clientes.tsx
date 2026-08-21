@@ -3,7 +3,7 @@ import { api, getErrorMessage } from '../api/client'
 import { maskCpfCnpj, maskCEP, maskPhone, isValidEmail } from '../utils/masks'
 import Toast, { ToastMessage } from './Toast'
 import Pagination, { usePagination } from './Pagination'
-import { Button, EmptyRow, Field, FONT, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
+import { Button, EmptyRow, Field, FONT, FormGrid, FormRow, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr } from '../ui'
 
 const initialClientes = [
   {
@@ -64,7 +64,6 @@ const initialClientes = [
 ]
 
 export default function Clientes() {
-  const isMobile = useIsMobile()
   const [clientes, setClientes] = useState<any[]>(initialClientes)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -379,8 +378,8 @@ export default function Clientes() {
             </Button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
-            <div style={{ gridColumn: '1 / -1' }}>
+          <FormGrid>
+            <FormRow span>
               <Field label="Nome completo ou razão social" required error={errors.nome}>
                 <input
                   type="text"
@@ -393,32 +392,36 @@ export default function Clientes() {
                   style={inputStyle(!!errors.nome)}
                 />
               </Field>
-            </div>
+            </FormRow>
 
-            <Field label={tipo === 'PF' ? 'CPF' : 'CNPJ'} required error={errors.cpfCnpj}>
-              <input
-                type="text"
-                placeholder={tipo === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'}
-                value={cpfCnpj}
-                onChange={e => {
-                  setCpfCnpj(maskCpfCnpj(e.target.value, tipo))
-                  if (errors.cpfCnpj) setErrors(prev => ({ ...prev, cpfCnpj: '' }))
-                }}
-                style={{ ...inputStyle(!!errors.cpfCnpj), fontFamily: 'var(--font-mono)' }}
-              />
-            </Field>
+            <FormRow>
+              <Field label={tipo === 'PF' ? 'CPF' : 'CNPJ'} required error={errors.cpfCnpj}>
+                <input
+                  type="text"
+                  placeholder={tipo === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'}
+                  value={cpfCnpj}
+                  onChange={e => {
+                    setCpfCnpj(maskCpfCnpj(e.target.value, tipo))
+                    if (errors.cpfCnpj) setErrors(prev => ({ ...prev, cpfCnpj: '' }))
+                  }}
+                  style={{ ...inputStyle(!!errors.cpfCnpj), fontFamily: 'var(--font-mono)' }}
+                />
+              </Field>
+            </FormRow>
 
-            <Field label="Telefone / WhatsApp">
-              <input
-                type="text"
-                placeholder="(11) 98877-6655"
-                value={telefone}
-                onChange={e => setTelefone(maskPhone(e.target.value))}
-                style={inputStyle()}
-              />
-            </Field>
+            <FormRow>
+              <Field label="Telefone / WhatsApp">
+                <input
+                  type="text"
+                  placeholder="(11) 98877-6655"
+                  value={telefone}
+                  onChange={e => setTelefone(maskPhone(e.target.value))}
+                  style={inputStyle()}
+                />
+              </Field>
+            </FormRow>
 
-            <div style={{ gridColumn: tipo === 'PF' ? undefined : '1 / -1' }}>
+            <FormRow span={tipo === 'PJ'}>
               <Field label="E-mail institucional" error={errors.email}>
                 <input
                   type="email"
@@ -431,22 +434,24 @@ export default function Clientes() {
                   style={inputStyle(!!errors.email)}
                 />
               </Field>
-            </div>
+            </FormRow>
 
             {tipo === 'PF' && (
-              <Field label="Data de Nascimento" error={errors.dataNascimento}>
-                <input
-                  type="date"
-                  value={dataNascimento}
-                  onChange={e => {
-                    setDataNascimento(e.target.value)
-                    if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
-                  }}
-                  style={inputStyle(!!errors.dataNascimento)}
-                />
-              </Field>
+              <FormRow>
+                <Field label="Data de Nascimento" error={errors.dataNascimento}>
+                  <input
+                    type="date"
+                    value={dataNascimento}
+                    onChange={e => {
+                      setDataNascimento(e.target.value)
+                      if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
+                    }}
+                    style={inputStyle(!!errors.dataNascimento)}
+                  />
+                </Field>
+              </FormRow>
             )}
-          </div>
+          </FormGrid>
 
           {/* Seção Endereço com Busca por CEP via ViaCEP */}
           <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', padding: SPACE.lg, borderRadius: RADIUS.control, display: 'flex', flexDirection: 'column', gap: SPACE.sm }}>
@@ -455,17 +460,26 @@ export default function Clientes() {
               {cepMsg && <span style={{ fontSize: FONT.sm, color: 'var(--color-primary)', fontWeight: 500 }}>{cepMsg}</span>}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '140px 1fr 90px', gap: SPACE.sm }}>
-              <input type="text" placeholder="CEP (00000-000)" value={cep} onChange={e => handleBuscarCep(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
-              <input type="text" placeholder="Rua / Avenida / Logradouro" value={logradouro} onChange={e => setLogradouro(e.target.value)} style={inputStyle()} />
-              <input type="text" placeholder="Número" value={numero} onChange={e => setNumero(e.target.value)} style={inputStyle()} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 60px', gap: SPACE.sm }}>
-              <input type="text" placeholder="Bairro" value={bairro} onChange={e => setBairro(e.target.value)} style={inputStyle()} />
-              <input type="text" placeholder="Cidade / Município" value={cidade} onChange={e => setCidade(e.target.value)} style={inputStyle()} />
-              <input type="text" placeholder="UF" value={uf} onChange={e => setUf(e.target.value)} style={{ ...inputStyle(), textTransform: 'uppercase' }} />
-            </div>
+            <FormGrid style={{ gap: SPACE.sm }}>
+              <FormRow>
+                <input type="text" placeholder="CEP (00000-000)" value={cep} onChange={e => handleBuscarCep(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
+              </FormRow>
+              <FormRow>
+                <input type="text" placeholder="Número" value={numero} onChange={e => setNumero(e.target.value)} style={inputStyle()} />
+              </FormRow>
+              <FormRow span>
+                <input type="text" placeholder="Rua / Avenida / Logradouro" value={logradouro} onChange={e => setLogradouro(e.target.value)} style={inputStyle()} />
+              </FormRow>
+              <FormRow span>
+                <input type="text" placeholder="Bairro" value={bairro} onChange={e => setBairro(e.target.value)} style={inputStyle()} />
+              </FormRow>
+              <FormRow>
+                <input type="text" placeholder="Cidade / Município" value={cidade} onChange={e => setCidade(e.target.value)} style={inputStyle()} />
+              </FormRow>
+              <FormRow>
+                <input type="text" placeholder="UF" value={uf} onChange={e => setUf(e.target.value)} style={{ ...inputStyle(), textTransform: 'uppercase' }} />
+              </FormRow>
+            </FormGrid>
           </div>
 
           <Field label="Qualificação jurídica completa para petições (autopreenchida)">

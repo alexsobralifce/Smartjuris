@@ -3,7 +3,7 @@ import { api, getErrorMessage } from '../api/client'
 import type { Processo, StatusProcesso } from '@lexia/shared'
 import Pagination, { usePagination } from './Pagination'
 import Toast, { ToastMessage } from './Toast'
-import { Button, EmptyRow, Field, FONT, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
+import { Button, EmptyRow, Field, FONT, FormGrid, FormRow, inputStyle, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
 const statusConfig: Record<StatusProcesso, { label: string; color: string; bg: string }> = {
   ativo:     { label: 'Ativo',     color: 'var(--color-success)', bg: 'var(--color-success-light)' },
@@ -376,9 +376,9 @@ export default function Processos() {
           </>
         }
       >
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
+        <FormGrid>
           {formFields.map(f => (
-            <div key={f.key} style={{ gridColumn: f.full ? '1 / -1' : undefined }}>
+            <FormRow key={f.key} span={f.full}>
               <Field label={f.label}>
                 <input
                   list={f.key === 'cliente' ? 'clientes-processo-datalist' : undefined}
@@ -395,16 +395,16 @@ export default function Processos() {
                   </datalist>
                 )}
               </Field>
-            </div>
+            </FormRow>
           ))}
-          <div>
+          <FormRow>
             <Field label="Área">
               <select value={form.area} onChange={e => setForm(v => ({ ...v, area: e.target.value }))} style={inputStyle()}>
                 {areasNovoProcesso.map(a => <option key={a}>{a}</option>)}
               </select>
             </Field>
-          </div>
-        </div>
+          </FormRow>
+        </FormGrid>
       </Modal>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />

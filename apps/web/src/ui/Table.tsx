@@ -1,8 +1,12 @@
-import { type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import { createContext, useContext, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { FONT, RADIUS, SPACE } from './tokens'
 
+// Propaga o `minWidth` do TableShell para a <table> interna (via contexto),
+// sem depender da estrutura de children nem quebrar usos sem `minWidth`.
+const TableMinWidthContext = createContext<number | undefined>(undefined)
+
 /** Cartão que envolve uma tabela; adiciona scroll horizontal no mobile. */
-export function TableShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+export function TableShell({ children, style, minWidth }: { children: ReactNode; style?: CSSProperties; minWidth?: number }) {
   return (
     <div style={{
       background: 'var(--color-surface)',
@@ -13,13 +17,16 @@ export function TableShell({ children, style }: { children: ReactNode; style?: C
       boxSizing: 'border-box',
       ...style,
     }}>
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>{children}</div>
+      <TableMinWidthContext.Provider value={minWidth}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>{children}</div>
+      </TableMinWidthContext.Provider>
     </div>
   )
 }
 
-export function Table({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <table style={{ width: '100%', borderCollapse: 'collapse', ...style }}>{children}</table>
+export function Table({ children, style, minWidth }: { children: ReactNode; style?: CSSProperties; minWidth?: number }) {
+  const contextMinWidth = useContext(TableMinWidthContext)
+  return <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: minWidth ?? contextMinWidth, ...style }}>{children}</table>
 }
 
 /** Linha de cabeçalho — padrão de thead do design system. */

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
-import { Button, EmptyRow, EmptyState, FONT, Field, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
+import { Button, EmptyRow, EmptyState, FONT, Field, FormGrid, FormRow, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
 type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria'
 
@@ -532,8 +532,8 @@ export default function RootPainel() {
           {loading ? (
             <Loading message="Carregando…" />
           ) : (
-            <TableShell>
-              <Table style={{ minWidth: 980 }}>
+            <TableShell minWidth={1000}>
+              <Table>
                 <thead>
                   <THeadRow>
                     <Th>Escritório</Th>
@@ -943,19 +943,23 @@ function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClo
         Crie um novo escritório e o administrador inicial responsável por ele.
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
-        <div style={{ gridColumn: '1 / -1' }}>
+      <FormGrid>
+        <FormRow span>
           <Field label="Nome do escritório" error={errors.nome}>
             <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Silva & Advogados Associados" autoFocus />
           </Field>
-        </div>
-        <Field label="Nome do admin inicial" error={errors.adminNome}>
-          <input value={adminNome} onChange={e => { setAdminNome(e.target.value); if (errors.adminNome) setErrors(p => ({ ...p, adminNome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminNome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" />
-        </Field>
-        <Field label="E-mail do admin inicial" error={errors.adminEmail}>
-          <input value={adminEmail} onChange={e => { setAdminEmail(e.target.value); if (errors.adminEmail) setErrors(p => ({ ...p, adminEmail: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminEmail ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="admin@escritorio.com" />
-        </Field>
-      </div>
+        </FormRow>
+        <FormRow>
+          <Field label="Nome do admin inicial" error={errors.adminNome}>
+            <input value={adminNome} onChange={e => { setAdminNome(e.target.value); if (errors.adminNome) setErrors(p => ({ ...p, adminNome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminNome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" />
+          </Field>
+        </FormRow>
+        <FormRow>
+          <Field label="E-mail do admin inicial" error={errors.adminEmail}>
+            <input value={adminEmail} onChange={e => { setAdminEmail(e.target.value); if (errors.adminEmail) setErrors(p => ({ ...p, adminEmail: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminEmail ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="admin@escritorio.com" />
+          </Field>
+        </FormRow>
+      </FormGrid>
     </Modal>
   )
 }
@@ -991,21 +995,25 @@ function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean
     >
       <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>{esc.nome}</div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
-        <Field label="Plano">
-          <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle()}>
-            {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </Field>
-        <Field label="Limite de usuários">
-          <input value={limiteUsuarios} onChange={e => setLimiteUsuarios(e.target.value)} style={inputStyle()} type="number" min={1} />
-        </Field>
-        <div style={{ gridColumn: '1 / -1' }}>
+      <FormGrid>
+        <FormRow>
+          <Field label="Plano">
+            <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle()}>
+              {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </Field>
+        </FormRow>
+        <FormRow>
+          <Field label="Limite de usuários">
+            <input value={limiteUsuarios} onChange={e => setLimiteUsuarios(e.target.value)} style={inputStyle()} type="number" min={1} />
+          </Field>
+        </FormRow>
+        <FormRow span>
           <Field label="Limite de tokens (mensal)">
             <input value={limiteTokensMes} onChange={e => setLimiteTokensMes(e.target.value)} style={inputStyle()} type="number" min={0} />
           </Field>
-        </div>
-      </div>
+        </FormRow>
+      </FormGrid>
     </Modal>
   )
 }
@@ -1064,22 +1072,26 @@ function NovoUsuarioModal({
         Adicione um novo usuário diretamente neste escritório. O usuário receberá uma senha temporária.
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
-        <Field label="Nome completo" error={errors.nome}>
-          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
-        </Field>
-        <Field label="E-mail de acesso" error={errors.email}>
-          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
-        </Field>
-        <div style={{ gridColumn: '1 / -1' }}>
+      <FormGrid>
+        <FormRow>
+          <Field label="Nome completo" error={errors.nome}>
+            <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
+          </Field>
+        </FormRow>
+        <FormRow>
+          <Field label="E-mail de acesso" error={errors.email}>
+            <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
+          </Field>
+        </FormRow>
+        <FormRow span>
           <Field label="Perfil (Função)">
             <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
               <option value="user">Advogado</option>
               <option value="admin">Administrador (Gestor)</option>
             </select>
           </Field>
-        </div>
-      </div>
+        </FormRow>
+      </FormGrid>
     </Modal>
   )
 }
@@ -1137,28 +1149,32 @@ function EditarUsuarioModal({
         </>
       }
     >
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
-        <Field label="Nome completo" error={errors.nome}>
-          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
-        </Field>
-        <Field label="E-mail de acesso" error={errors.email}>
-          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
-        </Field>
-        <div style={{ gridColumn: '1 / -1' }}>
+      <FormGrid>
+        <FormRow>
+          <Field label="Nome completo" error={errors.nome}>
+            <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
+          </Field>
+        </FormRow>
+        <FormRow>
+          <Field label="E-mail de acesso" error={errors.email}>
+            <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
+          </Field>
+        </FormRow>
+        <FormRow span>
           <Field label="Perfil (Função)">
             <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
               <option value="user">Advogado</option>
               <option value="admin">Administrador (Gestor)</option>
             </select>
           </Field>
-        </div>
-        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: SPACE.xs }}>
+        </FormRow>
+        <FormRow span style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: SPACE.xs }}>
           <input type="checkbox" id="user-ativo-check" checked={ativo} onChange={e => setAtivo(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
           <label htmlFor="user-ativo-check" style={{ fontSize: FONT.md, color: 'var(--color-foreground)', cursor: 'pointer', userSelect: 'none' }}>
             Usuário com acesso ativo
           </label>
-        </div>
-      </div>
+        </FormRow>
+      </FormGrid>
     </Modal>
   )
 }

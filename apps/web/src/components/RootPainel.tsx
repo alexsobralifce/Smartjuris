@@ -40,7 +40,6 @@ interface CreditoEscritorio {
 
 type ModalState =
   | { kind: 'novoEscritorio' }
-  | { kind: 'ativar'; esc: Escritorio }
   | { kind: 'editar'; esc: Escritorio }
   | { kind: 'desativar'; esc: Escritorio }
   | { kind: 'excluir'; esc: Escritorio }
@@ -450,25 +449,6 @@ export default function RootPainel() {
     }
   }
 
-  const handleAtivarSubmit = async (escId: string, data: { plano: string; limiteTokensMes: number }) => {
-    try {
-      const res = await api.raiz.atualizarEscritorio(escId, {
-        ativo: true,
-        plano: data.plano,
-        limiteTokensMes: data.limiteTokensMes,
-      })
-      if (!res.ok) {
-        addToast('error', await getErrorMessage(res, 'Falha ao ativar escritório.'))
-        return
-      }
-      setModal(null)
-      addToast('success', `Escritório ativado com ${data.limiteTokensMes.toLocaleString('pt-BR')} créditos liberados.`)
-      loadEscritorios()
-    } catch {
-      addToast('error', 'Falha ao ativar escritório.')
-    }
-  }
-
   const handleExcluir = async (esc: Escritorio) => {
     try {
       const res = await api.raiz.excluirEscritorioPermanente(esc.id)
@@ -553,7 +533,7 @@ export default function RootPainel() {
             <Loading message="Carregando…" />
           ) : (
             <TableShell>
-              <Table>
+              <Table style={{ minWidth: 980 }}>
                 <thead>
                   <THeadRow>
                     <Th>Escritório</Th>
@@ -658,9 +638,6 @@ export default function RootPainel() {
                                 }}>{esc.ativo ? 'Ativo' : 'Inativo'}</span>
                               </Td>
                               <Td rowSpan={rowspan} style={{ textAlign: 'right', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
-                                {!esc.ativo && (
-                                  <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'ativar', esc })}>Ativar</Button>
-                                )}
                                 <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'novoUsuario', esc })} title="Adicionar usuário a este escritório">+ Usuário</Button>
                                 <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
                                 <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={!esc.ativo} onClick={() => setModal({ kind: 'desativar', esc })}>
@@ -882,9 +859,6 @@ export default function RootPainel() {
       {modal?.kind === 'novoEscritorio' && (
         <NovoEscritorioModal open onClose={() => setModal(null)} onSubmit={handleCriarEscritorio} />
       )}
-      {modal?.kind === 'ativar' && (
-        <AtivarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={(data) => handleAtivarSubmit(modal.esc.id, data)} />
-      )}
       {modal?.kind === 'editar' && (
         <EditarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={handleEditar} />
       )}
@@ -955,7 +929,7 @@ function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClo
       open={open}
       onClose={onClose}
       title="Novo escritório"
-      width={440}
+      width={560}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -969,10 +943,12 @@ function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClo
         Crie um novo escritório e o administrador inicial responsável por ele.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
-        <Field label="Nome do escritório" error={errors.nome}>
-          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Silva & Advogados Associados" autoFocus />
-        </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Field label="Nome do escritório" error={errors.nome}>
+            <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Silva & Advogados Associados" autoFocus />
+          </Field>
+        </div>
         <Field label="Nome do admin inicial" error={errors.adminNome}>
           <input value={adminNome} onChange={e => { setAdminNome(e.target.value); if (errors.adminNome) setErrors(p => ({ ...p, adminNome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminNome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" />
         </Field>
@@ -1003,7 +979,7 @@ function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean
       open={open}
       onClose={onClose}
       title="Editar escritório"
-      width={440}
+      width={560}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -1015,7 +991,7 @@ function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean
     >
       <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.xl }}>{esc.nome}</div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
         <Field label="Plano">
           <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle()}>
             {PLANOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -1024,112 +1000,10 @@ function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean
         <Field label="Limite de usuários">
           <input value={limiteUsuarios} onChange={e => setLimiteUsuarios(e.target.value)} style={inputStyle()} type="number" min={1} />
         </Field>
-        <Field label="Limite de tokens (mensal)">
-          <input value={limiteTokensMes} onChange={e => setLimiteTokensMes(e.target.value)} style={inputStyle()} type="number" min={0} />
-        </Field>
-      </div>
-    </Modal>
-  )
-}
-
-
-
-function AtivarEscritorioModal({
-  open,
-  esc,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean
-  esc: Escritorio
-  onClose: () => void
-  onSubmit: (data: { plano: string; limiteTokensMes: number }) => Promise<void>
-}) {
-  const [plano, setPlano] = useState(esc.plano || 'basico')
-  const [limiteTokens, setLimiteTokens] = useState(String(esc.limiteTokensMes || 10000))
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | undefined>()
-
-  const tokensNum = Number(limiteTokens)
-  const valid = limiteTokens.trim() !== '' && Number.isInteger(tokensNum) && tokensNum >= 0
-
-  const handleSubmit = async () => {
-    if (!valid) {
-      setError('Informe uma quantidade válida de créditos (inteiro >= 0).')
-      return
-    }
-    setSubmitting(true)
-    setError(undefined)
-    try {
-      await onSubmit({ plano, limiteTokensMes: tokensNum })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Ativar Escritório e Conceder Créditos"
-      width={480}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !valid}>
-            {submitting ? 'Ativando…' : 'Ativar e Liberar Créditos →'}
-          </Button>
-        </>
-      }
-    >
-      <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginBottom: SPACE.lg, lineHeight: 1.5 }}>
-        Ao ativar o escritório <strong>{esc.nome}</strong>, o administrador receberá um e-mail confirmando a liberação do acesso e o saldo de créditos informado abaixo.
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
-        <Field label="Plano de Assinatura">
-          <select value={plano} onChange={e => setPlano(e.target.value)} style={inputStyle()}>
-            <option value="basico">Básico (Demo)</option>
-            <option value="starter">Starter</option>
-            <option value="profissional">Profissional</option>
-            <option value="enterprise">Enterprise</option>
-          </select>
-        </Field>
-
-        <Field
-          label="Créditos Iniciais / Limite Mensal de Tokens"
-          error={error}
-          required
-        >
-          <input
-            type="number"
-            min={0}
-            step={1000}
-            value={limiteTokens}
-            onChange={e => {
-              setLimiteTokens(e.target.value)
-              if (error) setError(undefined)
-            }}
-            placeholder="Ex.: 20000"
-            style={{ ...inputStyle(!!error), fontFamily: 'var(--font-mono)' }}
-          />
-        </Field>
-
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: -4 }}>
-          {[10000, 25000, 50000, 100000].map(sug => (
-            <Button
-              key={sug}
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setLimiteTokens(String(sug))}
-              style={{ fontSize: FONT.xs, padding: '4px 8px' }}
-            >
-              {sug.toLocaleString('pt-BR')} créditos
-            </Button>
-          ))}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Field label="Limite de tokens (mensal)">
+            <input value={limiteTokensMes} onChange={e => setLimiteTokensMes(e.target.value)} style={inputStyle()} type="number" min={0} />
+          </Field>
         </div>
       </div>
     </Modal>
@@ -1176,7 +1050,7 @@ function NovoUsuarioModal({
       open={open}
       onClose={onClose}
       title={`Adicionar usuário a ${esc.nome}`}
-      width={440}
+      width={560}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>Cancelar</Button>
@@ -1190,19 +1064,21 @@ function NovoUsuarioModal({
         Adicione um novo usuário diretamente neste escritório. O usuário receberá uma senha temporária.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
         <Field label="Nome completo" error={errors.nome}>
           <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
         </Field>
         <Field label="E-mail de acesso" error={errors.email}>
           <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
         </Field>
-        <Field label="Perfil (Função)">
-          <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
-            <option value="user">Advogado</option>
-            <option value="admin">Administrador (Gestor)</option>
-          </select>
-        </Field>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Field label="Perfil (Função)">
+            <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
+              <option value="user">Advogado</option>
+              <option value="admin">Administrador (Gestor)</option>
+            </select>
+          </Field>
+        </div>
       </div>
     </Modal>
   )
@@ -1251,7 +1127,7 @@ function EditarUsuarioModal({
       open={open}
       onClose={onClose}
       title={`Editar usuário de ${esc.nome}`}
-      width={440}
+      width={560}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>Cancelar</Button>
@@ -1261,20 +1137,22 @@ function EditarUsuarioModal({
         </>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SPACE.md }}>
         <Field label="Nome completo" error={errors.nome}>
           <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={{ ...inputStyle(), borderColor: errors.nome ? 'var(--color-danger)' : 'var(--color-border)' }} placeholder="Dr. Carlos Silva" autoFocus />
         </Field>
         <Field label="E-mail de acesso" error={errors.email}>
           <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={{ ...inputStyle(), borderColor: errors.email ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="carlos@escritorio.com" />
         </Field>
-        <Field label="Perfil (Função)">
-          <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
-            <option value="user">Advogado</option>
-            <option value="admin">Administrador (Gestor)</option>
-          </select>
-        </Field>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: SPACE.sm }}>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Field label="Perfil (Função)">
+            <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle()}>
+              <option value="user">Advogado</option>
+              <option value="admin">Administrador (Gestor)</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: SPACE.xs }}>
           <input type="checkbox" id="user-ativo-check" checked={ativo} onChange={e => setAtivo(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
           <label htmlFor="user-ativo-check" style={{ fontSize: FONT.md, color: 'var(--color-foreground)', cursor: 'pointer', userSelect: 'none' }}>
             Usuário com acesso ativo

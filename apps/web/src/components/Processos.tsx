@@ -22,10 +22,10 @@ const formFields: { key: string; label: string; placeholder: string; full?: bool
   { key: 'tipo', label: 'Tipo de Ação', placeholder: 'Reclamação Trabalhista', full: true },
   { key: 'cliente', label: 'Cliente', placeholder: 'Nome completo' },
   { key: 'adverso', label: 'Parte Adversa', placeholder: 'Empresa Ltda.' },
-  { key: 'vara', label: 'Vara / Tribunal', placeholder: '3ª Vara do Trabalho de SP', full: true },
+  { key: 'vara', label: 'Vara / Tribunal', placeholder: '3ª Vara do Trabalho de SP' },
+  { key: 'advogado', label: 'Advogado Responsável', placeholder: 'Dr. Nome' },
   { key: 'valor', label: 'Valor da Causa', placeholder: 'R$ 0,00' },
   { key: 'prazo', label: 'Próximo Prazo', placeholder: 'dd/mm/aaaa' },
-  { key: 'advogado', label: 'Advogado Responsável', placeholder: 'Dr. Nome' },
 ]
 
 const areasNovoProcesso = ['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista']
@@ -213,7 +213,7 @@ export default function Processos() {
 
           {/* Table */}
           <TableShell>
-            <Table>
+            <Table style={{ minWidth: 780 }}>
               <THeadRow>
                 {['Nº do Processo', 'Tipo / Cliente', 'Área', 'Advogado', 'Valor da Causa', 'Próximo Prazo', 'Status', ''].map(h => (
                   <Th key={h}>{h}</Th>
@@ -368,6 +368,7 @@ export default function Processos() {
         open={showForm}
         onClose={() => setShowForm(false)}
         title="Novo Processo"
+        width={560}
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowForm(false)}>Cancelar</Button>

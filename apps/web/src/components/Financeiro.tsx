@@ -296,7 +296,7 @@ export default function Financeiro() {
 
           {/* Tabela de Lançamentos */}
           <TableShell>
-            <Table>
+            <Table style={{ minWidth: 700 }}>
               <THeadRow>
                 {['Cliente', 'Tipo de Honorário', 'Valor', 'Vencimento', 'Status', 'Ações'].map(h => (
                   <Th key={h}>{h}</Th>
@@ -401,7 +401,7 @@ export default function Financeiro() {
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, fontSize: FONT.md }}>
               Histórico de Horas Registradas no Mês
             </div>
-            <Table>
+            <Table style={{ minWidth: 680 }}>
               <THeadRow>
                 {['Advogado', 'Descrição da Tarefa', 'Duração', 'Valor Calculado', 'Faturado'].map(h => (
                   <Th key={h}>{h}</Th>
@@ -439,80 +439,84 @@ export default function Financeiro() {
         open={showNovoLancamento}
         onClose={() => setShowNovoLancamento(false)}
         title="Novo Lançamento Financeiro"
-        width={420}
+        width={560}
       >
-        <form onSubmit={handleCreateLancamento} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
-          <Field label="Nome do cliente" required>
-            <div ref={clienteSearchRef} style={{ position: 'relative' }}>
+        <form onSubmit={handleCreateLancamento} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Field label="Nome do cliente" required>
+                <div ref={clienteSearchRef} style={{ position: 'relative' }}>
+                  <input
+                    required
+                    type="text"
+                    placeholder="Buscar cliente..."
+                    value={novoCliente}
+                    onChange={e => { setNovoCliente(e.target.value); setClienteDropdownOpen(true) }}
+                    onFocus={() => setClienteDropdownOpen(true)}
+                    style={inputStyle()}
+                  />
+                  {clienteDropdownOpen && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: Z.sticky,
+                      background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                      borderRadius: RADIUS.control, marginTop: SPACE.xs,
+                      maxHeight: 240, overflowY: 'auto',
+                    }}>
+                      {clientesFiltrados.length === 0 ? (
+                        <div style={{ padding: '10px 12px', fontSize: FONT.base, color: 'var(--color-muted)' }}>
+                          Nenhum cliente encontrado — digite o nome manualmente
+                        </div>
+                      ) : (
+                        clientesFiltrados.map(c => (
+                          <button
+                            type="button"
+                            key={c.id}
+                            onClick={() => { setNovoCliente(c.nome); setClienteDropdownOpen(false) }}
+                            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface-2)'}
+                            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm,
+                              width: '100%', padding: '9px 12px', border: 'none', background: 'transparent',
+                              cursor: 'pointer', textAlign: 'left', fontSize: FONT.md, color: 'var(--color-foreground)',
+                            }}
+                          >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</span>
+                            <span style={{
+                              fontSize: FONT.xs, fontWeight: 700, padding: '2px 6px', borderRadius: RADIUS.chip, flexShrink: 0,
+                              background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: 'var(--color-on-primary)',
+                            }}>{c.tipo}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Field>
+            </div>
+
+            <Field label="Tipo de honorário">
+              <select value={novoTipo} onChange={e => setNovoTipo(e.target.value)} style={inputStyle()}>
+                <option value="Honorário Fixo">Honorário Fixo</option>
+                <option value="Êxito (Ad Exitum)">Êxito (Ad Exitum)</option>
+                <option value="Partido Mensal">Partido Mensal</option>
+              </select>
+            </Field>
+
+            <Field label="Valor monetário" required>
               <input
                 required
                 type="text"
-                placeholder="Buscar cliente..."
-                value={novoCliente}
-                onChange={e => { setNovoCliente(e.target.value); setClienteDropdownOpen(true) }}
-                onFocus={() => setClienteDropdownOpen(true)}
-                style={inputStyle()}
+                placeholder="R$ 0,00"
+                value={novoValor}
+                onChange={e => setNovoValor(maskCurrency(e.target.value))}
+                style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }}
               />
-              {clienteDropdownOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: Z.sticky,
-                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                  borderRadius: RADIUS.control, marginTop: SPACE.xs,
-                  maxHeight: 240, overflowY: 'auto',
-                }}>
-                  {clientesFiltrados.length === 0 ? (
-                    <div style={{ padding: '10px 12px', fontSize: FONT.base, color: 'var(--color-muted)' }}>
-                      Nenhum cliente encontrado — digite o nome manualmente
-                    </div>
-                  ) : (
-                    clientesFiltrados.map(c => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        onClick={() => { setNovoCliente(c.nome); setClienteDropdownOpen(false) }}
-                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface-2)'}
-                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm,
-                          width: '100%', padding: '9px 12px', border: 'none', background: 'transparent',
-                          cursor: 'pointer', textAlign: 'left', fontSize: FONT.md, color: 'var(--color-foreground)',
-                        }}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</span>
-                        <span style={{
-                          fontSize: FONT.xs, fontWeight: 700, padding: '2px 6px', borderRadius: RADIUS.chip, flexShrink: 0,
-                          background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: 'var(--color-on-primary)',
-                        }}>{c.tipo}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </Field>
+            </Field>
 
-          <Field label="Tipo de honorário">
-            <select value={novoTipo} onChange={e => setNovoTipo(e.target.value)} style={inputStyle()}>
-              <option value="Honorário Fixo">Honorário Fixo</option>
-              <option value="Êxito (Ad Exitum)">Êxito (Ad Exitum)</option>
-              <option value="Partido Mensal">Partido Mensal</option>
-            </select>
-          </Field>
-
-          <Field label="Valor monetário" required>
-            <input
-              required
-              type="text"
-              placeholder="R$ 0,00"
-              value={novoValor}
-              onChange={e => setNovoValor(maskCurrency(e.target.value))}
-              style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }}
-            />
-          </Field>
-
-          <Field label="Data de vencimento" required>
-            <input required type="date" value={novoVencimento} onChange={e => setNovoVencimento(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
-          </Field>
+            <Field label="Data de vencimento" required>
+              <input required type="date" value={novoVencimento} onChange={e => setNovoVencimento(e.target.value)} style={{ ...inputStyle(), fontFamily: 'var(--font-mono)' }} />
+            </Field>
+          </div>
 
           <div style={{ display: 'flex', gap: SPACE.sm, justifyContent: 'flex-end', marginTop: SPACE.md }}>
             <Button variant="secondary" onClick={() => setShowNovoLancamento(false)}>Cancelar</Button>

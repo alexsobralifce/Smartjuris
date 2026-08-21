@@ -1,8 +1,6 @@
 import { type CSSProperties, type ReactNode } from 'react'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { SPACE } from './tokens'
-
-const PAGE_MAX_WIDTH = 1150
+import { LAYOUT, SPACE } from './tokens'
 
 export function PageContainer({ children, style }: {
   children: ReactNode
@@ -13,7 +11,9 @@ export function PageContainer({ children, style }: {
   return (
     <div
       style={{
-        maxWidth: PAGE_MAX_WIDTH,
+        width: '100%',
+        boxSizing: 'border-box',
+        maxWidth: LAYOUT.pageMaxW,
         margin: '0 auto',
         padding: isMobile
           ? `${SPACE.xxl}px ${SPACE.lg}px`

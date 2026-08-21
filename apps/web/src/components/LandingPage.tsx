@@ -87,7 +87,7 @@ function CadastroSucesso({ onBackToLogin }: { onBackToLogin: () => void }) {
           Cadastro concluído!
         </div>
         <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-          Seu escritório foi registrado. O administrador da plataforma vai liberar seu acesso e creditar seus tokens de IA.
+          Cadastro confirmado com sucesso. Seu acesso já está <strong style={{ color: 'var(--color-success)' }}>ativo</strong> — os créditos de uso serão concedidos pelo administrador da plataforma.
         </div>
       </div>
 
@@ -102,8 +102,8 @@ function CadastroSucesso({ onBackToLogin }: { onBackToLogin: () => void }) {
         textAlign: 'left',
         width: '100%',
       }}>
-        <div style={{ fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>📧 Acompanhe a liberação:</div>
-        Assim que o administrador aprovar seu escritório e creditar os tokens, você poderá entrar. Verifique sua caixa de entrada para saber quando seu acesso for liberado.
+        <div style={{ fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>📧 Acompanhe seus créditos:</div>
+        Seu acesso já está ativo — você já pode entrar com seu e-mail e senha. Os créditos de uso serão concedidos pelo administrador da plataforma.
       </div>
 
       <Button onClick={onBackToLogin} style={{ width: '100%', padding: '12px' }}>
@@ -293,14 +293,17 @@ function CadastroVerificacao({
 
 function CadastroForm({
   isMobile,
+  values,
+  onValuesChange,
   onCodeSent,
   onAutoVerified,
 }: {
   isMobile: boolean
+  values: CadastroValues
+  onValuesChange: (v: CadastroValues) => void
   onCodeSent: (email: string) => void
   onAutoVerified: () => void
 }) {
-  const [values, setValues] = useState<CadastroValues>(CADASTRO_INICIAL)
   const [errors, setErrors] = useState<Partial<Record<keyof CadastroValues, string>>>({})
   const [touched, setTouched] = useState<Partial<Record<keyof CadastroValues, boolean>>>({})
   const [submitError, setSubmitError] = useState('')
@@ -325,7 +328,7 @@ function CadastroForm({
   const setField = (field: keyof CadastroValues, raw: string, transform?: (v: string) => string) => {
     const next = transform ? transform(raw) : raw
     const updated = { ...values, [field]: next }
-    setValues(updated)
+    onValuesChange(updated)
     if (touched[field]) {
       const nextErrors = validate(updated)
       setErrors(prev => ({ ...prev, [field]: nextErrors[field] }))
@@ -798,12 +801,14 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [cadastroStep, setCadastroStep] = useState<'form' | 'otp' | 'sucesso'>('form')
   const [emailPendente, setEmailPendente] = useState('')
   const [esqueciSenha, setEsqueciSenha] = useState(false)
+  const [cadastroDados, setCadastroDados] = useState<CadastroValues>(CADASTRO_INICIAL)
 
   const switchMode = (m: 'login' | 'signup') => {
     setMode(m)
     setCadastroStep('form')
     setEmailPendente('')
     setEsqueciSenha(false)
+    setCadastroDados(CADASTRO_INICIAL)
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -1164,6 +1169,8 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           ) : (
             <CadastroForm
               isMobile={isMobile}
+              values={cadastroDados}
+              onValuesChange={setCadastroDados}
               onAutoVerified={() => setCadastroStep('sucesso')}
               onCodeSent={(em) => {
                 setEmailPendente(em)

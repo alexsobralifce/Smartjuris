@@ -296,6 +296,7 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
       open={modal !== null}
       onClose={onClose}
       title={isEdit ? 'Editar Evento' : 'Novo Evento'}
+      width={560}
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           {isEdit ? (
@@ -312,34 +313,48 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
         </div>
       }
     >
-      <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
-        <Field label="Título" required error={showError('titulo') ? errors.titulo : undefined}>
-          <input
-            type="text"
-            value={form.titulo}
-            maxLength={200}
-            placeholder="Ex: Audiência de conciliação"
-            onChange={e => setField('titulo', e.target.value)}
-            onBlur={() => markTouched('titulo')}
-            style={inputStyle(!!showError('titulo'))}
-          />
-        </Field>
+      <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Field label="Título" required error={showError('titulo') ? errors.titulo : undefined}>
+              <input
+                type="text"
+                value={form.titulo}
+                maxLength={200}
+                placeholder="Ex: Audiência de conciliação"
+                onChange={e => setField('titulo', e.target.value)}
+                onBlur={() => markTouched('titulo')}
+                style={inputStyle(!!showError('titulo'))}
+              />
+            </Field>
+          </div>
 
-        <Field label="Tipo">
-          <select
-            value={form.tipo}
-            onChange={e => setField('tipo', e.target.value)}
-            style={inputStyle()}
-          >
-            {TIPOS_EVENTO.map(t => (
-              <option key={t} value={t}>
-                {t === 'audiencia' ? 'Audiência' : t === 'reuniao' ? 'Reunião' : t === 'prazo' ? 'Prazo' : t === 'diligencia' ? 'Diligência' : 'Outro'}
-              </option>
-            ))}
-          </select>
-        </Field>
+          <Field label="Tipo">
+            <select
+              value={form.tipo}
+              onChange={e => setField('tipo', e.target.value)}
+              style={inputStyle()}
+            >
+              {TIPOS_EVENTO.map(t => (
+                <option key={t} value={t}>
+                  {t === 'audiencia' ? 'Audiência' : t === 'reuniao' ? 'Reunião' : t === 'prazo' ? 'Prazo' : t === 'diligencia' ? 'Diligência' : 'Outro'}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-        <div style={{ display: 'grid', gridTemplateColumns: dataGridCols, gap: SPACE.md }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', minHeight: 44 }}>
+              <input
+                type="checkbox"
+                checked={form.diaInteiro}
+                onChange={e => setField('diaInteiro', e.target.checked)}
+                style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }}
+              />
+              <span style={{ fontSize: FONT.md, fontWeight: 500 }}>Dia inteiro</span>
+            </label>
+          </div>
+
           <Field label="Data Início" required error={showError('dataInicio') ? errors.dataInicio : undefined}>
             <input
               type="date"
@@ -349,7 +364,8 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
               style={inputStyle(!!showError('dataInicio'))}
             />
           </Field>
-          {!form.diaInteiro && (
+
+          {!form.diaInteiro ? (
             <Field label="Hora início">
               <input
                 type="time"
@@ -358,20 +374,8 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
                 style={inputStyle()}
               />
             </Field>
-          )}
-        </div>
+          ) : <div />}
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', minHeight: 44 }}>
-          <input
-            type="checkbox"
-            checked={form.diaInteiro}
-            onChange={e => setField('diaInteiro', e.target.checked)}
-            style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }}
-          />
-          <span style={{ fontSize: FONT.md, fontWeight: 500 }}>Dia inteiro</span>
-        </label>
-
-        <div style={{ display: 'grid', gridTemplateColumns: dataGridCols, gap: SPACE.md }}>
           <Field label="Data Fim (opcional)">
             <input
               type="date"
@@ -380,7 +384,8 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
               style={inputStyle()}
             />
           </Field>
-          {!form.diaInteiro && (
+
+          {!form.diaInteiro ? (
             <Field label="Hora fim (opcional)">
               <input
                 type="time"
@@ -389,20 +394,8 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
                 style={inputStyle()}
               />
             </Field>
-          )}
-        </div>
+          ) : <div />}
 
-        <Field label="Descrição (opcional)">
-          <textarea
-            value={form.descricao}
-            onChange={e => setField('descricao', e.target.value)}
-            rows={3}
-            placeholder="Observações do compromisso..."
-            style={{ ...inputStyle(), resize: 'vertical', minHeight: 70 }}
-          />
-        </Field>
-
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
           <Field label="Processo vinculado">
             <select
               value={form.processoId}
@@ -417,6 +410,7 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
               ))}
             </select>
           </Field>
+
           <Field label="Cliente vinculado">
             <select
               value={form.clienteId}
@@ -429,6 +423,18 @@ function EventModal({ modal, processos, clientes, isMobile, onClose, onSaved, ad
               ))}
             </select>
           </Field>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Field label="Descrição (opcional)">
+              <textarea
+                value={form.descricao}
+                onChange={e => setField('descricao', e.target.value)}
+                rows={3}
+                placeholder="Observações do compromisso..."
+                style={{ ...inputStyle(), resize: 'vertical', minHeight: 70 }}
+              />
+            </Field>
+          </div>
         </div>
       </form>
     </Modal>
@@ -621,53 +627,61 @@ export default function Agenda() {
       }
 
       return (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-            {DIAS_SEMANA.map((d, i) => (
-              <div key={d} style={{
-                padding: '10px 8px', textAlign: 'center', fontSize: FONT.xs, fontWeight: 600,
-                letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)',
-                fontFamily: 'var(--font-mono)', background: 'var(--color-surface-2)',
-                borderRight: i !== 6 ? '1px solid var(--color-border)' : 'none',
-                borderBottom: '1px solid var(--color-border)',
-              }}>{d}</div>
-            ))}
-            {cells.map((cell, i) => {
-              const dayItems = itemsForDay(cell.date)
-              const isToday = sameDay(cell.date, today)
-              const visible = dayItems.slice(0, 3)
-              const more = dayItems.length - visible.length
-              return (
-                <div
-                  key={`${cell.date.getFullYear()}-${cell.date.getMonth()}-${cell.date.getDate()}`}
-                  onClick={() => openDay(cell.date)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDay(cell.date) }}
-                  style={{
-                    minHeight: 118, padding: 8, cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', gap: 4,
-                    background: isToday ? 'var(--color-accent-light)' : cell.inMonth ? 'var(--color-surface)' : 'var(--color-background)',
-                    borderRight: i % 7 !== 6 ? '1px solid var(--color-border)' : 'none',
-                    borderTop: i >= 7 ? '1px solid var(--color-border)' : 'none',
-                    transition: 'background 0.12s',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <span style={{
-                      width: 24, height: 24, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      background: isToday ? 'var(--color-primary)' : 'transparent',
-                      color: isToday ? 'var(--color-on-primary)' : cell.inMonth ? 'var(--color-foreground)' : 'var(--color-muted)',
-                      fontSize: FONT.base, fontWeight: isToday ? 700 : 500,
-                    }}>{cell.date.getDate()}</span>
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: RADIUS.card,
+          overflow: 'hidden',
+          width: '100%',
+        }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', minWidth: 700 }}>
+              {DIAS_SEMANA.map((d, i) => (
+                <div key={d} style={{
+                  padding: '10px 8px', textAlign: 'center', fontSize: FONT.xs, fontWeight: 600,
+                  letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)',
+                  fontFamily: 'var(--font-mono)', background: 'var(--color-surface-2)',
+                  borderRight: i !== 6 ? '1px solid var(--color-border)' : 'none',
+                  borderBottom: '1px solid var(--color-border)',
+                }}>{d}</div>
+              ))}
+              {cells.map((cell, i) => {
+                const dayItems = itemsForDay(cell.date)
+                const isToday = sameDay(cell.date, today)
+                const visible = dayItems.slice(0, 3)
+                const more = dayItems.length - visible.length
+                return (
+                  <div
+                    key={`${cell.date.getFullYear()}-${cell.date.getMonth()}-${cell.date.getDate()}`}
+                    onClick={() => openDay(cell.date)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDay(cell.date) }}
+                    style={{
+                      minHeight: 118, padding: 8, cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column', gap: 4,
+                      background: isToday ? 'var(--color-accent-light)' : cell.inMonth ? 'var(--color-surface)' : 'var(--color-background)',
+                      borderRight: i % 7 !== 6 ? '1px solid var(--color-border)' : 'none',
+                      borderTop: i >= 7 ? '1px solid var(--color-border)' : 'none',
+                      transition: 'background 0.12s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <span style={{
+                        width: 24, height: 24, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        background: isToday ? 'var(--color-primary)' : 'transparent',
+                        color: isToday ? 'var(--color-on-primary)' : cell.inMonth ? 'var(--color-foreground)' : 'var(--color-muted)',
+                        fontSize: FONT.base, fontWeight: isToday ? 700 : 500,
+                      }}>{cell.date.getDate()}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
+                      {visible.map(item => <MonthChip key={item.id} item={item} />)}
+                      {more > 0 && <span style={{ fontSize: FONT.xs, fontWeight: 600, color: 'var(--color-muted)' }}>+{more} mais</span>}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
-                    {visible.map(item => <MonthChip key={item.id} item={item} />)}
-                    {more > 0 && <span style={{ fontSize: FONT.xs, fontWeight: 600, color: 'var(--color-muted)' }}>+{more} mais</span>}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </div>
       )
@@ -676,7 +690,7 @@ export default function Agenda() {
     // ---------- SEMANA ----------
     if (view === 'semana') {
       return (
-        <div style={{ display: 'flex', gap: SPACE.sm, overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: SPACE.sm, overflowX: 'auto', paddingBottom: 4, width: '100%' }}>
           {weekDays.map(day => {
             const dayItems = itemsForDay(day)
             const isToday = sameDay(day, today)
@@ -720,7 +734,7 @@ export default function Agenda() {
     // ---------- DIA ----------
     const dayItems = itemsForDay(cursor)
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.sm, maxWidth: 720 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.sm, width: '100%' }}>
         {dayItems.length === 0 ? (
           <EmptyState message="Nenhum evento neste dia." />
         ) : (

@@ -2,21 +2,24 @@ import { type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { FONT, RADIUS, SPACE } from './tokens'
 
 /** Cartão que envolve uma tabela; adiciona scroll horizontal no mobile. */
-export function TableShell({ children }: { children: ReactNode }) {
+export function TableShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <div style={{
       background: 'var(--color-surface)',
       border: '1px solid var(--color-border)',
       borderRadius: RADIUS.card,
       overflow: 'hidden',
+      width: '100%',
+      boxSizing: 'border-box',
+      ...style,
     }}>
-      <div style={{ overflowX: 'auto' }}>{children}</div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>{children}</div>
     </div>
   )
 }
 
-export function Table({ children }: { children: ReactNode }) {
-  return <table style={{ width: '100%', borderCollapse: 'collapse' }}>{children}</table>
+export function Table({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return <table style={{ width: '100%', borderCollapse: 'collapse', ...style }}>{children}</table>
 }
 
 /** Linha de cabeçalho — padrão de thead do design system. */

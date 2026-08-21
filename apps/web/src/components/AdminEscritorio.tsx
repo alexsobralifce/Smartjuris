@@ -428,7 +428,7 @@ export default function AdminEscritorio() {
             </div>
 
             <TableShell>
-              <Table>
+              <Table style={{ minWidth: 720 }}>
                 <THeadRow>
                   <Th>Nome</Th><Th>E-mail</Th><Th>Perfil</Th><Th>Último login</Th><Th>Status</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
                 </THeadRow>
@@ -468,8 +468,8 @@ export default function AdminEscritorio() {
 
         {/* ===== TAB: PERMISSÕES ===== */}
         {activeTab === 'permissoes' && (
-          <div style={{ maxWidth: 560 }}>
-            <div style={{ marginBottom: SPACE.xl }}>
+          <div>
+            <div style={{ marginBottom: SPACE.xl, maxWidth: 560 }}>
               <Field label="Selecione o usuário">
                 <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} style={inputStyle()}>
                   <option value="">— Escolha um usuário —</option>
@@ -736,6 +736,7 @@ export default function AdminEscritorio() {
 }
 
 function NovoUsuarioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (data: { nome: string; email: string; permissoes: string[] }) => void }) {
+  const isMobile = useIsMobile()
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [permissoes, setPermissoes] = useState<string[]>(['documentacao'])
@@ -762,7 +763,7 @@ function NovoUsuarioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubm
       open
       onClose={onCancel}
       title="Novo usuário"
-      width={440}
+      width={560}
       footer={(
         <>
           <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
@@ -776,13 +777,15 @@ function NovoUsuarioModal({ onCancel, onSubmit }: { onCancel: () => void; onSubm
         Cadastre um membro da equipe e defina seus módulos de acesso.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
-        <Field label="Nome" error={errors.nome} required>
-          <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={inputStyle(!!errors.nome)} placeholder="Nome completo" autoFocus />
-        </Field>
-        <Field label="E-mail" error={errors.email} required>
-          <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={inputStyle(!!errors.email)} type="email" placeholder="usuario@escritorio.com" />
-        </Field>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: SPACE.md }}>
+          <Field label="Nome" error={errors.nome} required>
+            <input value={nome} onChange={e => { setNome(e.target.value); if (errors.nome) setErrors(p => ({ ...p, nome: undefined })) }} style={inputStyle(!!errors.nome)} placeholder="Nome completo" autoFocus />
+          </Field>
+          <Field label="E-mail" error={errors.email} required>
+            <input value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })) }} style={inputStyle(!!errors.email)} type="email" placeholder="usuario@escritorio.com" />
+          </Field>
+        </div>
 
         <div>
           <Field label="Módulos de acesso">

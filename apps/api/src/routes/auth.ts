@@ -191,7 +191,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
           sucesso: false,
           motivoFalha: 'Escritório desativado',
         });
-        return res.status(403).json({ error: 'Seu cadastro ainda não foi ativado pelo administrador da plataforma. Aguarde a habilitação do seu escritório.' });
+        return res.status(403).json({ error: 'Seu cadastro ainda não foi ativado. Confirme o código enviado ao seu e-mail ou contate o suporte.' });
       }
     }
 
@@ -285,10 +285,11 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       // código — fica marcado como verificado direto. OTP só se REQUIRE_EMAIL_OTP=true.
       if (!requereOtp) {
         const [upd] = await db.update(usuarios)
-          .set({ emailVerificado: true })
+          .set({ emailVerificado: true, ativo: true })
           .where(eq(usuarios.email, email))
           .returning({ id: usuarios.id, nome: usuarios.nome, escritorioId: usuarios.escritorioId });
         if (upd?.escritorioId) {
+          await db.update(escritorios).set({ ativo: true }).where(eq(escritorios.id, upd.escritorioId));
           const [escritorio] = await db.select().from(escritorios)
             .where(eq(escritorios.id, upd.escritorioId)).limit(1);
           sendRootNewUserNotificationEmail({
@@ -305,7 +306,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
           success: true,
           step: 'ok',
           email,
-          message: 'Cadastro finalizado! O administrador será notificado para liberar o acesso.',
+          message: 'Cadastro finalizado! Seu acesso já está ativo. O administrador será notificado para conceder os créditos.',
         });
       }
 
@@ -352,14 +353,15 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       }
     }
 
-    // Criação atômica do escritório (pendente de aprovação) + usuário admin
+    // Criação atômica do escritório + usuário admin. Sem OTP obrigatório, nasce
+    // ativo (ativação automática); com OTP, só ativa após confirmação do e-mail.
     const [esc] = await db.transaction(async (tx) => {
       const [escritorioCriado] = await tx.insert(escritorios).values({
         nome: escritorioNome,
         plano: 'basico',
         isDemo: true,
-        limiteTokensMes: 10000,
-        ativo: false,
+        limiteTokensMes: 0,
+        ativo: !requereOtp,
         ...(cnpj ? { cnpj } : {}),
         ...(telefone ? { telefone } : {}),
       }).returning();
@@ -369,7 +371,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         email,
         senha: senhaHash,
         role: 'admin',
-        ativo: false,
+        ativo: !requereOtp,
         // Dispensa o OTP por padrão; só pede código se REQUIRE_EMAIL_OTP=true.
         emailVerificado: requereOtp ? false : true,
         oab,
@@ -430,7 +432,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       success: true,
       step: 'ok',
       email,
-      message: 'Cadastro realizado! O administrador será notificado para liberar o acesso.',
+      message: 'Cadastro realizado! Seu acesso já está ativo. O administrador será notificado para conceder os créditos.',
     });
   } catch (error) {
     console.error('Registro error:', error);
@@ -485,11 +487,14 @@ router.post('/verificar-codigo', async (req, res) => {
       .where(eq(codigosVerificacao.id, registroCodigo.id));
 
     const [userAtualizado] = await db.update(usuarios)
-      .set({ emailVerificado: true })
+      .set({ emailVerificado: true, ativo: true })
       .where(eq(usuarios.email, email))
       .returning();
 
     if (userAtualizado?.escritorioId) {
+      // Ativa o escritório automaticamente ao confirmar o e-mail
+      await db.update(escritorios).set({ ativo: true }).where(eq(escritorios.id, userAtualizado.escritorioId));
+
       const [escritorio] = await db.select().from(escritorios)
         .where(eq(escritorios.id, userAtualizado.escritorioId)).limit(1);
 
@@ -517,7 +522,7 @@ router.post('/verificar-codigo', async (req, res) => {
     res.json({
       success: true,
       verified: true,
-      message: 'Cadastro confirmado com sucesso! O administrador já foi notificado para liberar o seu acesso.',
+      message: 'Cadastro confirmado com sucesso! Seu acesso já está ativo. O administrador foi notificado para conceder os créditos.',
     });
   } catch (error) {
     console.error('Erro na verificação de código:', error);

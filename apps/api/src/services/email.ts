@@ -295,7 +295,7 @@ export async function sendRootNewUserNotificationEmail(params: {
   const body = `
     <span class="badge" style="background: #e0f2fe; color: #0369a1; border-color: #bae6fd;">Novo Cadastro Verificado</span>
     <h2 style="margin: 0 0 16px; color: #1a2744; font-size: 20px;">Novo Advogado Cadastrado no SmartJuris</h2>
-    <p>Um novo usuário concluiu a verificação de e-mail e está <strong>aguardando liberação de acesso e concessão de créditos</strong> no Painel Root.</p>
+    <p>Um novo usuário confirmou o e-mail e <strong>já está ativo</strong> no sistema. Conceda os <strong>créditos de uso</strong> pelo Painel Root.</p>
     
     <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
       <tr style="border-bottom: 1px solid #eeede9;">
@@ -329,13 +329,13 @@ export async function sendRootNewUserNotificationEmail(params: {
     </table>
 
     <p style="text-align: center; margin: 28px 0;">
-      <a href="https://smartjuris-web-production.up.railway.app" class="button">Acessar Painel Root para Ativar e Conceder Créditos →</a>
+      <a href="https://smartjuris-web-production.up.railway.app" class="button">Conceder Créditos no Painel Root →</a>
     </p>
   `;
 
   return sendEmail({
     to: rootRecipient,
-    subject: `🔔 Novo Cadastro: ${params.nome} (${params.escritorioNome}) — Aguarda Ativação`,
+    subject: `🔔 Novo Cadastro: ${params.nome} (${params.escritorioNome}) — Ativo, aguarda créditos`,
     html: emailWrapper('Novo Cadastro no SmartJuris', body),
   });
 }

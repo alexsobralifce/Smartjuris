@@ -297,7 +297,7 @@ export default function Clientes() {
 
       {/* Tabela de Clientes */}
       <TableShell>
-        <Table>
+        <Table style={{ minWidth: 760 }}>
           <THeadRow>
             {['Tipo', 'Nome do Cliente', 'CPF / CNPJ', 'Contato / Email', 'Endereço (Cidade/UF)', 'Ações'].map(h => (
               <Th key={h}>{h}</Th>
@@ -350,6 +350,7 @@ export default function Clientes() {
         open={showModal}
         onClose={() => setShowModal(false)}
         title="Cadastrar Novo Cliente"
+        width={560}
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
@@ -417,7 +418,7 @@ export default function Clientes() {
               />
             </Field>
 
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ gridColumn: tipo === 'PF' ? undefined : '1 / -1' }}>
               <Field label="E-mail institucional" error={errors.email}>
                 <input
                   type="email"
@@ -433,19 +434,17 @@ export default function Clientes() {
             </div>
 
             {tipo === 'PF' && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <Field label="Data de Nascimento" error={errors.dataNascimento}>
-                  <input
-                    type="date"
-                    value={dataNascimento}
-                    onChange={e => {
-                      setDataNascimento(e.target.value)
-                      if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
-                    }}
-                    style={inputStyle(!!errors.dataNascimento)}
-                  />
-                </Field>
-              </div>
+              <Field label="Data de Nascimento" error={errors.dataNascimento}>
+                <input
+                  type="date"
+                  value={dataNascimento}
+                  onChange={e => {
+                    setDataNascimento(e.target.value)
+                    if (errors.dataNascimento) setErrors(prev => ({ ...prev, dataNascimento: '' }))
+                  }}
+                  style={inputStyle(!!errors.dataNascimento)}
+                />
+              </Field>
             )}
           </div>
 

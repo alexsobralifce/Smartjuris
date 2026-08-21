@@ -116,9 +116,10 @@ export async function checkTokenQuota(req: AuthenticatedRequest): Promise<TokenQ
     : (reg.limiteTokensMes != null ? Number(reg.limiteTokensMes) : null);
 
   if (limite == null) return { status: 'ok', usado: 0, limite: null, pct: 0 };
+  if (limite <= 0) return { status: 'blocked', usado: 0, limite, pct: 100 };
 
   const usado = await getTokenUsageMes(usuarioId);
-  const pct = limite > 0 ? Math.round((usado / limite) * 100) : 0;
+  const pct = Math.round((usado / limite) * 100);
 
   if (pct >= 100) return { status: 'blocked', usado, limite, pct };
   if (pct >= 80) return { status: 'warn', usado, limite, pct };

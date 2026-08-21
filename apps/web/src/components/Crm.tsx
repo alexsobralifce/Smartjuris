@@ -178,7 +178,7 @@ export default function Crm() {
           open={showNovo}
           onClose={() => setShowNovo(false)}
           title="Nova Oportunidade (CRM)"
-          width={400}
+          width={560}
           footer={(
             <>
               <Button variant="secondary" onClick={() => setShowNovo(false)}>Cancelar</Button>

@@ -8,3 +8,6 @@ export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, pageY: 32,
 export const RADIUS = { chip: 4, control: 6, card: 8, modal: 10 } as const
 
 export const Z = { sticky: 10, modal: 100, toast: 150 } as const
+
+export const LAYOUT = { pageMaxW: 1150 } as const
+

@@ -24,11 +24,11 @@ export async function trackTokenUsage(
   let custoUsd = 0;
   if (modelo.toLowerCase().includes('deepseek')) {
     const inputCost = pico
-      ? Number(process.env.DEEPSEEK_INPUT_COST_PEAK ?? '3.30')
-      : Number(process.env.DEEPSEEK_INPUT_COST_OFFPEAK ?? '1.65');
+      ? Number(process.env.DEEPSEEK_INPUT_COST_PEAK ?? '0.44')
+      : Number(process.env.DEEPSEEK_INPUT_COST_OFFPEAK ?? '0.22');
     const outputCost = pico
-      ? Number(process.env.DEEPSEEK_OUTPUT_COST_PEAK ?? '3.96')
-      : Number(process.env.DEEPSEEK_OUTPUT_COST_OFFPEAK ?? '1.98');
+      ? Number(process.env.DEEPSEEK_OUTPUT_COST_PEAK ?? '1.32')
+      : Number(process.env.DEEPSEEK_OUTPUT_COST_OFFPEAK ?? '0.66');
     custoUsd = (prompt / 1_000_000) * inputCost + (completion / 1_000_000) * outputCost;
   }
 

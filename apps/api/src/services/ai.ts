@@ -6,6 +6,9 @@ export const deepseekClient = new OpenAI({
   apiKey: process.env.DEEP_SEEK_API || '',
 });
 
+export const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
+export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'deepseek-v4-pro';
+
 export async function generatePecaWithDeepSeek(
   tipo: string,
   area: string,
@@ -24,7 +27,7 @@ Gere o documento final estruturado e formal.`;
 
   try {
     const completion = await deepseekClient.chat.completions.create({
-      model: 'deepseek-chat',
+      model: deepseekModel,
       messages: [
         { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças.' },
         { role: 'user', content: prompt }
@@ -65,7 +68,7 @@ Gere o documento final estruturado e formal.`;
 
   try {
     const stream = await deepseekClient.chat.completions.create({
-      model: 'deepseek-chat',
+      model: deepseekModel,
       messages: [
         { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças.' },
         { role: 'user', content: prompt }

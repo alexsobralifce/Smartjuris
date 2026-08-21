@@ -1,9 +1,10 @@
 import { Router } from 'express';
+import type OpenAI from 'openai';
 import { db } from '../db/client.js';
 import { chunks } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
-import { deepseekClient } from '../services/ai.js';
+import { deepseekClient, deepseekModel, deepseekModelPro } from '../services/ai.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { cosineDistance, sql, desc, or } from 'drizzle-orm';
@@ -11,6 +12,20 @@ import { parseBody, formatZodError, ragGenerateSchema } from '../validation/sche
 import { AREAS, MODELOS_PECA, buscarModelo } from '../services/modelosPeca.js';
 
 const router = Router();
+
+async function criarStreamComFallback(
+  params: Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming, 'model'>,
+  signal: AbortSignal
+) {
+  try {
+    const stream = await deepseekClient.chat.completions.create({ ...params, model: deepseekModel }, { signal });
+    return { stream, modelUsado: deepseekModel };
+  } catch (err: any) {
+    console.warn('[RAG] DeepSeek Flash falhou, tentando Pro:', err?.message);
+    const stream = await deepseekClient.chat.completions.create({ ...params, model: deepseekModelPro }, { signal });
+    return { stream, modelUsado: deepseekModelPro };
+  }
+}
 
 router.get('/modelos', async (_req, res) => {
   try {
@@ -144,8 +159,7 @@ ${estrutura ? `Estrutura obrigatória da peça (siga EXATAMENTE estas seções, 
 ${estrutura}` : ''}
 CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para destacar títulos, cabeçalhos ou seções. Se precisar destacar algo, use CAIXA ALTA (letras maiúsculas). O texto deve ser inteiramente limpo, sem caracteres de marcação.`;
 
-    const stream = await deepseekClient.chat.completions.create({
-      model: 'deepseek-chat',
+    const { stream, modelUsado } = await criarStreamComFallback({
       messages: [
         { role: 'system', content: 'Você é um assistente jurídico sênior especializado em redação de peças. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
@@ -153,7 +167,7 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
       temperature: 0.3,
       stream: true,
       stream_options: { include_usage: true },
-    }, { signal: controller.signal });
+    }, controller.signal);
 
     let fullText = '';
     let lastUsage: any = null;
@@ -173,7 +187,7 @@ CRÍTICO: Não use formatação em Markdown (como asteriscos '**' ou '*') para d
     if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);
 
     if (lastUsage) {
-      await trackTokenUsage((req as any).user?.id, 'rag_generate', 'deepseek-chat', {
+      await trackTokenUsage((req as any).user?.id, 'rag_generate', modelUsado, {
         prompt_tokens: lastUsage.prompt_tokens,
         completion_tokens: lastUsage.completion_tokens,
       });

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
+import PricingSection from './PricingSection'
 
 // Tipografia do hero — exceção de marketing permitida (46px).
 const HERO_FONT_SIZE = 46
@@ -841,6 +842,8 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           )}
         </div>
       </main>
+
+      <PricingSection />
 
       {/* Footer Swiss */}
       <footer style={{

@@ -14,6 +14,17 @@ const statusLabel: Record<string, { label: string; color: string; bg: string }> 
   reprovado:  { label: 'Reprovado',          color: 'var(--color-danger)',  bg: 'var(--color-danger-light)' },
 }
 
+function saudacaoDoDia(): string {
+  const h = new Date().getHours()
+  if (h >= 5 && h < 12) return 'Bom dia'
+  if (h >= 12 && h < 18) return 'Boa tarde'
+  return 'Boa noite'
+}
+
+function dataHoje(): string {
+  return new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 export default function Dashboard() {
   const isMobile = useIsMobile()
   const [processos, setProcessos] = useState<Processo[]>([])
@@ -30,6 +41,17 @@ export default function Dashboard() {
       return JSON.parse(raw)?.role === 'root'
     } catch {
       return false
+    }
+  })
+
+  // Usuário logado (nome/e-mail) para a saudação dinâmica — lido da sessão cacheada.
+  const [usuarioAtual] = useState<{ nome: string; email: string }>(() => {
+    try {
+      const raw = localStorage.getItem('smartjuris_user')
+      const u = raw ? JSON.parse(raw) : {}
+      return { nome: u?.name || '', email: u?.email || '' }
+    } catch {
+      return { nome: '', email: '' }
     }
   })
 
@@ -114,8 +136,8 @@ export default function Dashboard() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.xxl }}>
         <PageHeader
           eyebrow="VISÃO GERAL"
-          title="Bom dia, Dr. Marcos"
-          description={`Segunda-feira, 17 de agosto de 2026${emRevisao > 0 ? ` · ${emRevisao} ${emRevisao === 1 ? 'item aguardando' : 'itens aguardando'} revisão` : ''}`}
+          title={`${saudacaoDoDia()}, ${usuarioAtual.nome || 'Advogado'}`}
+          description={`${usuarioAtual.email ? `${usuarioAtual.email} · ` : ''}${dataHoje()}${emRevisao > 0 ? ` · ${emRevisao} ${emRevisao === 1 ? 'item aguardando' : 'itens aguardando'} revisão` : ''}`}
           action={(
             <span style={{
               fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',

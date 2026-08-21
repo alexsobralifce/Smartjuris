@@ -44,7 +44,6 @@ type ModalState =
   | { kind: 'editar'; esc: Escritorio }
   | { kind: 'desativar'; esc: Escritorio }
   | { kind: 'excluir'; esc: Escritorio }
-  | { kind: 'resetSenha'; esc: Escritorio }
   | { kind: 'tempSenha'; titulo: string; senha: string }
   | { kind: 'addCreditos'; alvo: { tipo: 'escritorio' | 'usuario'; id: string; nome: string } }
   | null
@@ -403,7 +402,7 @@ export default function RootPainel() {
     }
   }
 
-  const handleResetSenha = async (esc: Escritorio, user: Escritorio['usuarios'][number]) => {
+  const handleResetSenha = async (user: { id: string; email: string }) => {
     try {
       const res = await api.raiz.resetarSenhaUsuario(user.id)
       if (!res.ok) {
@@ -524,50 +523,102 @@ export default function RootPainel() {
               <Table>
                 <thead>
                   <THeadRow>
-                    <Th>Escritório</Th><Th>E-mails</Th><Th>Plano</Th><Th>Limite de usuários</Th><Th>Usuários ativos</Th><Th>Tokens (30d)</Th><Th>Status</Th><Th style={{ textAlign: 'right' }}>Ações</Th>
+                    <Th>Escritório</Th>
+                    <Th>Usuário</Th>
+                    <Th style={{ textAlign: 'center' }}>Reset Senha</Th>
+                    <Th>Plano</Th>
+                    <Th>Limite de usuários</Th>
+                    <Th>Usuários ativos</Th>
+                    <Th>Tokens (30d)</Th>
+                    <Th>Status</Th>
+                    <Th style={{ textAlign: 'right' }}>Ações</Th>
                   </THeadRow>
                 </thead>
                 <tbody>
-                  {escritorios.map(esc => {
-                    const pm = planoMeta[esc.plano] || { label: esc.plano, color: 'var(--color-muted)', bg: 'var(--color-surface-2)' }
-                    return (
-                      <Tr key={esc.id}>
-                        <Td style={{ fontSize: FONT.md, fontWeight: 500 }}>{esc.nome}</Td>
-                        <Td style={{ whiteSpace: 'pre-line', fontSize: FONT.sm }}>
-                          {esc.usuarios?.length ? esc.usuarios.map(u => u.email).join('\n') : '—'}
-                        </Td>
-                        <Td>
-                          <span style={{ fontSize: FONT.xs, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{pm.label}</span>
-                        </Td>
-                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(esc.limiteUsuarios)}</Td>
-                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(esc.usuariosAtivos)}</Td>
-                        <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base }}>{fmtNum(esc.tokens30d)}</Td>
-                        <Td>
-                          <span style={{
-                            fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip,
-                            color: esc.ativo ? 'var(--color-success)' : 'var(--color-muted)',
-                            background: esc.ativo ? 'var(--color-success-light)' : 'var(--color-surface-2)',
-                          }}>{esc.ativo ? 'Ativo' : 'Inativo'}</span>
-                        </Td>
-                        <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          {!esc.ativo && (
-                            <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'ativar', esc })}>Ativar</Button>
-                          )}
-                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-warning)', borderColor: 'var(--color-warning)', marginRight: 6 }} onClick={() => setModal({ kind: 'resetSenha', esc })}>
-                            Resetar senha
-                          </Button>
-                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
-                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={!esc.ativo} onClick={() => setModal({ kind: 'desativar', esc })}>
-                            Desativar
-                          </Button>
-                          <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)', marginLeft: 6 }} title="Excluir permanentemente (irreversível)" onClick={() => setModal({ kind: 'excluir', esc })}>
-                            Excluir
-                          </Button>
-                        </Td>
-                      </Tr>
+                  {(() => {
+                    const linhas = escritorios.flatMap(esc =>
+                      esc.usuarios?.length
+                        ? esc.usuarios.map((user, idx) => ({ esc, user, isFirst: idx === 0, rowspan: esc.usuarios.length }))
+                        : [{ esc, user: null, isFirst: true, rowspan: 1 }]
                     )
-                  })}
-                  {escritorios.length === 0 && <EmptyRow colSpan={8} message="Nenhum escritório cadastrado. Clique em “Novo escritório” para começar." />}
+
+                    return linhas.map((linha, idx) => {
+                      const { esc, user, isFirst, rowspan } = linha
+                      const pm = planoMeta[esc.plano] || { label: esc.plano, color: 'var(--color-muted)', bg: 'var(--color-surface-2)' }
+                      const rowStyle = isFirst && idx > 0 ? { borderTop: '2px solid var(--color-border)' } : {}
+
+                      return (
+                        <Tr key={`${esc.id}-${user?.id || 'empty'}`} style={rowStyle}>
+                          {isFirst && (
+                            <Td rowSpan={rowspan} style={{ fontSize: FONT.md, fontWeight: 500, verticalAlign: 'middle' }}>{esc.nome}</Td>
+                          )}
+                          <Td style={{ fontSize: FONT.sm, verticalAlign: 'middle' }}>
+                            {user ? (
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 500, color: 'var(--color-foreground)' }}>{user.nome}</span>
+                                  <span style={{
+                                    fontSize: FONT.xs, fontWeight: 600, padding: '1px 6px', borderRadius: RADIUS.chip,
+                                    color: user.role === 'admin' ? 'var(--color-primary)' : 'var(--color-muted)',
+                                    background: user.role === 'admin' ? 'var(--color-badge-tint)' : 'var(--color-surface-2)',
+                                  }}>
+                                    {user.role === 'admin' ? 'Admin' : 'Advogado'}
+                                  </span>
+                                </div>
+                                <div style={{ color: 'var(--color-muted)', marginTop: 2 }}>{user.email}</div>
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--color-muted)' }}>—</span>
+                            )}
+                          </Td>
+                          <Td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                            {user ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                style={{ padding: '4px 8px', fontSize: FONT.sm, color: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
+                                onClick={() => handleResetSenha(user)}
+                              >
+                                Resetar senha
+                              </Button>
+                            ) : (
+                              <span style={{ color: 'var(--color-muted)' }}>—</span>
+                            )}
+                          </Td>
+                          {isFirst && (
+                            <>
+                              <Td rowSpan={rowspan} style={{ verticalAlign: 'middle' }}>
+                                <span style={{ fontSize: FONT.xs, fontWeight: 600, color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{pm.label}</span>
+                              </Td>
+                              <Td rowSpan={rowspan} style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, verticalAlign: 'middle' }}>{fmtNum(esc.limiteUsuarios)}</Td>
+                              <Td rowSpan={rowspan} style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, verticalAlign: 'middle' }}>{fmtNum(esc.usuariosAtivos)}</Td>
+                              <Td rowSpan={rowspan} style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, verticalAlign: 'middle' }}>{fmtNum(esc.tokens30d)}</Td>
+                              <Td rowSpan={rowspan} style={{ verticalAlign: 'middle' }}>
+                                <span style={{
+                                  fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip,
+                                  color: esc.ativo ? 'var(--color-success)' : 'var(--color-muted)',
+                                  background: esc.ativo ? 'var(--color-success-light)' : 'var(--color-surface-2)',
+                                }}>{esc.ativo ? 'Ativo' : 'Inativo'}</span>
+                              </Td>
+                              <Td rowSpan={rowspan} style={{ textAlign: 'right', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                {!esc.ativo && (
+                                  <Button size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'ativar', esc })}>Ativar</Button>
+                                )}
+                                <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, marginRight: 6 }} onClick={() => setModal({ kind: 'editar', esc })}>Editar</Button>
+                                <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} disabled={!esc.ativo} onClick={() => setModal({ kind: 'desativar', esc })}>
+                                  Desativar
+                                </Button>
+                                <Button variant="secondary" size="sm" style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-danger)', borderColor: 'var(--color-danger)', marginLeft: 6 }} title="Excluir permanentemente (irreversível)" onClick={() => setModal({ kind: 'excluir', esc })}>
+                                  Excluir
+                                </Button>
+                              </Td>
+                            </>
+                          )}
+                        </Tr>
+                      )
+                    })
+                  })()}
+                  {escritorios.length === 0 && <EmptyRow colSpan={9} message="Nenhum escritório cadastrado. Clique em “Novo escritório” para começar." />}
                 </tbody>
               </Table>
             </TableShell>
@@ -779,9 +830,7 @@ export default function RootPainel() {
       {modal?.kind === 'editar' && (
         <EditarEscritorioModal open esc={modal.esc} onClose={() => setModal(null)} onSubmit={handleEditar} />
       )}
-      {modal?.kind === 'resetSenha' && (
-        <ResetSenhaModal open esc={modal.esc} onClose={() => setModal(null)} onReset={(user) => handleResetSenha(modal.esc, user)} />
-      )}
+      {/* ResetSenhaModal removido em favor do reset direto por linha */}
       {modal?.kind === 'desativar' && (
         <Modal
           open
@@ -920,63 +969,7 @@ function EditarEscritorioModal({ open, esc, onClose, onSubmit }: { open: boolean
   )
 }
 
-function ResetSenhaModal({ open, esc, onClose, onReset }: {
-  open: boolean
-  esc: Escritorio
-  onClose: () => void
-  onReset: (user: Escritorio['usuarios'][number]) => void
-}) {
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Resetar senha"
-      width={460}
-      footer={<Button variant="secondary" onClick={onClose}>Fechar</Button>}
-    >
-      <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, marginBottom: SPACE.lg, lineHeight: 1.5 }}>
-        Escolha o usuário de <strong style={{ color: 'var(--color-foreground)' }}>{esc.nome}</strong> para redefinir a senha de acesso.
-      </div>
 
-      {esc.usuarios?.length ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.sm }}>
-          {esc.usuarios.map(user => (
-            <div key={user.id} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md,
-              padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: RADIUS.control,
-            }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: FONT.md, fontWeight: 500, color: 'var(--color-foreground)' }}>{user.nome}</span>
-                  <span style={{
-                    fontSize: FONT.xs, fontWeight: 600, padding: '2px 8px', borderRadius: RADIUS.chip,
-                    color: user.role === 'admin' ? 'var(--color-primary)' : 'var(--color-muted)',
-                    background: user.role === 'admin' ? 'var(--color-badge-tint)' : 'var(--color-surface-2)',
-                  }}>
-                    {user.role === 'admin' ? 'Admin' : 'Advogado'}
-                  </span>
-                </div>
-                <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', overflowWrap: 'anywhere', marginTop: 2 }}>{user.email}</div>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                style={{ padding: '5px 10px', fontSize: FONT.sm, color: 'var(--color-warning)', borderColor: 'var(--color-warning)', flexShrink: 0 }}
-                onClick={() => onReset(user)}
-              >
-                Resetar senha
-              </Button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ color: 'var(--color-muted)', fontSize: FONT.base, padding: '12px 0' }}>
-          Nenhum usuário cadastrado neste escritório.
-        </div>
-      )}
-    </Modal>
-  )
-}
 
 function AtivarEscritorioModal({
   open,

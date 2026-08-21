@@ -3,9 +3,11 @@ export const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_URL.replace(/\/$/, '');
   }
 
-  // Em produção (seja no domínio *.railway.app ou no domínio personalizado)
-  if (typeof window !== 'undefined' && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-    return 'https://smartjuris-api-production.up.railway.app';
+  // Em produção, frontend e API ficam na MESMA origem: o serviço web serve o
+  // frontend e faz proxy de /api (nginx) para a API. Assim o cookie de sessão é
+  // first-party — evita bloqueio de cookies de terceiros (logout em produção).
+  if (import.meta.env.PROD) {
+    return '';
   }
 
   // Em desenvolvimento local

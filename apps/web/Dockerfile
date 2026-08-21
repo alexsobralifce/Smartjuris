@@ -20,17 +20,12 @@ COPY . .
 # Build frontend
 RUN pnpm --filter @lexia/web build
 
-# ---- Runtime image ----
-FROM node:22-alpine AS runner
-WORKDIR /app
+# ---- Runtime image (nginx): SPA + proxy /api para a API (mesma origem) ----
+FROM nginx:1.27-alpine
 
-# Copy built frontend static files
-COPY --from=builder /app/apps/web/dist /app/dist
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+COPY apps/web/nginx.conf /etc/nginx/templates/default.conf.template
 
-# Install serve globally to host the static site
-RUN npm install -g serve
-
-EXPOSE 8443
-
-# Serve the static dist folder on PORT provided by Railway or fallback to 8443
-CMD ["sh", "-c", "serve -s /app/dist -l ${PORT:-8443}"]
+# Railway injeta PORT; o entrypoint oficial do nginx faz envsubst em *.template
+# substituindo ${PORT}. O proxy /api usa a rede privada (smartjuris-api.railway.internal).
+EXPOSE 8080

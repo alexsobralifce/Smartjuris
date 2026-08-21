@@ -803,66 +803,21 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 </Button>
               </form>
 
-              {/* Dicas de Acesso Rápido com Clique Direto */}
+              {/* Informação do modo demonstração */}
               <div style={{
                 marginTop: 28,
                 paddingTop: SPACE.xl,
                 borderTop: '1px solid var(--color-border)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
                 fontSize: FONT.sm,
-                color: 'var(--color-muted)',
                 lineHeight: 1.6
               }}>
-                <div style={{ fontWeight: 600, color: 'var(--color-foreground)', marginBottom: 8 }}>
-                  🔑 Credenciais Prontas para Teste:
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)' }}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setEmail('admin@smartjuris.com')
-                      setPassword('admin123')
-                    }}
-                    style={{
-                      textAlign: 'left', justifyContent: 'flex-start', width: '100%',
-                      background: 'var(--color-background)', padding: '6px 10px',
-                      borderRadius: RADIUS.chip, fontSize: FONT.sm, fontWeight: 400
-                    }}
-                  >
-                    👤 <strong>Admin:</strong> <code>admin@smartjuris.com</code> (Preencher)
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setEmail('user@smartjuris.com')
-                      setPassword('user123')
-                    }}
-                    style={{
-                      textAlign: 'left', justifyContent: 'flex-start', width: '100%',
-                      background: 'var(--color-background)', padding: '6px 10px',
-                      borderRadius: RADIUS.chip, fontSize: FONT.sm, fontWeight: 400
-                    }}
-                  >
-                    ⚖️ <strong>Advogado/Usuário:</strong> <code>user@smartjuris.com</code> (Preencher)
-                  </Button>
-                </div>
-
-                <div style={{
-                  marginTop: 10,
-                  paddingTop: 10,
-                  borderTop: '1px solid var(--color-border)',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                }}>
-                  <span style={{ color: 'var(--color-accent)', flexShrink: 0 }}>🔋</span>
-                  <div>
-                    <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>Modo demonstração: 10.000 tokens/mês por usuário.</div>
-                    <div style={{ color: 'var(--color-muted)' }}>A geração de peças e resumos com IA consome tokens.</div>
-                  </div>
+                <span style={{ color: 'var(--color-accent)', flexShrink: 0 }}>🔋</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>Modo demonstração: 10.000 tokens/mês por usuário.</div>
+                  <div style={{ color: 'var(--color-muted)' }}>A geração de peças e resumos com IA consome tokens.</div>
                 </div>
               </div>
             </>

@@ -11,14 +11,15 @@ const statusConfig: Record<StatusProcesso, { label: string; color: string; bg: s
   arquivado: { label: 'Arquivado', color: 'var(--color-muted)',   bg: 'var(--color-surface-2)' },
 }
 
-const areas = ['Todas', 'Cível', 'Trabalhista', 'Tributário', 'Penal', 'Consumerista']
+const areas = ['Todas', 'Cível', 'Família', 'Sucessões', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista', 'Empresarial', 'Administrativo', 'Constitucional']
 
 const emptyForm: Omit<Processo, 'id'> = {
-  tipo: '', cliente: '', adverso: '', vara: '', area: 'Cível',
+  numero: '', tipo: '', cliente: '', adverso: '', vara: '', area: 'Cível',
   status: 'ativo', valor: '', prazo: '', advogado: '',
 }
 
 const formFields: { key: string; label: string; placeholder: string; full?: boolean }[] = [
+  { key: 'numero', label: 'Número do Processo', placeholder: '0001234-56.2026.8.26.0100', full: true },
   { key: 'tipo', label: 'Tipo de Ação', placeholder: 'Reclamação Trabalhista', full: true },
   { key: 'cliente', label: 'Cliente', placeholder: 'Nome completo' },
   { key: 'adverso', label: 'Parte Adversa', placeholder: 'Empresa Ltda.' },
@@ -28,7 +29,7 @@ const formFields: { key: string; label: string; placeholder: string; full?: bool
   { key: 'prazo', label: 'Próximo Prazo', placeholder: 'dd/mm/aaaa' },
 ]
 
-const areasNovoProcesso = ['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista']
+const areasNovoProcesso = ['Cível', 'Família', 'Sucessões', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista', 'Empresarial', 'Administrativo', 'Constitucional']
 
 export default function Processos() {
   const isMobile = useIsMobile()
@@ -234,7 +235,7 @@ export default function Processos() {
                       </Td>
                       <Td>
                         <div style={{ fontSize: FONT.md, fontWeight: 500 }}>{p.tipo}</div>
-                        <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: 1 }}>{p.cliente}</div>
+                        <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', marginTop: 1 }}>{p.numero ? `Nº ${p.numero} · ` : ''}{p.cliente}</div>
                       </Td>
                       <Td>
                         <span style={{ fontSize: FONT.sm, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-badge-tint)', padding: '2px 8px', borderRadius: RADIUS.chip }}>{p.area}</span>
@@ -301,6 +302,10 @@ export default function Processos() {
             <div>
               <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>JUÍZO / VARA</div>
               <div style={{ fontSize: FONT.sm, marginTop: 2 }}>{selected.vara}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>Nº DO PROCESSO</div>
+              <div style={{ fontSize: FONT.sm, fontFamily: 'var(--font-mono)', marginTop: 2 }}>{selected.numero || '—'}</div>
             </div>
             <div>
               <div style={{ fontSize: FONT.xs, color: 'var(--color-muted)', fontWeight: 600 }}>VALOR CAUSA</div>

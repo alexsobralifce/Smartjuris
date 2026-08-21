@@ -106,7 +106,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
           colecao,
           texto: chunkText,
           embedding,
-          metadata: { fonte: req.file.originalname }
+          metadata: { fonte: req.file.originalname, ...(parsed.data.area ? { area: parsed.data.area } : {}) }
         });
         indexedCount += 1;
       } catch (e) {

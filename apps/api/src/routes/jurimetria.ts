@@ -7,10 +7,17 @@ router.get('/stats', (req, res) => {
   res.json({
     taxaExito: 78,
     distribuicaoArea: [
-      { name: 'Trabalhista', value: 45 },
-      { name: 'Cível', value: 30 },
-      { name: 'Tributário', value: 15 },
-      { name: 'Penal', value: 10 },
+      { name: 'Cível', value: 20 },
+      { name: 'Família', value: 8 },
+      { name: 'Sucessões', value: 3 },
+      { name: 'Trabalhista', value: 30 },
+      { name: 'Tributário', value: 10 },
+      { name: 'Penal', value: 8 },
+      { name: 'Previdenciário', value: 6 },
+      { name: 'Consumerista', value: 6 },
+      { name: 'Empresarial', value: 4 },
+      { name: 'Administrativo', value: 3 },
+      { name: 'Constitucional', value: 2 },
     ],
     previsoes: [
       { processo: '0001234-56.2026.5.02.0001', tipo: 'Reclamação Trabalhista', cliente: 'Fernanda Oliveira', valor: 'R$ 87.500,00', prazo: '2026-09-15', chance: 86 },

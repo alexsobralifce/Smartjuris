@@ -15,6 +15,7 @@ export const processosSchema = z.object({
   valor: z.string().min(1),
   prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data no formato AAAA-MM-DD'),
   advogado: z.string().optional(),
+  numero: z.string().optional(),
 });
 export const processosPatchSchema = processosSchema.partial();
 
@@ -108,6 +109,8 @@ export const eventoPatchSchema = eventoBaseSchema.partial().refine(
 // --- Coleção de documentos (RAG) ---
 export const colecaoSchema = z.object({
   colecao: z.string().default('Jurisprudência'),
+  // Área do direito da fonte — usada para filtrar a recuperação no RAG.
+  area: z.string().optional(),
 });
 
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown) {
@@ -143,6 +146,8 @@ export const ragGenerateSchema = z.object({
   dadosCaso: z.string().min(1),
   // Peça complexa => roteia para o modelo Pro (DeepSeek V4-Pro) em vez do Flash.
   isComplex: z.boolean().optional().default(false),
+  // Vínculo com o processo para enriquecer a peça com dados reais das partes.
+  processoId: z.string().uuid().optional().nullable(),
 });
 
 export const uuidSchema = z.string().uuid();

@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import type OpenAI from 'openai';
 import { db } from '../db/client.js';
-import { chunks } from '../db/schema.js';
+import { chunks, processos, clientes, usuarios, escritorios } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
+import { decryptField } from '../services/crypto.js';
 import { deepseekClient, deepseekModel, deepseekModelPro, selecionarModeloDeepSeek } from '../services/ai.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
-import { cosineDistance, sql, desc, or } from 'drizzle-orm';
+import { cosineDistance, sql, desc, or, and, eq } from 'drizzle-orm';
 import { parseBody, formatZodError, ragGenerateSchema } from '../validation/schemas.js';
 import { AREAS, MODELOS_PECA, buscarModelo } from '../services/modelosPeca.js';
 
@@ -66,6 +67,91 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       ? modelo.secoes.map((s, i) => `${i + 1}. ${s.titulo} — ${s.instrucao}`).join('\n')
       : '';
 
+    // ── Dados estruturados: partes, advogado e escritório reais injetados ─────
+    // Elimina placeholders ("...", "[número]") na qualificação e na assinatura:
+    // o processo vinculado (se enviado) fornece as partes/vara/valor, o cliente
+    // do mesmo escritório fornece CPF/CNPJ/endereço, e o usuário logado fornece
+    // nome/OAB para o signatário.
+    let blocoDados = '';
+    try {
+      const autorId = (req as AuthenticatedRequest).user?.id;
+      const escritorioId = (req as AuthenticatedRequest).user?.escritorioId;
+      const linhas: string[] = [];
+
+      let processoRow: typeof processos.$inferSelect | undefined;
+      if (parsed.data.processoId) {
+        [processoRow] = await db.select().from(processos).where(eq(processos.id, parsed.data.processoId)).limit(1);
+      }
+
+      if (processoRow) {
+        linhas.push(`Autor: ${processoRow.cliente || 'a definir'}`);
+        linhas.push(`Réu: ${processoRow.adverso || 'a definir'}`);
+        if (processoRow.numero) linhas.push(`Processo nº: ${processoRow.numero}`);
+        if (processoRow.vara) linhas.push(`Vara: ${processoRow.vara}`);
+        if (processoRow.valor) linhas.push(`Valor: ${processoRow.valor}`);
+
+        // Melhor esforço: dados cadastrais do cliente (mesmo escritório), por nome.
+        if (processoRow.cliente && escritorioId) {
+          const [clienteRow] = await db.select({
+            cpfCnpj: clientes.cpfCnpj,
+            logradouro: clientes.logradouro,
+            numero: clientes.numero,
+            complemento: clientes.complemento,
+            bairro: clientes.bairro,
+            cidade: clientes.cidade,
+            uf: clientes.uf,
+            cep: clientes.cep,
+          }).from(clientes)
+            .where(and(eq(clientes.nome, processoRow.cliente), eq(clientes.escritorioId, escritorioId)))
+            .limit(1);
+          if (clienteRow) {
+            // CPF/CNPJ fica criptografado no banco (LGPD): descriptografa antes de
+            // injetar no prompt. Nunca expor o ciphertext nem derrubar a geração.
+            if (clienteRow.cpfCnpj) {
+              let cpf: string | null = null;
+              try { cpf = decryptField(clienteRow.cpfCnpj) || null; } catch { cpf = null; }
+              if (cpf) linhas.push(`CPF/CNPJ do autor: ${cpf}`);
+            }
+            const endereco = [clienteRow.logradouro, clienteRow.numero, clienteRow.complemento, clienteRow.bairro, clienteRow.cidade, clienteRow.uf, clienteRow.cep]
+              .filter(Boolean).join(', ');
+            if (endereco) linhas.push(`Endereço do autor: ${endereco}`);
+          }
+        }
+      }
+
+      // Advogado signatário (usuário logado) — a assinatura é SEMPRE do advogado.
+      if (autorId) {
+        const [advRow] = await db.select({
+          nome: usuarios.nome,
+          oab: usuarios.oab,
+          oabUf: usuarios.oabUf,
+        }).from(usuarios).where(eq(usuarios.id, autorId)).limit(1);
+        if (advRow) {
+          const oab = advRow.oab
+            ? `OAB/${(advRow.oabUf || '').trim()} ${advRow.oab}`.replace(/OAB\/\s+/, 'OAB/').trim()
+            : '';
+          linhas.push(`Advogado signatário: ${advRow.nome}${oab ? `, ${oab}` : ''}`);
+        }
+      }
+
+      // Escritório (contexto do timbre).
+      if (escritorioId) {
+        const [escRow] = await db.select({
+          razaoSocial: escritorios.razaoSocial,
+          cidade: escritorios.cidade,
+          uf: escritorios.uf,
+        }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
+        if (escRow?.razaoSocial) linhas.push(`Escritório: ${escRow.razaoSocial}`);
+      }
+
+      if (linhas.length > 0) {
+        blocoDados = `\nDADOS ESTRUTURADOS DO CASO (use EXATAMENTE estes dados na qualificação das partes, nos pedidos e nos requerimentos; não invente outros):\n${linhas.map(l => `- ${l}`).join('\n')}`;
+      }
+    } catch (e: any) {
+      // Nunca derruba a geração por falha no enriquecimento de dados.
+      console.warn('[RAG] Falha ao enriquecer dados estruturados:', e?.message);
+    }
+
     // Cota de tokens (antes de iniciar o stream SSE). O modelo Pro custa ~3x mais,
     // então exige margem de segurança maior (bloqueia a 70% em vez de 100%).
     const quota = await checkTokenQuota(req as AuthenticatedRequest);
@@ -104,7 +190,8 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 
       if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
 
-      // Similarity search (HNSW / cosine distance)
+      // Similarity search (HNSW / cosine distance), restrito à área da peça.
+      const areaFiltro = sql`${chunks.metadata}->>'area' = ${area}`;
       const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
       relevantChunks = await db
         .select({
@@ -113,8 +200,22 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
           similarity
         })
         .from(chunks)
+        .where(areaFiltro)
         .orderBy((t) => desc(t.similarity))
         .limit(5);
+      // Sem chunks da área indexados (ex.: base sem metadata de área), cai para a
+      // busca geral para nunca devolver resultado vazio.
+      if (relevantChunks.length === 0) {
+        relevantChunks = await db
+          .select({
+            texto: chunks.texto,
+            metadata: chunks.metadata,
+            similarity
+          })
+          .from(chunks)
+          .orderBy((t) => desc(t.similarity))
+          .limit(5);
+      }
     } catch {
       // Fallback: busca por palavras-chave quando os embeddings estão indisponíveis
       if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Embeddings indisponíveis — usando busca por palavras-chave...' })}\n\n`);
@@ -142,9 +243,19 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 
       const likeClauses = effectiveKeywords.map(k => sql`${chunks.texto} ILIKE ${'%' + k.replace(/'/g, "''") + '%'}`);
 
-      const rows = likeClauses.length > 0
-        ? await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).where(or(...likeClauses)).limit(5)
-        : await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).limit(5);
+      // Busca por palavras-chave filtrada pela ÁREA da peça (o fallback anterior
+      // não filtrava e recuperava chunks de áreas erradas, ex.: CTN numa peça cível).
+      const areaFiltroFallback = sql`${chunks.metadata}->>'area' = ${area}`;
+      let rows = likeClauses.length > 0
+        ? await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).where(and(areaFiltroFallback, or(...likeClauses))).limit(5)
+        : [];
+
+      // Nunca devolve vazio: sem correspondência na área, repete a busca geral.
+      if (rows.length === 0) {
+        rows = likeClauses.length > 0
+          ? await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).where(or(...likeClauses)).limit(5)
+          : await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).limit(5);
+      }
 
       relevantChunks = rows.map(r => ({ texto: r.texto, metadata: r.metadata, similarity: 0 }));
     }
@@ -164,6 +275,7 @@ Tarefa: Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça
 
 Os dados do caso são:
 ${dadosCaso}
+${blocoDados}
 
 Contexto (Precedentes e Leis relevantes):
 ${contexto}
@@ -177,6 +289,8 @@ DIRETRIZES DE FUNDAMENTAÇÃO (RAG):
 REGRAS DE FORMAÇÃO DO SISTEMA:
 - Retorne APENAS o texto da peça.
 - Não inclua saudações, explicações ou texto em Markdown, pois o sistema processará a saída via streaming SSE diretamente para o editor rico.
+- Use EXATAMENTE os dados do bloco "DADOS ESTRUTURADOS DO CASO" na qualificação das partes, nos pedidos e nos requerimentos. NÃO deixe espaços em branco ("...", "[...]", "a definir") para dados fornecidos nesse bloco.
+- Encerre a peça na fórmula "Termos em que, pede deferimento." SEM adicionar local, data, nome do advogado ou número de OAB ao final — o sistema insere a assinatura do advogado automaticamente na exportação.
 ${estrutura ? `Estrutura obrigatória da peça (siga EXATAMENTE estas seções, nesta ordem, usando CAIXA ALTA para os títulos de cada seção):
 ${estrutura}` : ''}`;
 

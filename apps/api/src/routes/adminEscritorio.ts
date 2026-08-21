@@ -110,9 +110,12 @@ router.patch('/info', async (req: AuthenticatedRequest, res) => {
 
     const d = parsed.data;
     const updates: Record<string, any> = {};
-    if (d.razaoSocial !== undefined) updates.razao_social = d.razaoSocial;
+    // Atenção: o Drizzle espera os NOMES DOS CAMPOS (camelCase da tabela), não
+    // os nomes das colunas. Usar snake_case aqui fazia razaoSocial/inscricaoOab/
+    // logoUrl serem silenciosamente ignorados (voltavam null no GET /info).
+    if (d.razaoSocial !== undefined) updates.razaoSocial = d.razaoSocial;
     if (d.cnpj !== undefined) updates.cnpj = d.cnpj;
-    if (d.inscricaoOab !== undefined) updates.inscricao_oab = d.inscricaoOab;
+    if (d.inscricaoOab !== undefined) updates.inscricaoOab = d.inscricaoOab;
     if (d.endereco !== undefined) updates.endereco = d.endereco;
     if (d.numero !== undefined) updates.numero = d.numero;
     if (d.bairro !== undefined) updates.bairro = d.bairro;
@@ -122,7 +125,7 @@ router.patch('/info', async (req: AuthenticatedRequest, res) => {
     if (d.telefone !== undefined) updates.telefone = d.telefone;
     if (d.email !== undefined) updates.email = d.email;
     if (d.site !== undefined) updates.site = d.site;
-    if (d.logoUrl !== undefined) updates.logo_url = d.logoUrl;
+    if (d.logoUrl !== undefined) updates.logoUrl = d.logoUrl;
 
     if (Object.keys(updates).length > 0) {
       await db.update(escritorios).set(updates).where(eq(escritorios.id, escritorioId));

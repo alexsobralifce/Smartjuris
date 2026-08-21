@@ -3,6 +3,7 @@ export type StatusPeca = 'revisao' | 'aprovado' | 'protocolado' | 'reprovado'
 
 export interface Processo {
   id: string
+  numero?: string | null
   tipo: string
   cliente: string
   adverso: string

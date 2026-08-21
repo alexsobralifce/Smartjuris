@@ -16,17 +16,31 @@ const taxaSucesso = [
 ]
 
 const porArea = [
-  { area: 'Trabalhista', processos: 58, sucesso: 89 },
   { area: 'Cível', processos: 47, sucesso: 74 },
+  { area: 'Família', processos: 21, sucesso: 83 },
+  { area: 'Sucessões', processos: 9, sucesso: 90 },
+  { area: 'Trabalhista', processos: 58, sucesso: 89 },
   { area: 'Tributário', processos: 29, sucesso: 86 },
+  { area: 'Penal', processos: 18, sucesso: 77 },
   { area: 'Previdenciário', processos: 13, sucesso: 92 },
+  { area: 'Consumerista', processos: 24, sucesso: 81 },
+  { area: 'Empresarial', processos: 12, sucesso: 76 },
+  { area: 'Administrativo', processos: 10, sucesso: 85 },
+  { area: 'Constitucional', processos: 6, sucesso: 88 },
 ]
 
 const distribuicao = [
-  { name: 'Trabalhista', value: 58, color: 'var(--color-primary)' },
-  { name: 'Cível', value: 47, color: 'var(--color-accent)' },
-  { name: 'Tributário', value: 29, color: 'var(--color-success)' },
-  { name: 'Previdenciário', value: 13, color: 'var(--color-muted)' },
+  { name: 'Cível', value: 20, color: 'var(--color-accent)' },
+  { name: 'Família', value: 8, color: 'var(--color-primary-hover)' },
+  { name: 'Sucessões', value: 3, color: 'var(--color-sidebar)' },
+  { name: 'Trabalhista', value: 30, color: 'var(--color-primary)' },
+  { name: 'Tributário', value: 10, color: 'var(--color-success)' },
+  { name: 'Penal', value: 8, color: 'var(--color-danger)' },
+  { name: 'Previdenciário', value: 6, color: 'var(--color-muted)' },
+  { name: 'Consumerista', value: 6, color: 'var(--color-warning)' },
+  { name: 'Empresarial', value: 4, color: 'var(--color-accent)' },
+  { name: 'Administrativo', value: 3, color: 'var(--color-warning)' },
+  { name: 'Constitucional', value: 2, color: 'var(--color-muted)' },
 ]
 
 function ChanceBar({ value }: { value: number }) {
@@ -329,7 +343,7 @@ export default function Jurimetria() {
                   onChange={e => handleSimulate(e.target.value, simTipo, simTribunal)}
                   style={inputStyle()}
                 >
-                  {['Trabalhista', 'Consumerista', 'Cível', 'Tributário'].map(a => <option key={a} value={a}>{a}</option>)}
+                  {['Trabalhista', 'Consumerista', 'Cível', 'Tributário', 'Família', 'Sucessões', 'Penal', 'Previdenciário', 'Empresarial', 'Administrativo', 'Constitucional'].map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
               </Field>
 

@@ -13,7 +13,7 @@ export interface ModeloPeca {
   observacoes?: string[]; // alertas (prazo, pressuposto, competência)
 }
 
-export const AREAS = ['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista'];
+export const AREAS = ['Cível', 'Família', 'Sucessões', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista', 'Empresarial', 'Administrativo', 'Constitucional'];
 
 // ---------------------------------------------------------------------------
 // Seções base reutilizadas nos esqueletos das categorias
@@ -241,7 +241,34 @@ const S_PREVIDENCIARIO: SecaoModelo[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Catálogo de modelos (62)
+// Seções específicas das novas áreas
+// ---------------------------------------------------------------------------
+const SECAO_ENDERECAMENTO_FAMILIA: SecaoModelo = {
+  titulo: 'ENDEREÇAMENTO',
+  instrucao: 'Enderece a peça à Vara de Família e Sucessões competente, indicando comarca e vara.',
+};
+const SECAO_ENDERECAMENTO_EMPRESARIAL: SecaoModelo = {
+  titulo: 'ENDEREÇAMENTO',
+  instrucao: 'Enderece a peça à Vara Empresarial ou de Falências e Recuperações Judiciais competente.',
+};
+const SECAO_ENDERECAMENTO_FAZENDA_PUBLICA: SecaoModelo = {
+  titulo: 'ENDEREÇAMENTO',
+  instrucao: 'Enderece a peça ao juízo competente — Vara da Fazenda Pública — indicando comarca e vara.',
+};
+
+const S_FAMILIA: SecaoModelo[] = [
+  SECAO_ENDERECAMENTO_FAMILIA,
+  SECAO_QUALIFICACAO,
+  SECAO_FATOS,
+  SECAO_DIREITO,
+  SECAO_PEDIDOS,
+  SECAO_VALOR_CAUSA,
+  SECAO_PROVAS,
+  SECAO_FECHAMENTO,
+];
+
+// ---------------------------------------------------------------------------
+// Catálogo de modelos (99)
 // ---------------------------------------------------------------------------
 export const MODELOS_PECA: ModeloPeca[] = [
   // ============================ CÍVEL ============================
@@ -1147,6 +1174,949 @@ export const MODELOS_PECA: ModeloPeca[] = [
     baseLegal: ['CDC 43'],
     secoes: [...S_PETICAO_INICIAL],
     observacoes: ['Súmula 385 STJ: inscrição indevida gera dano moral in re ipsa.'],
+  },
+
+  // ============================ FAMÍLIA ============================
+  {
+    id: 'divorcio-consensual',
+    area: 'Família',
+    tipo: 'Divórcio Consensual',
+    descricao: 'Para dissolver o casamento por mútuo consentimento, com acordo sobre guarda, alimentos e partilha.',
+    baseLegal: ['CC 1.571-1.580', 'CPC 731-734'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAMILIA,
+      SECAO_QUALIFICACAO,
+      SECAO_FATOS,
+      {
+        titulo: 'DO ACORDO',
+        instrucao: 'Descreva os termos do acordo quanto à guarda, regime de convivência, alimentos e partilha de bens.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o cabimento do divórcio consensual e a homologação do acordo (arts. 1.571 e 1.580, CC; arts. 731-734, CPC).',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: [
+      'Com filhos menores ou incapazes, o divórcio é judicial e exige manifestação do Ministério Público.',
+      'Sem filhos menores ou incapazes, admite escritura pública (Lei 11.441/2007).',
+    ],
+  },
+  {
+    id: 'divorcio-litigioso',
+    area: 'Família',
+    tipo: 'Divórcio Litigioso',
+    descricao: 'Para dissolver o casamento quando não houver consenso quanto à partilha, guarda ou alimentos.',
+    baseLegal: ['CC 1.571-1.582', 'CPC 693-699'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAMILIA,
+      SECAO_QUALIFICACAO,
+      SECAO_FATOS,
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a ruptura da affectio maritalis e os fundamentos do divórcio (art. 1.580, CC), abordando guarda, alimentos e partilha.',
+      },
+      {
+        titulo: 'DA GUARDA, ALIMENTOS E PARTILHA',
+        instrucao: 'Detalhe o pedido de guarda, regime de convivência, pensão alimentícia e partilha de bens.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Audiência de mediação/conciliação (art. 695, CPC); a ausência de causa de pedir enseja emenda à inicial.'],
+  },
+  {
+    id: 'acao-de-guarda',
+    area: 'Família',
+    tipo: 'Ação de Guarda',
+    descricao: 'Para regular a guarda de menor, unilateral ou compartilhada, em favor de um dos genitores ou terceiro.',
+    baseLegal: ['CC 1.583-1.590', 'ECA 33-35'],
+    secoes: [...S_FAMILIA],
+    observacoes: [
+      'Guarda compartilhada é a regra (art. 1.584, §2º, CC), salvo fundamento em desfavor.',
+      'Audiência de mediação e manifestação do Ministério Público quando envolver menor.',
+    ],
+  },
+  {
+    id: 'acao-de-alimentos',
+    area: 'Família',
+    tipo: 'Ação de Alimentos',
+    descricao: 'Para fixar pensão alimentícia em favor de quem não pode prover a própria subsistência.',
+    baseLegal: ['CC 1.694-1.710', 'CPC 528', 'Lei 5.478/1968'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAMILIA,
+      SECAO_QUALIFICACAO,
+      SECAO_FATOS,
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a necessidade do alimentando e a possibilidade do alimentante, aplicando o binômio necessidade-possibilidade (art. 1.694, §1º, CC).',
+      },
+      {
+        titulo: 'DOS ALIMENTOS PROVISIONAIS',
+        instrucao: 'Requeira e fundamente os alimentos provisionais desde a citação, com os requisitos legais.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: [
+      'Alimentos provisionais podem ser fixados na inicial (art. 4º, Lei 5.478/1968).',
+      'Prestações vencem no dia 1º de cada mês; inadimplemento autoriza execução com prisão civil (art. 528, CPC).',
+    ],
+  },
+  {
+    id: 'execucao-de-alimentos',
+    area: 'Família',
+    tipo: 'Execução de Alimentos',
+    descricao: 'Para cobrar judicialmente as três últimas prestações alimentares vencidas e vincendas.',
+    baseLegal: ['CPC 528-533', 'CC 1.700'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAMILIA,
+      SECAO_QUALIFICACAO,
+      {
+        titulo: 'DO TÍTULO EXECUTIVO E DAS PRESTAÇÕES',
+        instrucao: 'Apresente o título executivo (sentença, acordo ou termo) e discrimine as prestações vencidas e vincendas.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o rito da execução de alimentos e o cabimento da prisão civil ou da expropriação.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: [
+      'Prisão civil de 1 a 3 meses para as 3 últimas prestações (art. 528, §3º e §7º, CPC).',
+      'Prestações antigas seguem o rito da execução por quantia certa (art. 528, §8º, CPC).',
+    ],
+  },
+  {
+    id: 'investigacao-de-paternidade',
+    area: 'Família',
+    tipo: 'Investigação de Paternidade',
+    descricao: 'Para declarar a paternidade socioafetiva ou biológica, com os efeitos de filiação e registro.',
+    baseLegal: ['CC 1.596-1.614', 'Lei 8.560/1992'],
+    secoes: [...S_FAMILIA],
+    observacoes: [
+      'Ação imprescritível; a recusa ao exame de DNA gera presunção relativa de paternidade (art. 2º-A, Lei 8.560/1992).',
+      'Pode ser cumulada com pedido de alimentos e retificação de registro civil.',
+    ],
+  },
+  {
+    id: 'dissolucao-de-uniao-estavel',
+    area: 'Família',
+    tipo: 'Dissolução de União Estável',
+    descricao: 'Para reconhecer e dissolver a união estável, com a partilha do patrimônio comum e demais efeitos.',
+    baseLegal: ['CC 1.723-1.727', 'CPC 693-699'],
+    secoes: [...S_FAMILIA],
+    observacoes: [
+      'Consensual e sem filhos menores: escritura pública (Lei 11.441/2007).',
+      'Partilha do patrimônio adquirido onerosamente na constância (art. 1.725, CC), salvo contrato escrito em contrário.',
+    ],
+  },
+  {
+    id: 'regulamentacao-de-visitas',
+    area: 'Família',
+    tipo: 'Regulamentação de Visitas',
+    descricao: 'Para fixar o regime de convivência entre o genitor não guardião e o menor.',
+    baseLegal: ['CC 1.589', 'ECA 19'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAMILIA,
+      SECAO_QUALIFICACAO,
+      SECAO_FATOS,
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o direito de convivência familiar e a necessidade de regime fixo de visitas, no melhor interesse do menor.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['O descumprimento reiterado do regime pode gerar advertência, revisão da guarda ou ajuizamento de ação autônoma.'],
+  },
+
+  // ============================ SUCESSÕES ============================
+  {
+    id: 'inventario-judicial',
+    area: 'Sucessões',
+    tipo: 'Inventário Judicial',
+    descricao: 'Para inventariar os bens do falecido e promover a partilha judicial entre os herdeiros.',
+    baseLegal: ['CPC 610-658', 'CC 1.784-1.797'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO DO ESPÓLIO E HERDEIROS',
+        instrucao: 'Qualifique o falecido, o espólio, os herdeiros e o testamenteiro, se houver, com os documentos de óbito e última residência.',
+      },
+      {
+        titulo: 'DO INVENTÁRIO',
+        instrucao: 'Descreva o rol de bens, direitos e dívidas do espólio, com valores e matrículas.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente a abertura do inventário, a nomeação do inventariante e a forma de partilha aplicável.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a abertura do inventário, a nomeação do inventariante e as providências de citação e avaliação.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: [
+      'Prazo de 60 dias do óbito para a abertura (art. 611, CPC), sob pena de multa.',
+      'Recolhimento do imposto causa mortis antes da partilha; desnecessário na herança negativa.',
+    ],
+  },
+  {
+    id: 'inventario-extrajudicial',
+    area: 'Sucessões',
+    tipo: 'Inventário Extrajudicial',
+    descricao: 'Para realizar o inventário por escritura pública, quando todos os herdeiros forem capazes e concordes.',
+    baseLegal: ['Lei 11.441/2007', 'CPC 610, §1º'],
+    secoes: [
+      {
+        titulo: 'ENDEREÇAMENTO',
+        instrucao: 'Enderece a peça ao tabelionato de notas competente ou, se judicializado o pedido de homologação, ao juízo de família e sucessões.',
+      },
+      {
+        titulo: 'QUALIFICAÇÃO DO ESPÓLIO E HERDEIROS',
+        instrucao: 'Qualifique o falecido, os herdeiros e os documentos do óbito, com a comprovação de capacidade e consenso.',
+      },
+      {
+        titulo: 'DOS BENS E DA PARTILHA',
+        instrucao: 'Descreva os bens, valores e a forma de partilha consensualmente ajustada.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o cabimento do inventário extrajudicial (Lei 11.441/2007) e os requisitos legais.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a lavratura da escritura pública de inventário e partilha, com as certidões exigidas.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Requisitos: herdeiros maiores e capazes, consenso e assistência de advogado; não cabe se houver testamento ou imposto pendente.'],
+  },
+  {
+    id: 'arrolamento-sumario',
+    area: 'Sucessões',
+    tipo: 'Arrolamento Sumário',
+    descricao: 'Para inventariar e partilhar os bens de forma simplificada, quando todos os herdeiros forem maiores e capazes.',
+    baseLegal: ['CPC 658-667'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO DO ESPÓLIO E HERDEIROS',
+        instrucao: 'Qualifique o falecido, os herdeiros e o patrimônio, comprovando a capacidade de todos.',
+      },
+      {
+        titulo: 'DO ARROLAMENTO',
+        instrucao: 'Descreva os bens com valores e demonstre o preenchimento das hipóteses legais de arrolamento sumário.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o rito do arrolamento (arts. 658-667, CPC) e a dispensa de avaliação ou partilha formal.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Independe de consenso; não cabe quando houver herdeiro incapaz, testamento ou litígio sobre os bens.'],
+  },
+  {
+    id: 'sobrepartilha-peticao-de-heranca',
+    area: 'Sucessões',
+    tipo: 'Sobrepartilha / Petição de Herança',
+    descricao: 'Para partilhar bens sonegados ou reivindicar a herança de quem a detém indevidamente.',
+    baseLegal: ['CPC 669-673', 'CC 1.824'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO DAS PARTES',
+        instrucao: 'Qualifique o herdeiro requerente, o espólio e o detentor dos bens sonegados ou da herança.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o inventário originário, os bens sonegados ou a posse indevida da herança.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente a sobrepartilha (arts. 669-673, CPC) ou a petição de herança (art. 1.824, CC), com os efeitos da sentença.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Petição de herança: herdeiro aparente vs. herdeiro legítimo; a sentença tem eficácia declaratória e condenatória.'],
+  },
+  {
+    id: 'anulacao-de-testamento',
+    area: 'Sucessões',
+    tipo: 'Ação de Anulação de Testamento',
+    descricao: 'Para anular testamento eivado de vícios de forma, incapacidade do testador ou violação da legítima.',
+    baseLegal: ['CC 1.857-1.877'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      SECAO_QUALIFICACAO,
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o testamento impugnado, o óbito do testador e os vícios que o invalidam.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre os vícios de forma ou consentimento, a incapacidade do testador ou a violação da legítima (arts. 1.857-1.860, CC).',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo decadencial de 4 anos para anular (art. 1.859, CC); legitimidade dos herdeiros e legatários prejudicados.'],
+  },
+
+  // ============================ EMPRESARIAL ============================
+  {
+    id: 'recuperacao-judicial',
+    area: 'Empresarial',
+    tipo: 'Recuperação Judicial',
+    descricao: 'Para a empresa em crise econômico-financeira superar a situação mediante plano aprovado em assembleia de credores.',
+    baseLegal: ['Lei 11.101/2005, arts. 47-69'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      {
+        titulo: 'QUALIFICAÇÃO DA EMPRESA',
+        instrucao: 'Qualifique a empresa com CNPJ, sede, atividade, e apresente a documentação exigida pelo art. 48 da LRE.',
+      },
+      {
+        titulo: 'DA SITUAÇÃO ECONÔMICO-FINANCEIRA',
+        instrucao: 'Descreva a crise, os motivos e as demonstrações contábeis dos últimos exercícios.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre o preenchimento dos requisitos do art. 48 da Lei 11.101/2005 e a viabilidade da recuperação.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira o processamento da recuperação judicial, com a nomeação de administrador judicial e a suspensão das execuções (stay period).',
+      },
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: [
+      'Plano em até 60 dias do deferimento do processamento (art. 53, LRE).',
+      'Stay period de 180 dias de suspensão das execuções (art. 6º, §4º, LRE).',
+    ],
+  },
+  {
+    id: 'recuperacao-extrajudicial',
+    area: 'Empresarial',
+    tipo: 'Recuperação Extrajudicial',
+    descricao: 'Para a empresa negociar diretamente com credores e homologar o plano em juízo.',
+    baseLegal: ['Lei 11.101/2005, arts. 161-167'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      {
+        titulo: 'QUALIFICAÇÃO DA EMPRESA E DO PLANO',
+        instrucao: 'Qualifique a empresa e descreva o plano negociado com as classes de credores, com as adesões obtidas.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre os requisitos dos arts. 161-163 da LRE e a viabilidade da homologação.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a homologação do plano de recuperação extrajudicial e as providências de publicação.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Exige adesão mínima de credores (art. 163, LRE); não abrange créditos trabalhistas e tributários na forma da lei.'],
+  },
+  {
+    id: 'pedido-de-falencia',
+    area: 'Empresarial',
+    tipo: 'Pedido de Falência',
+    descricao: 'Para requerer a falência do devedor nas hipóteses do art. 94 da LRE.',
+    baseLegal: ['Lei 11.101/2005, arts. 94-97'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      {
+        titulo: 'QUALIFICAÇÃO DAS PARTES',
+        instrucao: 'Qualifique o credor requerente e o devedor, com o crédito e seus documentos comprobatórios.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva a impontualidade injustificada, a execução frustrada ou os atos de falência praticados.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Enquadre o caso nas hipóteses do art. 94 da LRE e demonstre a legitimidade do credor.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Citação do devedor para contestar em 10 dias (art. 98, LRE); o pagamento com correção obsta a falência.'],
+  },
+  {
+    id: 'contestacao-ao-pedido-de-falencia',
+    area: 'Empresarial',
+    tipo: 'Contestação ao Pedido de Falência',
+    descricao: 'Para o devedor se defender do pedido de falência, impugnando o crédito ou a hipótese legal.',
+    baseLegal: ['Lei 11.101/2005, art. 96'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      SECAO_QUALIFICACAO,
+      {
+        titulo: 'PRELIMINARES',
+        instrucao: 'Argua a ilegitimidade, a falta de interesse ou vícios do pedido, conforme o art. 96 da LRE.',
+      },
+      {
+        titulo: 'DO MÉRITO',
+        instrucao: 'Impugne o crédito ou a hipótese legal invocada, demonstrando a inexistência dos pressupostos da falência.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a rejeição do pedido de falência ou a decretação de sua improcedência.',
+      },
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo de 10 dias da citação (art. 98, LRE); o depósito do valor pode evitar a decretação.'],
+  },
+  {
+    id: 'dissolucao-parcial-de-sociedade',
+    area: 'Empresarial',
+    tipo: 'Dissolução Parcial de Sociedade',
+    descricao: 'Para dissolver parcialmente a sociedade, com apuração de haveres do sócio retirante.',
+    baseLegal: ['CC 1.028-1.032', 'CPC 599-609'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      {
+        titulo: 'QUALIFICAÇÃO DAS PARTES',
+        instrucao: 'Qualifique o sócio requerente, a sociedade e os demais sócios, com o contrato social.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva a causa de dissolução parcial (retirada, morte, exclusão ou exercício de direito de retirada).',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o direito à dissolução parcial e à apuração de haveres (arts. 1.028-1.032, CC; arts. 599-609, CPC).',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Apuração de haveres por perícia com base no balanço de determinação; aplicável especialmente às sociedades limitadas.'],
+  },
+  {
+    id: 'exclusao-de-socio',
+    area: 'Empresarial',
+    tipo: 'Exclusão de Sócio',
+    descricao: 'Para excluir sócio por justa causa ou falta grave, com a apuração e o pagamento dos haveres.',
+    baseLegal: ['CC 1.030, 1.085'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      {
+        titulo: 'QUALIFICAÇÃO DAS PARTES',
+        instrucao: 'Qualifique a sociedade, o sócio a ser excluído e os demais sócios, com o contrato social.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva a falta grave ou justa causa, com as provas da conduta do sócio.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente a exclusão (arts. 1.030 e 1.085, CC) e o procedimento de deliberação ou judicial.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Justa causa comprovada ou deliberação de 3/4 do capital (art. 1.085, CC); exclusão por vias de fato ou atos ilegais (art. 1.030, CC).'],
+  },
+  {
+    id: 'prestacao-de-contas',
+    area: 'Empresarial',
+    tipo: 'Ação de Prestação de Contas',
+    descricao: 'Para exigir a prestação de contas de quem administra bens ou interesses alheios.',
+    baseLegal: ['CC 1.020', 'CPC 550-553'],
+    secoes: [
+      SECAO_ENDERECAMENTO_EMPRESARIAL,
+      SECAO_QUALIFICACAO,
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva a relação jurídica que impõe a prestação de contas e a recusa ou omissão do requerido.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Fundamente o dever de prestar contas (art. 1.020, CC; arts. 550-553, CPC) e o rito bifásico da ação.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Rito bifásico: 1ª fase reconhece o dever de prestar contas; 2ª fase julga as contas (arts. 550-552, CPC).'],
+  },
+
+  // ============================ ADMINISTRATIVO ============================
+  {
+    id: 'mandado-de-seguranca-administrativo',
+    area: 'Administrativo',
+    tipo: 'Mandado de Segurança Administrativo',
+    descricao: 'Para proteger direito líquido e certo contra ato coator de autoridade administrativa.',
+    baseLegal: ['Lei 12.016/2009'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAZENDA_PUBLICA,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o impetrante, a autoridade coatora e a pessoa jurídica interessada, com o ato impugnado.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o ato coator, a data da ciência e o direito líquido e certo violado.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre o direito líquido e certo e o cabimento do mandado de segurança, com fundamentação legal.',
+      },
+      {
+        titulo: 'DA LIMINAR',
+        instrucao: 'Requeira e fundamente a liminar, com os requisitos do art. 7º, III, da Lei 12.016/2009.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo de 120 dias da ciência do ato coator (art. 23, Lei 12.016/2009); não cabe contra ato de que caiba recurso com efeito suspensivo.'],
+  },
+  {
+    id: 'acao-ordinaria-ato-administrativo',
+    area: 'Administrativo',
+    tipo: 'Ação Ordinária contra Ato Administrativo',
+    descricao: 'Para anular ou declarar a nulidade de ato administrativo ilegal, com a recomposição do direito do autor.',
+    baseLegal: ['Lei 9.784/1999', 'CPC 319'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAZENDA_PUBLICA,
+      SECAO_QUALIFICACAO,
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o ato administrativo impugnado, sua publicação ou notificação e o prejuízo causado.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a ilegalidade ou nulidade do ato (arts. 53-54, Lei 9.784/1999) e os efeitos pretendidos.',
+      },
+      {
+        titulo: 'DA TUTELA DE URGÊNCIA',
+        instrucao: 'Requeira e fundamente a tutela de urgência, se cabível, contra os efeitos do ato.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Decadência administrativa de 5 anos para anulação (art. 54, Lei 9.784/1999); citar a pessoa jurídica de direito público competente.'],
+  },
+  {
+    id: 'defesa-em-pad',
+    area: 'Administrativo',
+    tipo: 'Defesa em Processo Administrativo Disciplinar',
+    descricao: 'Para apresentar defesa escrita em processo administrativo disciplinar.',
+    baseLegal: ['Lei 8.112/1990, arts. 143-147'],
+    secoes: [
+      {
+        titulo: 'ENDEREÇAMENTO',
+        instrucao: 'Enderece a defesa à Comissão Processante ou à autoridade administrativa competente.',
+      },
+      {
+        titulo: 'QUALIFICAÇÃO DO ACUSADO',
+        instrucao: 'Identifique o servidor acusado, o PAD e a portaria de instauração.',
+      },
+      {
+        titulo: 'DA SÍNTESE DA ACUSAÇÃO',
+        instrucao: 'Sintetize os fatos imputados na portaria e os artigos supostamente violados.',
+      },
+      {
+        titulo: 'DAS PRELIMINARES',
+        instrucao: 'Argua nulidades do processo, como incompetência, cerceamento de defesa e vícios da portaria.',
+      },
+      {
+        titulo: 'DO MÉRITO',
+        instrucao: 'Refute as imputações fato a fato, com provas documentais e testemunhais.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira o acolhimento das preliminares ou a absolvição do acusado, com o arquivamento do PAD.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo de 10 dias para defesa escrita (art. 161, Lei 8.112/1990); contraditório e ampla defesa.'],
+  },
+  {
+    id: 'impugnacao-a-licitacao',
+    area: 'Administrativo',
+    tipo: 'Impugnação a Licitação',
+    descricao: 'Para impugnar edital ou ato de licitação com vícios de legalidade ou cláusulas restritivas.',
+    baseLegal: ['Lei 14.133/2021, arts. 164-165'],
+    secoes: [
+      {
+        titulo: 'ENDEREÇAMENTO',
+        instrucao: 'Enderece a impugnação ao pregoeiro, à comissão de contratação ou à autoridade competente.',
+      },
+      {
+        titulo: 'DO OBJETO DA IMPUGNAÇÃO',
+        instrucao: 'Identifique o edital ou o ato impugnado e as cláusulas questionadas.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a ilegalidade ou restritividade do edital, com fundamento na Lei 14.133/2021.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a alteração ou anulação do edital, com a republicação e reabertura dos prazos, se cabível.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: [
+      'Impugnação ao edital até 3 dias úteis antes da abertura do certame; recursos em 3 dias úteis (Lei 14.133/2021, arts. 164-165).',
+      'Qualquer pessoa pode impugnar; licitantes têm prazo recursal próprio após a habilitação.',
+    ],
+  },
+  {
+    id: 'acao-de-improbidade',
+    area: 'Administrativo',
+    tipo: 'Ação de Improbidade Administrativa',
+    descricao: 'Para responsabilizar agente público por atos de improbidade enriquecimento ilícito, dano ao erário ou violação de princípios.',
+    baseLegal: ['Lei 8.429/1992, arts. 9º-12'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAZENDA_PUBLICA,
+      {
+        titulo: 'QUALIFICAÇÃO DAS PARTES',
+        instrucao: 'Qualifique o autor legitimado (Ministério Público ou pessoa jurídica lesada) e os réus, com a função pública exercida.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva os atos de improbidade com datas, valores e o enquadramento nos arts. 9º, 10 ou 11 da Lei 8.429/1992.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre o dolo, o enquadramento legal e as sanções aplicáveis (art. 12, Lei 8.429/1992).',
+      },
+      {
+        titulo: 'DAS MEDIDAS CAUTELARES',
+        instrucao: 'Requeira e fundamente as medidas cautelares, como indisponibilidade de bens e afastamento, se cabíveis.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_VALOR_CAUSA,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Legitimidade do Ministério Público e das pessoas jurídicas lesadas (art. 17, Lei 8.429/1992); medidas cautelares do §10.'],
+  },
+  {
+    id: 'defesa-em-improbidade',
+    area: 'Administrativo',
+    tipo: 'Defesa em Improbidade Administrativa',
+    descricao: 'Para o réu apresentar manifestação preliminar ou defesa em ação de improbidade administrativa.',
+    baseLegal: ['Lei 8.429/1992, art. 17'],
+    secoes: [
+      SECAO_ENDERECAMENTO_FAZENDA_PUBLICA,
+      {
+        titulo: 'QUALIFICAÇÃO DO RÉU',
+        instrucao: 'Qualifique o réu, indicando a ação de improbidade e a petição inicial impugnada.',
+      },
+      {
+        titulo: 'PRELIMINARES',
+        instrucao: 'Argua a decadência, a ilegitimidade passiva, a ausência de dolo ou vícios da petição inicial.',
+      },
+      {
+        titulo: 'DO MÉRITO',
+        instrucao: 'Refute os fatos e o enquadramento legal, demonstrando a ausência de ato ímprobo ou de dolo.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira o acolhimento das preliminares ou a improcedência dos pedidos, com a rejeição da ação.',
+      },
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Notificação preliminar para manifestação por escrito (art. 17, §7º, Lei 8.429/1992); decadência de 8 anos (art. 23).'],
+  },
+  {
+    id: 'recurso-administrativo',
+    area: 'Administrativo',
+    tipo: 'Recurso Administrativo',
+    descricao: 'Para recorrer de decisão administrativa desfavorável perante a autoridade competente.',
+    baseLegal: ['Lei 9.784/1999, arts. 56-65'],
+    secoes: [
+      {
+        titulo: 'ENDEREÇAMENTO',
+        instrucao: 'Enderece o recurso à autoridade que proferiu a decisão ou à autoridade hierarquicamente superior.',
+      },
+      {
+        titulo: 'DO RECORRENTE E DA DECISÃO RECORRIDA',
+        instrucao: 'Identifique o recorrente, o processo administrativo e a decisão recorrida.',
+      },
+      {
+        titulo: 'DAS RAZÕES RECURSAIS',
+        instrucao: 'Exponha os fundamentos de fato e de direito para a reforma ou anulação da decisão.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira o conhecimento e o provimento do recurso, com a reforma ou anulação da decisão.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo de 10 dias da ciência da decisão (art. 59, Lei 9.784/1999); efeito suspensivo quando o dano for de difícil reparação (art. 61).'],
+  },
+
+  // ============================ CONSTITUCIONAL ============================
+  {
+    id: 'mandado-de-injuncao',
+    area: 'Constitucional',
+    tipo: 'Mandado de Injunção',
+    descricao: 'Para suprir a falta de norma regulamentadora que inviabiliza o exercício de direito constitucional.',
+    baseLegal: ['CF 5º, LXXI', 'Lei 13.300/2016'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o impetrante, a autoridade impetrada e o órgão responsável pela omissão normativa.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva a norma constitucional dependente de regulamentação e a omissão do Poder competente.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre o direito constitucional inviabilizado e a omissão, com os precedentes do STF sobre o tema.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a ciência da omissão e a efetivação do direito, nos termos da Lei 13.300/2016.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Cabe quando a falta de norma regulamentadora inviabiliza o exercício do direito (CF 5º, LXXI); a decisão pode ser integrativa ou concretizadora.'],
+  },
+  {
+    id: 'habeas-data',
+    area: 'Constitucional',
+    tipo: 'Habeas Data',
+    descricao: 'Para assegurar o acesso, retificação ou complementação de informações pessoais em bancos de dados públicos.',
+    baseLegal: ['CF 5º, LXXII', 'Lei 9.507/1997'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o impetrante e a entidade detentora do banco de dados, com o requerimento administrativo prévio.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o requerimento administrativo, a negativa ou a ausência de resposta da entidade.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre o direito de acesso ou retificação das informações (CF 5º, LXXII; Lei 9.507/1997).',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira a exibição dos registros, a retificação ou a anotação nos assentamentos.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Esgotamento administrativo prévio: requerimento negado ou sem resposta no prazo (art. 8º, parágrafo único, Lei 9.507/1997).'],
+  },
+  {
+    id: 'mandado-de-seguranca-coletivo',
+    area: 'Constitucional',
+    tipo: 'Mandado de Segurança Coletivo',
+    descricao: 'Para proteger direito coletivo ou individual homogêneo contra ato coator, impetrado por entidade legitimada.',
+    baseLegal: ['CF 5º, LXIX-LXX', 'Lei 12.016/2009, art. 21'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o impetrante (entidade legitimada), os substituídos e a autoridade coatora.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o ato coator e a violação de direito coletivo, líquido e certo, dos membros ou associados.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a legitimidade ativa e o direito líquido e certo violado, com fundamento na Lei 12.016/2009.',
+      },
+      {
+        titulo: 'DA LIMINAR',
+        instrucao: 'Requeira e fundamente a liminar, se cabível, com os requisitos legais.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_PROVAS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Legitimados: partido político com representação no Congresso, entidade de classe ou associação constituída há mais de 1 ano (art. 21, Lei 12.016/2009).'],
+  },
+  {
+    id: 'adpf',
+    area: 'Constitucional',
+    tipo: 'Arguição de Descumprimento de Preceito Fundamental (ADPF)',
+    descricao: 'Para evitar ou reparar lesão a preceito fundamental decorrente de ato do Poder Público.',
+    baseLegal: ['CF 102, §1º', 'Lei 9.882/1999'],
+    secoes: [
+      {
+        titulo: 'ENDEREÇAMENTO',
+        instrucao: 'Enderece a petição ao Supremo Tribunal Federal.',
+      },
+      {
+        titulo: 'DOS LEGITIMADOS',
+        instrucao: 'Identifique o requerente entre os legitimados do art. 103 da CF e o ato impugnado.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva o ato do Poder Público que viola preceito fundamental, com sua repercussão.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a lesão a preceito fundamental e a subsidiariedade do instrumento (art. 4º, §1º, Lei 9.882/1999).',
+      },
+      {
+        titulo: 'DA LIMINAR',
+        instrucao: 'Requeira e fundamente a medida liminar, com os requisitos do art. 5º, §3º, da Lei 9.882/1999.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Legitimados do art. 103, CF; caráter subsidiário (inexistência de outro meio eficaz); possibilidade de liminar.'],
+  },
+
+  // ============================ PENAL — ampliação ============================
+  {
+    id: 'transacao-penal',
+    area: 'Penal',
+    tipo: 'Transação Penal',
+    descricao: 'Para aceitar ou requerer a aplicação imediata de pena restritiva de direitos ou multa em infrações de menor potencial ofensivo.',
+    baseLegal: ['Lei 9.099/1995, art. 76', 'CPP 61'],
+    secoes: [...S_PENAL],
+    observacoes: [
+      'Cabível para infrações de menor potencial ofensivo, desde que preenchidos os requisitos do art. 76, Lei 9.099/1995.',
+      'A proposta é formulada pelo Ministério Público antes do recebimento da denúncia; a aceitação não importa reincidência.',
+    ],
+  },
+  {
+    id: 'suspensao-condicional-do-processo',
+    area: 'Penal',
+    tipo: 'Suspensão Condicional do Processo',
+    descricao: 'Para requerer a suspensão condicional do processo, com as condições do art. 89 da Lei 9.099/1995.',
+    baseLegal: ['Lei 9.099/1995, art. 89'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o acusado e identifique a ação penal e os fatos imputados.',
+      },
+      SECAO_FATOS,
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre o preenchimento dos requisitos do art. 89 da Lei 9.099/1995 (pena mínima igual ou inferior a 1 ano e demais condições).',
+      },
+      {
+        titulo: 'DAS CONDIÇÕES',
+        instrucao: 'Proponha as condições a serem cumpridas durante o período de prova, conforme o art. 89, §1º.',
+      },
+      SECAO_PEDIDOS,
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Período de prova de 2 a 4 anos (art. 89, §1º); a suspensão não se aplica na continuidade delitiva ou violência doméstica, nas hipóteses legais.'],
+  },
+  {
+    id: 'representacao-criminal',
+    area: 'Penal',
+    tipo: 'Representação Criminal',
+    descricao: 'Para manifestar a vontade da vítima ou ofendido de que o autor de infração de ação penal pública condicionada seja processado.',
+    baseLegal: ['CPP 39', 'CP 100-106'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o ofendido/representante e o autor do fato, com o relato da infração.',
+      },
+      {
+        titulo: 'DOS FATOS',
+        instrucao: 'Descreva a infração penal e as circunstâncias que ensejam a representação.',
+      },
+      {
+        titulo: 'DO DIREITO',
+        instrucao: 'Demonstre a condicionante de procedibilidade e a manifestação de vontade de processar (art. 39, CPP).',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira o recebimento da representação e o encaminhamento ao Ministério Público.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo decadencial de 6 meses da ciência do autor (art. 38, CPP); a retratação só é admitida antes do recebimento da denúncia.'],
+  },
+  {
+    id: 'progressao-de-regime',
+    area: 'Penal',
+    tipo: 'Pedido de Progressão de Regime',
+    descricao: 'Para requerer a transferência do apenado para regime menos gravoso, preenchidos os requisitos legais.',
+    baseLegal: ['LEP 7.210/1984, arts. 112-114'],
+    secoes: [...S_PENAL],
+    observacoes: [
+      'Requisito objetivo: fração da pena cumprida (1/6; 40% ou 50% para crimes hediondos, conforme reincidência).',
+      'Requisito subjetivo: mérito comprovado pelo exame criminológico ou atestado de boa conduta carcerária.',
+    ],
+  },
+  {
+    id: 'livramento-condicional',
+    area: 'Penal',
+    tipo: 'Livramento Condicional',
+    descricao: 'Para requerer a liberdade antecipada do condenado sob condições, preenchidos os requisitos do Código Penal.',
+    baseLegal: ['CP 83-90', 'LEP 131-146'],
+    secoes: [...S_PENAL],
+    observacoes: [
+      'Cumprimento de mais de 1/3 (ou 1/2, para reincidente em crime hediondo) da pena, conforme o art. 83, CP.',
+      'Exige comportamento satisfatório e reparação do dano, salvo impossibilidade (art. 83, III-IV, CP).',
+    ],
+  },
+  {
+    id: 'contra-razoes-apelacao-criminal',
+    area: 'Penal',
+    tipo: 'Contra-razões de Apelação Criminal',
+    descricao: 'Para responder ao recurso de apelação criminal, impugnando as razões recursais da parte contrária.',
+    baseLegal: ['CPP 600'],
+    secoes: [
+      SECAO_ENDERECAMENTO,
+      {
+        titulo: 'QUALIFICAÇÃO',
+        instrucao: 'Qualifique o apelado e o apelante, indicando o processo de origem.',
+      },
+      {
+        titulo: 'DA SÍNTESE DO RECURSO',
+        instrucao: 'Sintetize as razões do apelante e os pontos impugnados.',
+      },
+      {
+        titulo: 'DAS CONTRARRAZÕES',
+        instrucao: 'Refute as razões recursais, demonstrando a manutenção da decisão recorrida.',
+      },
+      {
+        titulo: 'DOS PEDIDOS',
+        instrucao: 'Requeira o não conhecimento ou o desprovimento do recurso.',
+      },
+      SECAO_FECHAMENTO,
+    ],
+    observacoes: ['Prazo de 8 dias para as contrarrazões (art. 600, CPP); após, os autos sobem ao tribunal.'],
   },
 ];
 

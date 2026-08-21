@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/startup.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/startup.js",
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit generate && drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",

@@ -214,6 +214,13 @@ export default function Crm() {
                   <option value="Consumerista">Consumerista</option>
                   <option value="Cível">Cível</option>
                   <option value="Tributário">Tributário</option>
+                  <option value="Família">Família</option>
+                  <option value="Sucessões">Sucessões</option>
+                  <option value="Penal">Penal</option>
+                  <option value="Previdenciário">Previdenciário</option>
+                  <option value="Empresarial">Empresarial</option>
+                  <option value="Administrativo">Administrativo</option>
+                  <option value="Constitucional">Constitucional</option>
                 </select>
               </Field>
 

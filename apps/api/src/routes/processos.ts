@@ -33,6 +33,7 @@ router.post('/', async (req, res) => {
     }
     const data = parsed.data;
     const novo = await db.insert(processos).values({
+      numero: data.numero ?? null,
       tipo: data.tipo,
       cliente: data.cliente,
       adverso: data.adverso,

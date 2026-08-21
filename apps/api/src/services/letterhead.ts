@@ -235,6 +235,7 @@ export function montarPecaDocumento(args: {
       .filter((p) => p.length > 0)
       .map((paragrafo) => ({
         type: 'paragraph' as const,
+        align: 'justify' as const,
         runs: [{ text: paragrafo }],
       }));
   }

@@ -20,6 +20,7 @@ const vector = customType<{ data: number[] }>({
 
 export const processos = pgTable('processos', {
   id: uuid('id').defaultRandom().primaryKey(),
+  numero: text('numero'),
   tipo: text('tipo').notNull(),
   cliente: text('cliente').notNull(),
   adverso: text('adverso').notNull(),

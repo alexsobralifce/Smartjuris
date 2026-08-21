@@ -44,9 +44,9 @@ function linhaDeContato(esc: EscritorioIdentity): string {
     .join(' · ');
 }
 
-/** Nome exibido no cabeçalho: razão social (ou e-mail como fallback). */
+/** Nome exibido no cabeçalho: razão social (ou e-mail/fallback). */
 function nomePapelTimbrado(esc: EscritorioIdentity): string {
-  return limpar(esc.razaoSocial) || limpar(esc.email);
+  return limpar(esc.razaoSocial) || limpar(esc.email) || 'Escritório de Advocacia';
 }
 
 /**
@@ -132,25 +132,45 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
 
   let numeroPagina = 1;
 
+  // Estado da fonte do CORPO, rastreado manualmente. NÃO usar `_font`/`_fillColor`
+  // do pdfkit: `_font` é um objeto Font (não o nome a passar a `pdf.font`) e os
+  // helpers de cabeçalho/rodapé mudam a fonte para Helvetica 8pt — o pdfkit
+  // retoma o texto interrompido numa quebra de página com esse estado, o que
+  // encolhia a continuação do parágrafo na página nova.
+  let nomeFonteCorpo = 'Times-Roman';
+  let tamanhoFonteCorpo = 12;
+  let corFonteCorpo = 'black';
+  const capturarFonte = () => ({ font: nomeFonteCorpo, size: tamanhoFonteCorpo, color: corFonteCorpo });
+  const restaurarFonte = (estado: { font: string; size: number; color: string }) => {
+    pdf.font(estado.font).fontSize(estado.size).fillColor(estado.color || 'black');
+  };
+
   // Número de página centralizado no rodapé (coordenadas explícitas).
   // Usa lineBreak:false e centragem manual para não disparar quebra de página:
   // desenhar com width ativaria o LineWrapper, que cria página nova quando
   // y > page.maxY() (o rodapé fica dentro da margem inferior, além do maxY).
   const desenharRodape = () => {
     if (numeroPagina <= 0) return;
-    const texto = `Página ${numeroPagina}`;
-    const yRodape = pdf.page.height - 40;
     pdf.font('Helvetica').fontSize(8).fillColor('#7a7870');
+    const nome = nomePapelTimbrado(doc.escritorio);
+    if (nome) {
+      const yNome = pdf.page.height - 52;
+      const xNome = MARGEM_ESQUERDA + (larguraUtil - pdf.widthOfString(nome)) / 2;
+      pdf.text(nome, xNome, yNome, { lineBreak: false });
+    }
+    const texto = `Página ${numeroPagina}`;
+    const yRodape = pdf.page.height - 38;
     const xCentro = MARGEM_ESQUERDA + (larguraUtil - pdf.widthOfString(texto)) / 2;
     pdf.text(texto, xCentro, yRodape, { lineBreak: false });
-    pdf.fillColor('black');
   };
 
   // Cabeçalho (papel timbrado): logo, nome/razão social, contato e linha.
   // Desenha a partir da posição atual e retorna a nova posição de y.
   const drawHeader = (): number => {
     const base64 = base64DeDataUri(doc.escritorio.logoUrl);
-    if (base64) {
+    // Guarda defensiva: imagens minúsculas (ex.: PNG 1x1) fazem o pdfkit entrar
+    // em loop infinito de CPU com `fit`. Filtramos por tamanho mínimo do base64.
+    if (base64 && base64.length >= 300) {
       try {
         pdf.image(Buffer.from(base64, 'base64'), { fit: [120, 60], align: 'left' } as any);
       } catch {
@@ -179,8 +199,12 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
   // rodapé no final. Em pageAdded o pdfkit já resetou x/y para as margens.
   pdf.on('pageAdded', () => {
     numeroPagina += 1;
+    const estado = capturarFonte();
     const yAposHeader = drawHeader();
     desenharRodape();
+    // Restaura a fonte que o corpo usava antes da quebra — evita o texto
+    // encolhido (Helvetica 8pt) na continuação de um parágrafo.
+    restaurarFonte(estado);
     // O corpo continua logo abaixo do cabeçalho (pageAdded não resetou y de novo).
     pdf.y = yAposHeader;
   });
@@ -188,11 +212,16 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
   // Página 1: o cabeçalho é desenhado manualmente (pageAdded não dispara para
   // a primeira página, criada no construtor antes dos listeners), junto com o
   // rodapé correspondente antes do conteúdo.
+  const estadoInicial = capturarFonte();
   const yInicioPagina1 = drawHeader();
   desenharRodape();
+  restaurarFonte(estadoInicial);
   pdf.y = yInicioPagina1;
 
   // Título da peça
+  nomeFonteCorpo = 'Times-Bold';
+  tamanhoFonteCorpo = 12;
+  corFonteCorpo = 'black';
   pdf.font('Times-Bold').fontSize(12);
   pdf.text(doc.titulo, MARGEM_ESQUERDA, pdf.y, { width: larguraUtil, align: 'center' });
   pdf.moveDown(0.8);
@@ -204,8 +233,11 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
     if (bloco.type === 'heading') {
       pdf.moveDown(0.5);
       const tamanho = bloco.level === 1 ? 16 : bloco.level === 2 ? 14 : 13;
+      nomeFonteCorpo = 'Times-Bold';
       runs.forEach((run, idx) => {
         const isLast = idx === runs.length - 1;
+        tamanhoFonteCorpo = run.size ?? tamanho;
+        corFonteCorpo = 'black';
         pdf.font('Times-Bold').fontSize(run.size ?? tamanho);
         pdf.text(run.text, MARGEM_ESQUERDA, pdf.y, {
           continued: !isLast,
@@ -216,10 +248,14 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
       });
     } else if (bloco.type === 'listItem') {
       const prefixo = bloco.ordered ? `${bloco.index ?? 1}. ` : '• ';
+      nomeFonteCorpo = 'Times-Roman';
+      tamanhoFonteCorpo = 12;
       pdf.font('Times-Roman').fontSize(12);
       pdf.text(prefixo, MARGEM_ESQUERDA, pdf.y, { continued: true, width: larguraUtil });
       runs.forEach((run, idx) => {
         const isLast = idx === runs.length - 1;
+        nomeFonteCorpo = fonteRica(run);
+        tamanhoFonteCorpo = run.size ?? 12;
         pdf.font(fonteRica(run)).fontSize(run.size ?? 12);
         pdf.text(run.text, MARGEM_ESQUERDA, pdf.y, {
           continued: !isLast,
@@ -231,16 +267,20 @@ export async function renderPdf(doc: PecaDocumento): Promise<Buffer> {
         });
       });
     } else {
-      // paragraph
+      // paragraph (justificado por padrão — padrão forense)
+      const alinhamento = bloco.align ?? 'justify';
       runs.forEach((run, idx) => {
         const isLast = idx === runs.length - 1;
+        nomeFonteCorpo = fonteRica(run);
+        tamanhoFonteCorpo = run.size ?? 12;
+        corFonteCorpo = 'black';
         pdf.font(fonteRica(run)).fontSize(run.size ?? 12);
         pdf.text(run.text, MARGEM_ESQUERDA, pdf.y, {
           continued: !isLast,
           underline: run.underline,
           lineGap: 6,
           width: larguraUtil,
-          ...(bloco.align ? { align: bloco.align } : {}),
+          align: alinhamento,
         });
       });
     }
@@ -320,7 +360,10 @@ export async function renderDocx(doc: PecaDocumento): Promise<Buffer> {
     children: [
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [new TextRun({ children: ['Página ', PageNumber.CURRENT] })],
+        children: [
+          new TextRun({ text: `${nomePapelTimbrado(doc.escritorio)}  ·  `, size: 16 }),
+          new TextRun({ children: ['Página ', PageNumber.CURRENT], size: 16 }),
+        ],
       }),
     ],
   });
@@ -401,11 +444,12 @@ export async function renderDocx(doc: PecaDocumento): Promise<Buffer> {
         );
       }
     } else {
-      // paragraph
+      // paragraph (justificado por padrão, com recuo de primeira linha)
       listaOrdenadaAtiva = false;
       children.push(
         new Paragraph({
-          alignment: mapAlign(bloco.align),
+          alignment: mapAlign(bloco.align ?? 'justify'),
+          indent: { firstLine: convertInchesToTwip(0.5) },
           children: textRunsDoBloco(bloco.runs),
           spacing: { after: 200, line: 360 },
         })

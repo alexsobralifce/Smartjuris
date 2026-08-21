@@ -8,15 +8,82 @@ import { Button, FONT, Field, inputStyle, Modal, PageContainer, PageHeader, RADI
 
 type Step = 'tipo' | 'dados' | 'gerando' | 'revisao'
 
-const areas = ['Cível', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista']
+const areas = ['Cível', 'Família', 'Sucessões', 'Trabalhista', 'Tributário', 'Penal', 'Previdenciário', 'Consumerista', 'Empresarial', 'Administrativo', 'Constitucional']
 
+// Fallback local do catálogo de peças — usado apenas se a API (/api/rag/modelos)
+// não responder. Espelha o catálogo oficial de apps/api/src/services/modelosPeca.ts
+// (MODELOS_PECA, 62 peças). Os nomes precisam ser EXATOS: são usados em
+// buscarModelo(tipo, area) na geração da peça.
 const tiposPorArea: Record<string, string[]> = {
-  'Cível': ['Petição Inicial', 'Contestação', 'Réplica', 'Recurso de Apelação', 'Agravo de Instrumento', 'Embargos de Declaração', 'Impugnação ao Cumprimento de Sentença'],
-  'Trabalhista': ['Reclamação Trabalhista', 'Contestação Trabalhista', 'Recurso Ordinário', 'Recurso de Revista', 'Agravo de Petição'],
-  'Tributário': ['Mandado de Segurança Tributário', 'Ação Anulatória', 'Ação de Repetição de Indébito', 'Embargos à Execução Fiscal'],
-  'Penal': ['Queixa-Crime', 'Resposta à Acusação', 'Memoriais', 'Habeas Corpus', 'Apelação Criminal'],
-  'Previdenciário': ['Ação de Concessão de Benefício', 'Revisão de Benefício', 'Recurso ao CRPS'],
-  'Consumerista': ['Petição Inicial CDC', 'Ação de Danos Morais', 'Ação de Obrigação de Fazer'],
+  'Cível': [
+    'Petição Inicial', 'Contestação', 'Réplica', 'Recurso de Apelação',
+    'Agravo de Instrumento', 'Embargos de Declaração',
+    'Impugnação ao Cumprimento de Sentença', 'Cumprimento de Sentença',
+    'Execução de Título Extrajudicial', 'Embargos à Execução',
+    'Exceção de Pré-Executividade', 'Ação Monitória',
+    'Ação de Consignação em Pagamento', 'Ação de Despejo', 'Ação de Usucapião',
+    'Ação Reivindicatória', 'Ação de Obrigação de Fazer/Não Fazer',
+    'Tutela de Urgência/Antecipada',
+  ],
+  'Trabalhista': [
+    'Reclamação Trabalhista', 'Contestação Trabalhista', 'Recurso Ordinário',
+    'Recurso de Revista', 'Agravo de Petição',
+    'Impugnação à Sentença de Liquidação', 'Embargos à Execução Trabalhista',
+    'Mandado de Segurança Trabalhista', 'Ação de Consignação de Verbas',
+    'Ação Rescisória',
+  ],
+  'Tributário': [
+    'Mandado de Segurança Tributário', 'Ação Anulatória',
+    'Ação de Repetição de Indébito', 'Embargos à Execução Fiscal',
+    'Ação Declaratória', 'Exceção de Pré-Executividade',
+    'Agravo de Instrumento Tributário', 'Ação de Compensação',
+  ],
+  'Penal': [
+    'Queixa-Crime', 'Resposta à Acusação', 'Memoriais / Alegações Finais',
+    'Habeas Corpus', 'Apelação Criminal', 'Recurso em Sentido Estrito',
+    'Embargos de Declaração Penal', 'Revisão Criminal',
+    'Pedido de Liberdade Provisória', 'Relaxamento de Prisão',
+    'Transação Penal', 'Suspensão Condicional do Processo',
+    'Representação Criminal', 'Pedido de Progressão de Regime',
+    'Livramento Condicional', 'Contra-razões de Apelação Criminal',
+  ],
+  'Previdenciário': [
+    'Ação de Concessão de Benefício', 'Revisão de Benefício', 'Recurso ao CRPS',
+    'Ação de Auxílio por Incapacidade',
+    'Aposentadoria por Idade/Tempo de Contribuição', 'Pensão por Morte',
+    'Benefício de Prestação Continuada BPC/LOAS', 'Recurso Ordinário à TNU',
+  ],
+  'Consumerista': [
+    'Petição Inicial CDC', 'Ação de Danos Morais', 'Ação de Obrigação de Fazer',
+    'Ação Revisional de Contrato', 'Ação de Restituição de Valores em Dobro',
+    'Ação Declaratória de Inexigibilidade de Débito',
+    'Ação por Vício do Produto/Serviço', 'Ação por Negativação Indevida',
+  ],
+  'Família': [
+    'Divórcio Consensual', 'Divórcio Litigioso', 'Ação de Guarda',
+    'Ação de Alimentos', 'Execução de Alimentos',
+    'Investigação de Paternidade', 'Dissolução de União Estável',
+    'Regulamentação de Visitas',
+  ],
+  'Sucessões': [
+    'Inventário Judicial', 'Inventário Extrajudicial', 'Arrolamento Sumário',
+    'Sobrepartilha / Petição de Herança', 'Ação de Anulação de Testamento',
+  ],
+  'Empresarial': [
+    'Recuperação Judicial', 'Recuperação Extrajudicial', 'Pedido de Falência',
+    'Contestação ao Pedido de Falência', 'Dissolução Parcial de Sociedade',
+    'Exclusão de Sócio', 'Ação de Prestação de Contas',
+  ],
+  'Administrativo': [
+    'Mandado de Segurança Administrativo',
+    'Ação Ordinária contra Ato Administrativo', 'Defesa em Processo Administrativo Disciplinar',
+    'Impugnação a Licitação', 'Ação de Improbidade Administrativa',
+    'Defesa em Improbidade Administrativa', 'Recurso Administrativo',
+  ],
+  'Constitucional': [
+    'Mandado de Injunção', 'Habeas Data', 'Mandado de Segurança Coletivo',
+    'Arguição de Descumprimento de Preceito Fundamental (ADPF)',
+  ],
 }
 
 // Teses Rápidas / Playbooks por Área
@@ -73,7 +140,67 @@ const tesesPlaybook: Record<string, { label: string; texto: string; tipo: string
       tipo: 'Revisão de Benefício',
       texto: 'O cálculo da Renda Mensal Inicial (RMI) pelo INSS não computou corretamente os salários de contribuição e verbas reconhecidas em reclamação trabalhista transitada em julgado. Requer a revisão do valor do benefício mantido, a retificação do CNIS e o pagamento das diferenças retroativas respeitada a prescrição quinquenal.'
     }
-  ]
+  ],
+  'Família': [
+    {
+      label: '⚡ Divórcio Litigioso com Partilha e Guarda',
+      tipo: 'Divórcio Litigioso',
+      texto: 'Casamento de 12 anos com separação de fato há 2, um filho menor e imóvel comum. Requer a dissolução do vínculo (art. 1.580, CC), a guarda compartilhada com fixação do lar de referência, pensão alimentícia proporcional ao binômio necessidade-possibilidade e a partilha do patrimônio comum, com audiência de mediação (art. 695, CPC).'
+    },
+    {
+      label: '⚡ Alimentos para Filho Menor (Binômio Necessidade-Possibilidade)',
+      tipo: 'Ação de Alimentos',
+      texto: 'O menor necessita de pensão compatível com as despesas de escola, plano de saúde e alimentação, enquanto o genitor aufere renda fixa de R$ 6.000,00 mensais. Requer a fixação de alimentos provisórios desde a citação e definitivos em percentual sobre os rendimentos do alimentante (arts. 1.694-1.701, CC; art. 4º, Lei 5.478/1968).'
+    },
+  ],
+  'Sucessões': [
+    {
+      label: '⚡ Inventário por Escritura Pública (Herdeiros Maiores e Capazes)',
+      tipo: 'Inventário Extrajudicial',
+      texto: 'Falecimento sem testamento, herdeiros maiores, capazes e concordes, e bens sem litígio. Requer a lavratura da escritura pública de inventário e partilha, com recolhimento do imposto causa mortis, nos termos da Lei 11.441/2007 e do art. 610, §1º, do CPC.'
+    },
+    {
+      label: '⚡ Sonegados de Inventário — Sobrepartilha',
+      tipo: 'Sobrepartilha / Petição de Herança',
+      texto: 'Bem imóvel não declarado no inventário encerrado, ocultado pelo inventariante. Requer a sobrepartilha do bem sonegado (arts. 669-673, CPC) e a condenação do inventariante, com os efeitos da sonegação.'
+    },
+  ],
+  'Empresarial': [
+    {
+      label: '⚡ Recuperação Judicial — Stay Period e Suspensão das Execuções',
+      tipo: 'Recuperação Judicial',
+      texto: 'Empresa de médio porte com passivo de R$ 4,2 milhões e 140 empregados, em crise pela queda de demanda e inadimplência de clientes. Requer o processamento da recuperação judicial com suspensão das execuções por 180 dias (art. 6º, §4º, LRE) e apresentação de plano em 60 dias (art. 53, LRE), preenchidos os requisitos do art. 48.'
+    },
+    {
+      label: '⚡ Pedido de Falência por Impontualidade Injustificada',
+      tipo: 'Pedido de Falência',
+      texto: 'Duplicatas vencidas há mais de 90 dias, protestadas e não pagas, no valor de R$ 380.000,00. Requer a citação do devedor para pagamento em 24 horas e a decretação da falência na hipótese do art. 94, I, da Lei 11.101/2005.'
+    },
+  ],
+  'Administrativo': [
+    {
+      label: '⚡ MS contra Negativa Administrativa (Prazo de 120 Dias)',
+      tipo: 'Mandado de Segurança Administrativo',
+      texto: 'Autoridade administrativa negou licença pleiteada com fundamento em requisito não previsto em lei, violando direito líquido e certo. Requer a concessão de liminar e a segurança definitiva, observado o prazo de 120 dias da ciência do ato coator (art. 23, Lei 12.016/2009).'
+    },
+    {
+      label: '⚡ Defesa em PAD por Falta Grave',
+      tipo: 'Defesa em Processo Administrativo Disciplinar',
+      texto: 'Servidor acusado de inassiduidade habitual com base em registro unilateral, sem provas da conduta. Requer o acolhimento das preliminares de cerceamento de defesa e a absolvição, no prazo de 10 dias (art. 161, Lei 8.112/1990), com a oitiva de testemunhas.'
+    },
+  ],
+  'Constitucional': [
+    {
+      label: '⚡ Mandado de Injunção — Direito de Greve do Servidor Público',
+      tipo: 'Mandado de Injunção',
+      texto: 'Servidor público impedido de exercer o direito de greve por ausência de norma regulamentadora específica. Requer a ciência da omissão e a aplicação, por analogia, da Lei 7.783/1989, nos moldes do MI 670/STF (CF 5º, LXXI; Lei 13.300/2016).'
+    },
+    {
+      label: '⚡ Habeas Data — Negativa de Acesso a Assentamentos',
+      tipo: 'Habeas Data',
+      texto: 'Requisição administrativa de acesso a informações pessoais em órgão público negada ou sem resposta no prazo. Requer a exibição dos registros e a retificação das informações inexatas (CF 5º, LXXII; arts. 7º e 8º, parágrafo único, Lei 9.507/1997).'
+    },
+  ],
 }
 
 export default function GeradorPecas() {
@@ -150,7 +277,7 @@ export default function GeradorPecas() {
   // A heurística de "mais de 5 documentos" não é auto-detectável aqui (os
   // documentos vivem na Base RAG); o toggle da Etapa 2 cobre esse caso manualmente.
   useEffect(() => {
-    setIsComplex(tipo === 'Recurso' || tipo === 'Contestação')
+    setIsComplex(tipo.includes('Recurso') || tipo.includes('Contestação'))
   }, [tipo])
 
   const [showDecisoesModal, setShowDecisoesModal] = useState(false)
@@ -242,6 +369,7 @@ export default function GeradorPecas() {
               tipo, 
               area, 
               isComplex,
+              processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
               dadosCaso: `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.` 
             })
           });

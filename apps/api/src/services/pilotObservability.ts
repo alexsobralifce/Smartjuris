@@ -22,18 +22,21 @@ export function cicloAtual(): string {
  * Compara o custo consumido do ciclo com o limiar DENTRO do PostgreSQL
  * (bigint) — nenhuma conversão imprecisa em JS. Devolve também o total
  * serializado como texto exato (para apresentação). A comparação `> limiar`
- * é estrita: igualdade NÃO dispara.
+ * é estrita: igualdade NÃO dispara. `exec` opcional: quando fornecido (a
+ * transação que detém o advisory lock), TODAS as consultas usam a MESMA
+ * conexão da transação — sem risco de deadlock por pool saturado.
  */
-export async function custoDoCicloVsLimiar(escritorioId: string, limiarCents: bigint): Promise<{ excede: boolean; totalTexto: string }> {
+export async function custoDoCicloVsLimiar(escritorioId: string, limiarCents: bigint, exec?: any): Promise<{ excede: boolean; totalTexto: string }> {
+  const q = exec ?? db;
   const ciclo = cicloAtual();
-  const rows = (await db.execute(sql`
+  const rows = await q.execute(sql`
     SELECT COALESCE(SUM(cost_cents_actual), 0)::text AS total,
            (COALESCE(SUM(cost_cents_actual), 0) > ${limiarCents}) AS excede
     FROM ai_operations
     WHERE escritorio_id = ${escritorioId}
       AND status = 'succeeded'
       AND to_char(COALESCE(finished_at, updated_at, created_at), 'YYYY-MM') = ${ciclo}
-  `)) as any[];
+  `);
   return {
     totalTexto: String(rows[0]?.total ?? '0'),
     excede: Boolean(rows[0]?.excede),
@@ -48,14 +51,14 @@ export async function custoConsumidoCiclo(escritorioId: string): Promise<number>
   return Number.isFinite(numero) ? numero : 0;
 }
 
-async function alertaJaEmitido(escritorioId: string, ciclo: string): Promise<boolean> {
-  const rows = (await db.execute(sql`
+async function alertaJaEmitido(exec: any, escritorioId: string, ciclo: string): Promise<boolean> {
+  const rows = await exec.execute(sql`
     SELECT id FROM audit_log
     WHERE acao = 'AI_ALERTA_CUSTO_PILOTO'
       AND detalhes->>'escritorioId' = ${escritorioId}
       AND detalhes->>'ciclo' = ${ciclo}
     LIMIT 1
-  `)) as any[];
+  `);
   return Array.isArray(rows) && rows.length > 0;
 }
 
@@ -79,9 +82,11 @@ export async function checarAlertaCustoPiloto(escritorioId: string, req?: Reques
     // nunca deixa e-mail órfão; retry não duplica (alertaJaEmitido bloqueia).
     const novoAlerta = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${chave}))`);
-      if (await alertaJaEmitido(escritorioId, ciclo)) return null;
+      // TODAS as consultas da transação usam a MESMA conexão (`tx`) que detém
+      // o advisory lock — nunca `db.execute` aqui (deadlock com pool saturado).
+      if (await alertaJaEmitido(tx, escritorioId, ciclo)) return null;
       // Comparação bigint NO POSTGRES (sem conversão imprecisa em JS).
-      const { excede, totalTexto } = await custoDoCicloVsLimiar(escritorioId, limiarCents);
+      const { excede, totalTexto } = await custoDoCicloVsLimiar(escritorioId, limiarCents, tx);
       if (!excede) return null;
 
       await tx.insert(auditLog).values({

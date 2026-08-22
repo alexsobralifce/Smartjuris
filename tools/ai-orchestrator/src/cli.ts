@@ -24,7 +24,7 @@ import { createLogger, withLock } from './io.js';
 import { createRealDeps } from './deps.js';
 import { runPhase, runAutonomousChain } from './run.js';
 import { reAuditRun } from './auditRun.js';
-import { printStatus, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
+import { printStatus, printRelatorio, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
 import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
@@ -32,6 +32,7 @@ const USAGE = `Uso:
   ai:run --phase <ID> [modo]               executa uma fase
   ai:audit --run <run-id> [--force]        reexecuta a auditoria de um run
   ai:status                                tabela do roadmap
+  ai:relatorio                             relatório de andamento (implementações + validações)
   ai:approve --phase <ID> [--next]         aprovação manual (humano)
   ai:retry --phase <ID> [modo]             reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
   ai:dry-run [--phase <ID>]                plano offline sem mutações
@@ -106,6 +107,10 @@ async function main(): Promise<void> {
   switch (command) {
     case 'status': {
       printStatus(deps());
+      break;
+    }
+    case 'relatorio': {
+      await printRelatorio(deps());
       break;
     }
     case 'dry-run': {

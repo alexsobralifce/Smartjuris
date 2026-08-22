@@ -410,4 +410,75 @@ describe('4B — observabilidade (alerta de custo por escritório)', { skip: !db
     });
     assert.ok(r2.ok, 'settle continua ok com limiar inválido (falha de observabilidade não falha liquidação)');
   });
+
+  test('SATURAÇÃO de pool: 20 checarAlertaCustoPiloto concorrentes concluem sem deadlock e emitem UM alerta', async () => {
+    const [esc] = await db.insert(s.escritorios).values([
+      { nome: `Pilot Pool ${suffix}`, plano: 'office', ativo: true, limiteTokensMes: null },
+    ]).returning({ id: s.escritorios.id });
+    escIds.push(esc.id);
+    const [op] = await db.insert(s.aiOperations).values({
+      idempotencyKey: `piloto-pool-${suffix}`,
+      escritorioId: esc.id,
+      operationType: 'STANDARD_PETITION',
+      status: 'succeeded',
+      model: 'flash',
+      costCentsActual: 100_000,
+      tokensIn: 1000,
+      tokensOut: 1000,
+      finishedAt: new Date(),
+    }).returning({ id: s.aiOperations.id });
+    opIds.push(op.id);
+
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_ALERTA_CUSTO_CENTS = '50000';
+    const comTimeout = async (p: Promise<unknown>, ms: number) =>
+      Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout: deadlock ou espera indefinida')), ms))]);
+    await comTimeout(
+      Promise.all(Array.from({ length: 20 }, () => checarAlertaCustoPiloto(esc.id))),
+      20_000,
+    );
+    const ciclo = new Date().toISOString().slice(0, 7);
+    const alerts = await db.select().from(s.auditLog)
+      .where(eq(s.auditLog.acao, 'AI_ALERTA_CUSTO_PILOTO'))
+      .then((rows) => rows.filter((r) => (r.detalhes as any)?.escritorioId === esc.id && (r.detalhes as any)?.ciclo === ciclo));
+    assert.equal(alerts.length, 1, 'UM único alerta sob saturação de pool (sem deadlock)');
+  });
+
+  test('settleAiUsage sob concorrência de alertas: liquidações concluem e a observabilidade não bloqueia', async () => {
+    const { settleAiUsage } = await import('./usage.js');
+    const [esc] = await db.insert(s.escritorios).values([
+      { nome: `Pilot SettleConc ${suffix}`, plano: 'office', ativo: true, limiteTokensMes: null, creditsAvailable: 100, reserveCentsUsed: 0, cycleMonth: sql`to_char(now(), 'YYYY-MM')` },
+    ]).returning({ id: s.escritorios.id });
+    escIds.push(esc.id);
+    const opIdsLocais: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const [o] = await db.insert(s.aiOperations).values({
+        idempotencyKey: `piloto-settle-conc-${i}-${suffix}`,
+        escritorioId: esc.id,
+        operationType: 'STANDARD_PETITION',
+        status: 'reserved',
+        model: 'flash',
+        creditsReserved: 2,
+        costCentsReserved: 5000,
+        maxInputTokens: 5000,
+        maxOutputTokens: 3500,
+      }).returning({ id: s.aiOperations.id });
+      opIdsLocais.push(o.id);
+      opIds.push(o.id);
+    }
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_ALERTA_CUSTO_CENTS = '100';
+    const resultados = await Promise.all(
+      opIdsLocais.map((id) =>
+        settleAiUsage({ operationId: id, modelUsed: 'deepseek-v4-flash', inputTokens: 2_000_000, outputTokens: 100_000 }),
+      ),
+    );
+    assert.equal(resultados.length, 6, 'todas as liquidações concluíram (nenhuma bloqueada pela observabilidade)');
+    assert.ok(resultados.every((r) => r.ok || r.alreadySettled), 'todas ok/alreadySettled');
+    const ciclo = new Date().toISOString().slice(0, 7);
+    const alerts = await db.select().from(s.auditLog)
+      .where(eq(s.auditLog.acao, 'AI_ALERTA_CUSTO_PILOTO'))
+      .then((rows) => rows.filter((r) => (r.detalhes as any)?.escritorioId === esc.id && (r.detalhes as any)?.ciclo === ciclo));
+    assert.equal(alerts.length, 1, 'UM único alerta para todas as liquidações concorrentes');
+  });
 });

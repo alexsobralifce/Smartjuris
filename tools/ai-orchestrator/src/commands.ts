@@ -68,6 +68,119 @@ export function findNextEligible(deps: RunDeps): RoadmapPhase {
 }
 
 /**
+ * Relatório de ANDAMENTO (implementações + validações do orquestrador):
+ * agrega o roadmap com o histórico REAL de runs de auditoria por fase
+ * (rounds, veredito final, revisor usado, achados graves), a configuração
+ * atual do revisor/gate e o estado do working tree. Demo de progresso
+ * auditável, sem tocar em nenhum estado.
+ */
+export async function printRelatorio(deps: RunDeps): Promise<void> {
+  const { readdirSync, readFileSync, existsSync } = await import('node:fs');
+  const md = readText(safeJoin(deps.aiDevDir, basename(deps.config.roadmap)));
+  const { phases } = parseRoadmap(md);
+
+  const runsDir = safeJoin(deps.aiDevDir, 'runs');
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(runsDir);
+  } catch {
+    entries = [];
+  }
+
+  const porFase = new Map<string, Array<{
+    id: string;
+    ts: number;
+    status: string;
+    reviewer: string;
+    verdict: string | null;
+    graves: number | null;
+    achados: number | null;
+  }>>();
+  for (const entry of entries) {
+    const m = entry.match(/^(\d{8}T\d{6}Z)-(.+)$/);
+    if (!m) continue;
+    const fase = m[2];
+    const dir = safeJoin(runsDir, entry);
+    let run: { status?: string; reviewerModel?: string } = {};
+    try {
+      run = JSON.parse(readFileSync(safeJoin(dir, 'run.json'), 'utf8'));
+    } catch {
+      // run parcial (sem run.json) — ignora
+    }
+    let audit: { verdict?: string; findings?: Array<{ severity?: string }>; missingTests?: unknown[] } | null = null;
+    const auditPath = safeJoin(dir, '10-audit-result.json');
+    if (existsSync(auditPath)) {
+      try {
+        audit = JSON.parse(readFileSync(auditPath, 'utf8'));
+      } catch {
+        audit = null;
+      }
+    }
+    const achados = audit?.findings?.filter((f) => f.severity && f.severity !== 'PASS') ?? [];
+    const item = {
+      id: entry,
+      ts: Date.parse(m[1]) || 0,
+      status: run.status ?? '?',
+      reviewer: run.reviewerModel ?? '?',
+      verdict: audit?.verdict ?? null,
+      graves: audit ? achados.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER').length : null,
+      achados: audit ? achados.length : null,
+    };
+    const lista = porFase.get(fase) ?? [];
+    lista.push(item);
+    porFase.set(fase, lista);
+  }
+  for (const lista of porFase.values()) lista.sort((a, b) => a.ts - b.ts);
+
+  console.log('\n=== SmartJuris — Relatório de Andamento (implementações + validações) ===\n');
+  console.log(`Revisor atual   : ${deps.config.reviewer.model} (${deps.config.reviewer.provider})`);
+  console.log(`Teto correções  : ${deps.config.limits.maxCorrectionAttempts}`);
+  console.log(`Gate de avanço  : testes=${deps.config.limits.requireTests ? 'obrigatórios' : 'não'} · build=${deps.config.limits.requireBuild ? 'obrigatório' : 'não'} · diff=${deps.config.limits.requireDiff ? 'obrigatório' : 'não'}`);
+  console.log('');
+
+  console.log('Fase        Estado               Rounds  Último veredito      Revisor         Achados (HIGH)');
+  for (const phase of phases) {
+    const runs = porFase.get(phase.id) ?? [];
+    const ultimo = runs.length > 0 ? runs[runs.length - 1] : null;
+    const rounds = runs.length > 0 ? String(runs.length) : '—';
+    const veredito = ultimo?.verdict ?? '—';
+    const revisor = ultimo && ultimo.reviewer !== '?' ? ultimo.reviewer : '—';
+    const achados = ultimo && ultimo.achados != null ? `${ultimo.achados} (${ultimo.graves ?? 0})` : '—';
+    console.log(
+      `${phase.id.padEnd(11)} ${phase.status.padEnd(20)} ${rounds.padEnd(7)} ${String(veredito).padEnd(19)} ${String(revisor).padEnd(16)} ${achados}`,
+    );
+  }
+
+  console.log('\n--- Últimas validações por fase (run → veredito [HIGH]) ---');
+  for (const phase of phases) {
+    const runs = (porFase.get(phase.id) ?? []).filter((r) => r.verdict);
+    if (runs.length === 0) continue;
+    const ultimos = runs.slice(-3);
+    console.log(
+      `${phase.id}: ${ultimos
+        .map((r) => {
+          const ts = r.id.slice(9, 15);
+          return `${ts} ${r.verdict}${r.graves ? `(${r.graves}H)` : ''}`;
+        })
+        .join(' → ')}`,
+    );
+  }
+
+  // Estado do working tree (sem mutar nada).
+  try {
+    const git = await import('./git.js');
+    if (git && typeof deps.git?.porcelain === 'function') {
+      const porc = await deps.git.porcelain();
+      const dirty = porc.split('\n').filter(Boolean).length;
+      console.log(`\nWorking tree: ${dirty === 0 ? 'limpo' : `${dirty} arquivo(s) alterado(s) fora do roadmap`}`);
+    }
+  } catch {
+    // sem git disponível — omite
+  }
+  console.log('');
+}
+
+/**
  * Aprovação MANUAL (gate humano) via CLI. O roadmap só muda depois de
  * validação do estado atual e da transição permitida.
  */

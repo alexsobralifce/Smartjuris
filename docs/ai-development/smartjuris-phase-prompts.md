@@ -612,3 +612,74 @@ Confirme:
 
 Retorne o veredito em JSON.
 ```
+# 3B — Fallback Flash/Pro
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 3B — fallback Flash/Pro.
+
+Confirme que 2F (idempotência e reserva) está `AUDIT_APPROVED`.
+
+Implemente o fallback automático de modelo DeepSeek: quando a execução com
+FLASH falhar por motivo recuperável (erro 5xx/429 do provider, timeout de rede,
+resposta vazia, erro transitório — NUNCA por recusa de conteúdo/contexto ou
+erro de validação de entrada), o sistema pode reexecutar a operação com o
+modelo PRO, seguindo o fluxo:
+
+1. Registrar o motivo do fallback (auditável: operação, modelo original,
+   motivo, timestamps).
+2. Recalcular o custo com o modelo PRO (custo por token do PRO no usage.ts).
+3. Revalidar a reserva: conferir se o orçamento disponível do escritório
+   (maxReserveCents/maxOpCostCents e créditos do plano) cobre o custo PRO.
+4. Executar o PRO SOMENTE se houver orçamento disponível — a reexecução é
+   feita como nova operação (nova chave de idempotência derivada, ex. sufixo
+   ':pro') para não colidir com a operação FLASH já reservada; a reserva
+   FLASH original é liquidada/revertida conforme o resultado.
+5. Se NÃO houver orçamento para o PRO, retornar `REQUIRES_ADDITIONAL_CREDITS`
+   (estado tipado) sem executar — nunca executar Pro sem saldo.
+
+Requisitos:
+- O fallback é uma decisão de servidor (configurável via env, ex.:
+  `DEEPSEEK_FALLBACK_TO_PRO` default true), nunca do cliente;
+- Integrar ao orquestrador de operação de IA (`services/aiOperation.ts`, 2F):
+  o fallback entra como política de reexecução da fase de geração, respeitando
+  idempotência por tenant e settle/release corretos (sem débito duplicado:
+  cada execução PRO gera seu próprio token_usage; a FLASH falha libera reserva);
+- Registrar auditoria com o motivo do fallback (campo auditável na operação);
+- Não alterar classifier, catálogo, payloadBuilder, migrations ou frontend.
+
+Testes com banco real (padrão de `aiOperation.test.ts`):
+- falha recuperável FLASH → reexecução PRO registrada (motivo + modelo),
+  token_usage da execução PRO criado sem duplicar o da FLASH;
+- falha recuperável SEM orçamento para PRO → `REQUIRES_ADDITIONAL_CREDITS`,
+  nenhuma chamada PRO;
+- falha NÃO recuperável (recusa/validação) → sem fallback, operação `failed`;
+- isolamento entre escritórios (fallback nunca cruza tenants);
+- env desligando o fallback → falha FLASH permanece `failed`.
+
+Não altere rotas, SSE, frontend ou migrations.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 3B — fallback Flash/Pro.
+
+Analise o fallback Flash→Pro e os testes.
+
+Confirme:
+- motivo do fallback registrado (auditável);
+- custo recalculado para o modelo PRO;
+- reserva revalidada (orçamento disponível) ANTES de executar o PRO;
+- PRO executado somente com orçamento; caso contrário `REQUIRES_ADDITIONAL_CREDITS`
+  sem chamada;
+- idempotência por tenant preservada (nova chave para a execução PRO; sem
+  débito duplicado; settle/release corretos);
+- falhas não recuperáveis não disparam fallback;
+- decisão de servidor (env), nunca do cliente;
+- testes com banco real cobrindo os cenários acima;
+- nenhuma alteração fora de escopo.
+
+Retorne o veredito em JSON.
+```

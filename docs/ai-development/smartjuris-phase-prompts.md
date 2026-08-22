@@ -868,3 +868,61 @@ Confirme:
 
 Retorne o veredito em JSON.
 ```
+# 4B — Piloto controlado
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 4B — Piloto controlado.
+
+Confirme que 4A (testes end-to-end) está `AUDIT_APPROVED`.
+
+Implemente a CAMADA DE CONTROLE do piloto controlado (resultado esperado:
+`READY_FOR_PILOT`, NÃO produção automática). Tudo deve ser reversível por
+configuração (rollback = desligar as flags; zero efeito em produção sem piloto).
+
+Alterações esperadas (roadmap 4B):
+- flag `PILOTO_ATIVO` + limites configuráveis (escritórios, usuários por
+  escritório, documentos por escritório, alerta de custo em cents);
+- bloqueio no cadastro/registro quando o limite de escritórios ativos for
+  atingido (403 com código `PILOTO_LIMITE_ESCRITORIOS`);
+- bloqueio na criação de usuário quando o limite por escritório for atingido
+  (`PILOTO_LIMITE_USUARIOS`);
+- bloqueio no upload de documentos quando o limite por escritório for atingido
+  (`PILOTO_LIMITE_DOCUMENTOS`);
+- OBSERVABILIDADE: alerta de custo por escritório — quando o custo consumido
+  do ciclo (credit_ledger) ultrapassar o limiar, registrar auditoria + log e
+  notificar o e-mail raiz (best-effort, sem quebrar o fluxo);
+- acompanhamento manual: endpoint root `GET /api/root/piloto/status` com
+  contagens, limites e alertas ativos (resultado `READY_FOR_PILOT`);
+- rollback preparado: TODAS as decisões derivadas de env (default piloto
+  DESLIGADO); documentar rollback no README/roadmap.
+
+Requisitos:
+- defaults SEGUROS: piloto desligado por padrão (produção atual intocada);
+- os limites usam o catálogo/bd existente (escritorios.limiteUsuarios etc.);
+- alerta de custo NUNCA bloqueia geração (só observa/notifica);
+- testes: unitários do config/limites + integração dos bloqueios e do alerta;
+- suíte completa verde + builds.
+
+Não altere a lógica financeira existente (reserva/settle/fallback) — apenas
+ADICIONE a camada de controle.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 4B — Piloto controlado.
+
+Analise a camada de controle do piloto (resultado READY_FOR_PILOT).
+
+Confirme:
+- piloto DESLIGADO por padrão (rollback = desligar flags; produção intocada);
+- bloqueios 403 com códigos PILOTO_LIMITE_* no registro/usuários/upload;
+- alerta de custo por escritório (credit_ledger do ciclo) registrado em
+  auditoria/log + notificação best-effort, SEM bloquear geração;
+- endpoint root de status com contagens/limites/alertas;
+- testes unitários + integração dos bloqueios e do alerta; suítes verdes.
+
+Retorne o veredito em JSON.
+```

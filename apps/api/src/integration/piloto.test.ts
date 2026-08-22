@@ -34,7 +34,13 @@ process.env.OLLAMA_URL = `http://127.0.0.1:${(ollamaServer.address() as import('
 
 const { db, client } = await import('../db/client.js');
 const s = await import('../db/schema.js');
+const { runMigrations } = await import('../db/migrate.js');
 const { contarEscritoriosAtivos } = await import('../services/pilotMode.js');
+
+// Aplica o runner OFICIAL de migrations no banco da suíte (idempotente) —
+// garante o schema 0024 (area/usuario_id em documentos) ANTES de qualquer
+// fluxo de upload do piloto.
+await runMigrations();
 const { default: authRoutes } = await import('../routes/auth.js');
 const { default: documentosRoutes } = await import('../routes/documentos.js');
 const { default: adminEscritorioRoutes } = await import('../routes/adminEscritorio.js');
@@ -178,6 +184,15 @@ after(async () => {
 });
 
 describe('4B — bloqueios do piloto (HTTP)', () => {
+  test('migration 0024 APLICADA via runner oficial: colunas area/usuario_id presentes em documentos ANTES dos uploads', async () => {
+    const rows = (await db.execute(sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'documentos' AND column_name IN ('area', 'usuario_id')
+    `)) as any[];
+    const colunas = rows.map((r: any) => r.column_name).sort();
+    assert.deepEqual(colunas, ['area', 'usuario_id'], 'runner oficial aplicou 0024 no banco da suíte');
+  });
+
   test('registro de NOVO escritório bloqueado quando o teto de ativos é atingido (403 PILOTO_LIMITE_ESCRITORIOS)', async () => {
     resetRateLimiters();
     process.env.PILOTO_ATIVO = 'true';

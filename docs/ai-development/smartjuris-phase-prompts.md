@@ -808,3 +808,63 @@ Confirme:
 
 Retorne o veredito em JSON.
 ```
+# 4A — Testes end-to-end
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 4A — Testes end-to-end.
+
+Confirme que 3D (integração frontend) está `AUDIT_APPROVED`.
+
+Crie a suíte de testes END-TO-END do fluxo completo de operação de IA sobre a
+stack REAL (Express + Postgres local + orquestrador 2F + classificador 2B/2C +
+SSE 3C + idempotência 3D), mockando APENAS o provedor de LLM no limite da
+chamada (mesmo padrão de `src/integration/gerarSse.test.ts`).
+
+Cobertura exigida (roadmap 4A) — um cenário único encadeado + casos isolados:
+- login (cookie httpOnly, JWT);
+- upload de documento e indexação;
+- criação de processo vinculado;
+- classificação da operação (FLASH/PRO via catálogo compartilhado);
+- estimativa + reserva de créditos (credit_ledger);
+- geração com SSE (operacao → progresso → texto → concluido);
+- fallback Flash→Pro (somente com confirmação estruturada 3B);
+- persistência idempotente da peça (replay da MESMA chave → mesma peça);
+- validação humana e exportação (status aprovado/protocolado);
+- débito real de tokens (uso REAL, nunca aproximado);
+- retry idempotente após falha simulada;
+- isolamento multi-tenant (escritório B não enxerga/toca dados de A).
+
+Requisitos:
+- servidor Express real em porta efêmera + banco real (padrão dos testes de
+  integração existentes); NUNCA mockar o banco;
+- mock SOMENTE do provider (stream de eventos SSE do DeepSeek), como 3C;
+- assertar efeitos financeiros reais (reserva/settle/ledger) e não só status;
+- nenhuma chamada de rede real a provedores (determinístico);
+- suíte completa verde: `pnpm --filter @lexia/api test` + `web test` + builds.
+
+Não altere código de produção além do estritamente necessário para testar
+(helpers exportados se preciso). Evidência: suíte verde + diff.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 4A — Testes end-to-end.
+
+Analise a suíte e2e do fluxo completo de operação de IA (stack real, provider
+mockado).
+
+Confirme:
+- cenário encadeado cobre login→upload→processo→classificação→reserva→
+  geração SSE→persistência→validação→exportação→débito;
+- retry idempotente (mesma chave) e fallback Flash→Pro com confirmação
+  estruturada;
+- isolamento multi-tenant verificado de ponta a ponta;
+- uso REAL de tokens (nunca aproximado) e efeitos de ledger assertados;
+- nenhuma chamada real a provedor; banco real nunca mockado;
+- suítes backend E frontend verdes + builds.
+
+Retorne o veredito em JSON.
+```

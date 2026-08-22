@@ -14,6 +14,7 @@ import { runDirForRunId } from '../src/run.js';
 import { validateConfigPaths, applyRepoDotEnv, applyLegacyAliases } from '../src/config.js';
 import { acquireLock, releaseLock, withLock } from '../src/io.js';
 import { AutomationConfig } from '../src/contracts.js';
+import { resolveRunMode } from '../src/commands.js';
 
 describe('allowlist de comandos', () => {
   test('aceita comandos permitidos', () => {
@@ -345,5 +346,22 @@ describe('.env da raiz (applyRepoDotEnv / applyLegacyAliases)', () => {
     applyLegacyAliases(env);
     assert.equal(env.PORT, '1');
     assert.equal(env.DEEPSEEK_API_KEY, undefined);
+  });
+});
+
+// --- Precedência de modos (--dry-run > --no-auto-commit > --autonomous > --auto-commit) ---
+
+describe('resolveRunMode (precedência)', () => {
+  test('precedência das flags na ordem pedida', () => {
+    // resolveRunMode importado no topo
+    assert.equal(resolveRunMode(['dry-run'], true), 'dry-run');
+    assert.equal(resolveRunMode(['dry-run', 'autonomous'], true), 'dry-run');
+    assert.equal(resolveRunMode(['no-auto-commit', 'autonomous'], true), 'no-auto-commit');
+    assert.equal(resolveRunMode(['autonomous'], true), 'autonomous');
+    assert.equal(resolveRunMode(['autonomous', 'auto-commit'], true), 'autonomous');
+    assert.equal(resolveRunMode(['auto-commit'], true), 'auto-commit');
+    assert.equal(resolveRunMode(['allow-dirty'], true), 'allow-dirty');
+    assert.equal(resolveRunMode([], true), 'interactive');
+    assert.equal(resolveRunMode([], false), 'no-auto-commit');
   });
 });

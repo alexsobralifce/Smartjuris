@@ -31,6 +31,7 @@ export interface WorktreeInspection {
   protectedPaths: string[];
   suspiciousPaths: string[];
   secretPaths: string[];
+  conflictPaths: string[];
   initialSha: string | null;
 }
 
@@ -60,6 +61,11 @@ const SUSPICIOUS_PATH = /(^|\/)\.ignore$|(^|\/)pps\/|\.(exe|dll|so|bin)$/i;
 const ARTIFACT_PATH = /(^|\/)(node_modules|dist|build|\.pnpm-store|\.reasonix|\.cache|coverage|\.vite|\.tmp-.*)(\/|$)/;
 
 export type EntryKind = 'safe' | 'artifact' | 'protected' | 'suspicious' | 'secret';
+
+/** Status de conflito de merge no porcelain v1 (U = unmerged, AA/DD duplicado). */
+export function isConflictStatus(status: string): boolean {
+  return status.includes('U') || status === 'AA' || status === 'DD';
+}
 
 export function classifyEntry(path: string, aiDevRel: string): EntryKind {
   if (path === aiDevRel || path.startsWith(`${aiDevRel}/`)) return 'protected';
@@ -93,8 +99,13 @@ export async function inspectWorktree(git: GitOps, aiDevRel: string): Promise<Wo
     protectedPaths: [],
     suspiciousPaths: [],
     secretPaths: [],
+    conflictPaths: [],
   };
   for (const entry of entries) {
+    if (isConflictStatus(entry.status)) {
+      buckets.conflictPaths.push(entry.path);
+      continue;
+    }
     switch (classifyEntry(entry.path, aiDevRel)) {
       case 'safe':
         buckets.safePaths.push(entry.path);
@@ -163,6 +174,11 @@ export async function prepareWorkingTree(opts: PrepareOptions): Promise<PrepareR
         'Analise a finalidade antes de prosseguir (ex.: .ignore, pps/, binários).',
     );
   }
+  if (plan.conflictPaths.length > 0) {
+    throw new CheckpointAbortError(
+      `Conflito de merge detectado (resolva antes de executar): ${plan.conflictPaths.join(', ')}. `,
+    );
+  }
   if (plan.artifactPaths.length > 0) {
     log.warn(`Artefatos/gerados excluídos do checkpoint: ${plan.artifactPaths.join(', ')}`);
   }
@@ -198,7 +214,7 @@ export async function prepareWorkingTree(opts: PrepareOptions): Promise<PrepareR
     return { mode, initialSha: plan.initialSha, finalSha: null, preRunFiles: plan.safePaths, committed: false };
   }
 
-  // interactive | auto-commit
+  // interactive | auto-commit | autonomous (autonomous = automático, sem confirmação)
   if (plan.safePaths.length === 0) {
     log.info('Nenhuma alteração de código para checkpoint; prosseguindo.');
     return { mode, initialSha: plan.initialSha, finalSha: null, preRunFiles: [], committed: false };

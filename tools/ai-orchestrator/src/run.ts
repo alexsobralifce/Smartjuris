@@ -28,6 +28,7 @@ import {
 import {
   parseRoadmap,
   findPhase,
+  findNextPlannable,
   getBlockingDependencies,
   assertTransition,
   renderRoadmap,
@@ -361,7 +362,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     } else {
       deps.log.info(`Fase ${phaseId}: ${state}. Próxima fase só via ai:next (após merge manual da branch).`);
     }
-    if (mode === 'auto-commit') {
+    if (mode === 'auto-commit' || mode === 'autonomous') {
       const sha = await commitRoadmapUpdate({ git: deps.git, log: deps.log, aiDevRel, phaseId });
       if (sha) runSummary.finalSha = sha;
     } else {
@@ -378,7 +379,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       if (isAuditError) {
         // Roadmap permanece AUDIT_PENDING: permite ai:audit --run <id> manual.
         deps.log.error(`Auditoria inválida para ${phaseId}: ${runSummary.error}. Reenvie com ai:audit --run ${runId}.`);
-        if (mode === 'auto-commit') {
+        if (mode === 'auto-commit' || mode === 'autonomous') {
           const sha = await commitRoadmapUpdate({ git: deps.git, log: deps.log, aiDevRel, phaseId });
           if (sha) runSummary.finalSha = sha;
         }
@@ -391,4 +392,61 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     }
     throw err;
   }
+}
+
+// ===========================================================================
+// Cadeia autônoma: roda uma fase e, SE aprovada (AUDIT_APPROVED), continua
+// automaticamente para a próxima fase elegível. Para em qualquer condição de
+// risco (a próxima chamada de runPhase lança/para) e nunca faz push.
+// ===========================================================================
+
+const MAX_AUTONOMOUS_PHASES = 10;
+
+function patchContinuedTo(deps: RunDeps, runId: string, nextPhase: string): void {
+  try {
+    const runJsonPath = safeJoin(deps.aiDevDir, 'runs', runId, 'run.json');
+    const parsed = JSON.parse(readText(runJsonPath)) as Record<string, unknown>;
+    parsed.continuedTo = nextPhase;
+    writeTextAtomic(runJsonPath, JSON.stringify(parsed, null, 2));
+  } catch {
+    // registro é best-effort (gitignored); não interrompe a cadeia
+  }
+}
+
+/**
+ * Executa fases em modo autônomo, encadeando a próxima fase elegível somente
+ * após aprovação. Retorna os resumos de todas as fases executadas.
+ */
+export async function runAutonomousChain(
+  deps: RunDeps,
+  phaseId: string,
+  opts: { maxPhases?: number } = {},
+): Promise<RunSummary[]> {
+  const max = opts.maxPhases ?? MAX_AUTONOMOUS_PHASES;
+  const visited = new Set<string>();
+  const results: RunSummary[] = [];
+  let current: string | null = phaseId;
+
+  while (current && !visited.has(current) && results.length < max) {
+    visited.add(current);
+    deps.log.info(`[autonomous] Executando fase ${current}...`);
+    const summary = await runPhase(deps, current, { mode: 'autonomous' });
+    results.push(summary);
+    if (summary.status !== 'AUDIT_APPROVED') {
+      deps.log.warn(`[autonomous] Fase ${current} não aprovada (${summary.status}); cadeia interrompida.`);
+      break;
+    }
+    const roadmapFile = safeJoin(deps.aiDevDir, basename(deps.config.roadmap));
+    const next = findNextPlannable(parseRoadmap(readText(roadmapFile)).phases);
+    if (!next) {
+      deps.log.info('[autonomous] Nenhuma fase elegível restante; cadeia concluída.');
+      break;
+    }
+    summary.continuedTo = next.id; // registra no objeto e no run.json
+    patchContinuedTo(deps, summary.runId, next.id);
+    deps.log.info(`[autonomous] Fase ${current} aprovada; continuando para ${next.id}.`);
+    current = next.id;
+  }
+
+  return results;
 }

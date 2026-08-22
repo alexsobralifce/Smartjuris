@@ -17,11 +17,12 @@ import {
   inspectWorktree,
   classifyEntry,
   parsePorcelain,
+  isConflictStatus,
   CheckpointAbortError,
   CHECKPOINT_MSG_PREFIX,
   ROADMAP_COMMIT_MSG_PREFIX,
 } from '../src/worktree.js';
-import { runPhase } from '../src/run.js';
+import { runPhase, runAutonomousChain } from '../src/run.js';
 import type { LlmClient } from '../src/llm.js';
 import type { AutomationConfig, RunSummary } from '../src/contracts.js';
 import type { Logger } from '../src/io.js';
@@ -40,6 +41,7 @@ const ROADMAP = `# Roadmap
 |---|---|---|---|---|---|
 | 2A | Segurança documental | — | \`AUDIT_APPROVED\` | DeepSeek | GPT-5.6 Terra |
 | 2A.1 | Testes HTTP de tenancy | 2A | \`PLANNED\` | DeepSeek | GPT-5.6 Terra |
+| 2A.2 | Correção da exportação | 2A.1 | \`PLANNED\` | DeepSeek | GPT-5.6 Terra |
 
 ## Fases detalhadas
 
@@ -52,6 +54,16 @@ const ROADMAP = `# Roadmap
 **Objetivo:**
 
 Validar o fluxo completo por HTTP.
+
+### 2A.2 — Correção da exportação
+
+**Estado:** \`PLANNED\`
+
+**Dependência:** 2A.1 aprovada.
+
+**Objetivo:**
+
+Aplicar a regra de validação humana antes da exportação.
 
 ## Histórico de auditoria
 
@@ -76,6 +88,22 @@ Implemente somente testes de integração HTTP.
 
 \`\`\`text
 Fase: 2A.1. Retorne somente o JSON do contrato.
+\`\`\`
+
+# 2A.2 — Correção da exportação
+
+## DeepSeek — implementação
+
+\`\`\`text
+Fase atual: 2A.2 — correção da exportação.
+
+Aplique as regras de exportação por status.
+\`\`\`
+
+## GPT-5.6 Terra — revisão
+
+\`\`\`text
+Fase: 2A.2. Retorne somente o JSON do contrato.
 \`\`\`
 `;
 
@@ -129,8 +157,12 @@ function makeRepo(opts: { withDocs?: boolean } = {}): TempRepo {
   mkdirSync(join(root, 'apps', 'api', 'src'), { recursive: true });
   writeFileSync(join(root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 1;\n', 'utf8');
   writeFileSync(join(root, 'README.md'), 'repo\n', 'utf8');
-  // Regras esperadas de artefatos locais/gerados.
-  writeFileSync(join(root, '.gitignore'), 'node_modules/\ndist/\n.pnpm-store/\n.reasonix/\n', 'utf8');
+  // Regras esperadas de artefatos locais/gerados + saída do orquestrador.
+  writeFileSync(
+    join(root, '.gitignore'),
+    'node_modules/\ndist/\n.pnpm-store/\n.reasonix/\ndocs/ai-development/runs/\n',
+    'utf8',
+  );
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'baseline']);
   const baselineSha = git(root, ['rev-parse', 'HEAD']);
@@ -162,12 +194,14 @@ class HybridExecutor implements Executor {
 }
 
 function makeFakeLlm(repoRoot?: string): LlmClient {
+  let counter = 1000;
   return {
     async implementer(): Promise<string> {
       if (repoRoot) {
-        // Simula a implementação modificando um arquivo RASTREADO (o diff da
-        // fase precisa ser não-vazio para o gate aprovar).
-        writeFileSync(join(repoRoot, 'apps', 'api', 'src', 'code.ts'), 'export const a = 1000; // implementado\n', 'utf8');
+        // Simula a implementação modificando um arquivo RASTREADO com conteúdo
+        // DIFERENTE a cada fase (o diff da fase precisa ser não-vazio).
+        counter += 1;
+        writeFileSync(join(repoRoot, 'apps', 'api', 'src', 'code.ts'), `export const a = ${counter}; // implementado\n`, 'utf8');
       }
       return 'Fase implementada. Testes: PASS. Build: PASS.';
     },
@@ -519,5 +553,138 @@ describe('runPhase end-to-end com git real (--auto-commit)', () => {
     assert.ok(plan.artifactPaths.includes('coverage/lcov.info'));
     assert.equal(plan.safePaths.length, 0);
     assert.equal(plan.initialSha, repo.baselineSha);
+  });
+});
+
+describe('modo autônomo (--autonomous)', () => {
+  test('autonomous com código modificado cria checkpoint e commit sem confirmação', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 200;\n', 'utf8');
+    const res = await prepareWorkingTree(prepareOpts(repo, '2A.1', 'autonomous'));
+    assert.equal(res.committed, true, 'checkpoint automático sem confirmação');
+    assert.ok(git(repo.root, ['log', '-1', '--oneline']).includes(CHECKPOINT_MSG_PREFIX + '2A.1'));
+  });
+
+  test('autonomous para diante de segredo (.env)', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, '.env'), 'OPENAI_API_KEY=segredo\n', 'utf8');
+    await assert.rejects(
+      prepareWorkingTree(prepareOpts(repo, '2A.1', 'autonomous')),
+      (err: unknown) => err instanceof CheckpointAbortError && /sensíveis/.test(err.message),
+    );
+  });
+
+  test('conflito de merge (status UU) para com intervenção humana', async () => {
+    const repo = makeRepo();
+    const base = createGitOps(new SafeExecutor(), repo.root);
+    const conflictingGit: GitOps = {
+      ...base,
+      async porcelain() {
+        return 'UU apps/api/src/x.ts\n';
+      },
+    };
+    await assert.rejects(
+      prepareWorkingTree({
+        git: conflictingGit,
+        log: silentLog,
+        aiDevRel: repo.aiDevRel,
+        phaseId: '2A.1',
+        mode: 'autonomous',
+      }),
+      (err: unknown) => err instanceof CheckpointAbortError && /Conflito de merge/.test(err.message),
+    );
+  });
+
+  test('isConflictStatus identifica status de conflito', () => {
+    assert.equal(isConflictStatus('UU'), true);
+    assert.equal(isConflictStatus('AA'), true);
+    assert.equal(isConflictStatus('DD'), true);
+    assert.equal(isConflictStatus('UD'), true);
+    assert.equal(isConflictStatus(' M'), false);
+    assert.equal(isConflictStatus('??'), false);
+  });
+
+  test('cadeia autônoma: 2A.1 aprovada → continua para 2A.2 automaticamente', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 300;\n', 'utf8');
+
+    let clock = Date.parse('2026-02-01T00:00:00.000Z');
+    const hybrid = new HybridExecutor(new SafeExecutor());
+    const deps = {
+      exec: hybrid,
+      git: createGitOps(hybrid, repo.root),
+      llm: makeFakeLlm(repo.root),
+      repoRoot: repo.root,
+      aiDevDir: repo.aiDevDir,
+      config: CONFIG,
+      env: {},
+      now: () => new Date((clock += 1000)),
+      log: silentLog,
+    };
+
+    const results = await runAutonomousChain(deps, '2A.1', { maxPhases: 5 });
+    assert.equal(results.length, 2, `fases executadas: ${results.map((r) => r.phase).join(', ')}`);
+    assert.equal(results[0].phase, '2A.1');
+    assert.equal(results[0].status, 'AUDIT_APPROVED');
+    assert.equal(results[0].continuedTo, '2A.2', 'run.json registra a continuação');
+    assert.equal(results[1].phase, '2A.2');
+    assert.equal(results[1].status, 'AUDIT_APPROVED');
+
+    // Roadmap: ambas aprovadas.
+    const roadmapText = readFileSync(join(repo.aiDevDir, 'implementation-roadmap.md'), 'utf8');
+    const countApproved = (roadmapText.match(/`AUDIT_APPROVED`/g) ?? []).length;
+    assert.ok(countApproved >= 3, `2A + 2A.1 + 2A.2 aprovadas: ${countApproved}`);
+
+    // Dois run dirs distintos.
+    const runsDir = join(repo.aiDevDir, 'runs');
+    const dirs = execFileSync('ls', ['-1', runsDir], { cwd: repo.root, encoding: 'utf8' }).trim().split('\n');
+    assert.equal(dirs.length, 2, `run dirs: ${dirs.join(', ')}`);
+
+    // Commits de roadmap das duas fases presentes no histórico.
+    const log = git(repo.root, ['log', '--oneline', '-8']);
+    assert.ok(log.includes(ROADMAP_COMMIT_MSG_PREFIX + '2A.1'), log);
+    assert.ok(log.includes(ROADMAP_COMMIT_MSG_PREFIX + '2A.2'), log);
+  });
+
+  test('cadeia autônoma para quando a auditoria tem BLOCKER', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 400;\n', 'utf8');
+    let clock = Date.parse('2026-02-02T00:00:00.000Z');
+    const hybrid = new HybridExecutor(new SafeExecutor());
+    const deps = {
+      exec: hybrid,
+      git: createGitOps(hybrid, repo.root),
+      llm: {
+        async implementer() {
+          writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 401;\n', 'utf8');
+          return 'implementado';
+        },
+        async reviewer() {
+          return JSON.stringify({
+            phase: '2A.1',
+            verdict: 'APPROVE',
+            advanceAllowed: true,
+            findings: [{ severity: 'BLOCKER', file: 'x', line: 1, requirement: 'r', evidence: 'e', impact: 'i', action: 'a' }],
+            requiredFixes: [],
+            missingTests: [],
+            scopeViolations: [],
+            migrationRisks: [],
+            securityRisks: [],
+            financialRisks: [],
+            rollbackRisks: [],
+            nextPhase: null,
+          });
+        },
+      } as LlmClient,
+      repoRoot: repo.root,
+      aiDevDir: repo.aiDevDir,
+      config: CONFIG,
+      env: {},
+      now: () => new Date((clock += 1000)),
+      log: silentLog,
+    };
+    const results = await runAutonomousChain(deps, '2A.1', { maxPhases: 5 });
+    assert.equal(results.length, 1, 'cadeia interrompida após BLOCKER');
+    assert.equal(results[0].status, 'AUDIT_FAILED', 'BLOCKER → AUDIT_FAILED, sem avanço');
   });
 });

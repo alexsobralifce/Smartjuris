@@ -47,16 +47,32 @@ pnpm ai:dry-run [--phase 2A.1]       # plano offline: valida config/roadmap/prom
 
 | Flag | Comportamento |
 |---|---|
+| `--autonomous` | **modo automático**: checkpoint automático, commits automáticos (checkpoint + roadmap), testes/builds, revisor e avanço para a próxima fase elegível **somente quando aprovada** — sem confirmações para operações seguras; **para** em qualquer condição de risco (ver abaixo) |
 | `--auto-commit` | cria **checkpoint automático** (`git add` filtrado + `git commit -m "chore(ai-orchestrator): checkpoint before phase <id>"`) antes da fase; ao final, commita a atualização do roadmap |
 | `--no-auto-commit` | comportamento antigo: exige working tree limpo (bloqueia alterações fora de `docs/ai-development`) |
 | `--allow-dirty` | executa **sem commit**, registra o SHA inicial e avisa que a fase roda sobre estado não consolidado |
 | `--dry-run` | valida tudo **sem modificar nada** (nem git, nem arquivos, nem LLM) |
 | *(sem flag)* | mostra o resumo e **pergunta** antes do checkpoint (interativo; sem TTY, vira `--no-auto-commit`) |
 
+**Precedência de flags:** `--dry-run` > `--no-auto-commit` > `--autonomous` > `--auto-commit` > `--allow-dirty`.
+
+**Política explícita:**
+
+```text
+normal operation = automatic      (checkpoint, commits do roadmap, testes, builds, avanço de fase)
+risk condition   = stop           (segredo, suspeito, docs protegido, conflito de merge, erro de
+                                   permissão, detached HEAD, sem identidade, teste/build falhando,
+                                   BLOCKER, push, reset/clean, produção)
+```
+
+O modo `--autonomous` mantém **todos** os bloqueios de segurança, **nunca faz push**, **nunca
+descarta alterações** e registra as decisões (modo, SHAs, arquivos, continuação) em `run.json`.
+
 O checkpoint **nunca** usa `git add .`: apenas caminhos classificados como código seguro
 (sem `node_modules/`, `dist/`, `.pnpm-store/`, `.reasonix/`, segredos como `.env*`,
 suspeitos como `.ignore`/`pps/`/binários, e sem arquivos fora da raiz do repositório).
-Alterações locais em `docs/ai-development` **bloqueiam** a fase (a fase reescreve o roadmap).
+Alterações locais em `docs/ai-development` **bloqueiam** a fase (a fase reescreve o roadmap);
+conflitos de merge (`U*`/`AA`/`DD` no porcelain) também **bloqueiam**.
 
 ## Fluxo de uma execução (`ai:run`)
 

@@ -203,18 +203,22 @@ const here = dirname(fileURLToPath(import.meta.url));
 const realRoadmap = join(here, '..', '..', '..', 'docs', 'ai-development', 'implementation-roadmap.md');
 
 describe('roadmap real do repositório (leitura)', { skip: !existsSync(realRoadmap) }, () => {
-  test('parseia o arquivo real e identifica 2A.1 como próxima fase elegível', () => {
+  test('parseia o arquivo real e identifica a próxima fase elegível (2A.1 aprovada → 2A.2)', () => {
     const md = readFileSync(realRoadmap, 'utf8');
     const { phases } = parseRoadmap(md);
     assert.ok(phases.length >= 10, `fases encontradas: ${phases.length}`);
     const a = findPhase(phases, '2A');
     assert.equal(a?.status, 'AUDIT_APPROVED');
     const a1 = findPhase(phases, '2A.1');
-    assert.equal(a1?.status, 'PLANNED');
+    // Estado evolutivo do repo real (após aprovação manual da fase 2A.1).
+    assert.ok(a1, 'fase 2A.1 presente');
     assert.deepEqual(a1?.dependencies, ['2A']);
-    assert.equal(findNextPlannable(phases)?.id, '2A.1');
+    const next = findNextPlannable(phases);
+    assert.ok(next, 'existe fase elegível');
+    assert.equal(next?.id, '2A.2', `próxima elegível: ${next?.id}`);
+    assert.equal(next?.status, 'PLANNED');
     // render com update não altera o número de linhas significativamente
-    const out = renderRoadmap(md, { '2A.1': 'IMPLEMENTING' });
+    const out = renderRoadmap(md, { '2A.2': 'IMPLEMENTING' });
     assert.ok(out.includes('**Estado:** `IMPLEMENTING`'));
   });
 });

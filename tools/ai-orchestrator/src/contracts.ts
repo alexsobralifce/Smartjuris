@@ -146,7 +146,7 @@ export type ImplementerReport = z.infer<typeof ImplementerReport>;
 
 // --- Resumo de execução (run.json) ---
 
-export const RUN_MODES = ['interactive', 'auto-commit', 'no-auto-commit', 'allow-dirty', 'dry-run'] as const;
+export const RUN_MODES = ['interactive', 'auto-commit', 'no-auto-commit', 'allow-dirty', 'dry-run', 'autonomous'] as const;
 export const RunMode = z.enum(RUN_MODES);
 export type RunMode = z.infer<typeof RunMode>;
 
@@ -170,5 +170,7 @@ export const RunSummary = z.object({
   initialSha: z.string().nullable().optional(),
   finalSha: z.string().nullable().optional(),
   preRunFiles: z.array(z.string()).optional(),
+  // Modo autônomo: próxima fase elegível para a qual esta fase avançou.
+  continuedTo: z.string().nullable().optional(),
 }).strict();
 export type RunSummary = z.infer<typeof RunSummary>;

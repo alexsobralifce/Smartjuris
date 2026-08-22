@@ -22,9 +22,9 @@ import { moduleDir, resolveRepoRoot, resolveAiDevDir, type Env } from './paths.j
 import { loadAutomationConfig } from './config.js';
 import { createLogger, withLock } from './io.js';
 import { createRealDeps } from './deps.js';
-import { runPhase, type RunPhaseOptions } from './run.js';
+import { runPhase, runAutonomousChain } from './run.js';
 import { reAuditRun } from './auditRun.js';
-import { printStatus, findNextEligible, approvePhase, planDryRun } from './commands.js';
+import { printStatus, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
 import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
@@ -78,12 +78,19 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 function resolveMode(flags: string[]): RunMode {
-  if (flags.includes('auto-commit')) return 'auto-commit';
-  if (flags.includes('no-auto-commit')) return 'no-auto-commit';
-  if (flags.includes('allow-dirty')) return 'allow-dirty';
-  if (flags.includes('dry-run')) return 'dry-run';
-  // Padrão: pergunta antes do checkpoint; sem TTY, preserva o comportamento antigo.
-  return process.stdin.isTTY ? 'interactive' : 'no-auto-commit';
+  return resolveRunMode(flags, process.stdin.isTTY);
+}
+
+async function runWithMode(deps: ReturnType<typeof createRealDeps>, phaseId: string, flags: string[]): Promise<void> {
+  const mode = resolveMode(flags);
+  if (mode === 'autonomous') {
+    const results = await runAutonomousChain(deps, phaseId);
+    for (const summary of results) {
+      deps.log.info(`[autonomous] ${summary.phase}: ${summary.status}${summary.continuedTo ? ` → ${summary.continuedTo}` : ''}`);
+    }
+    return;
+  }
+  await runPhase(deps, phaseId, { mode });
 }
 
 async function main(): Promise<void> {
@@ -95,7 +102,6 @@ async function main(): Promise<void> {
   const config = loadAutomationConfig(aiDevDir);
 
   const deps = () => createRealDeps({ env, config, repoRoot, aiDevDir, log });
-  const runOptions = (): RunPhaseOptions => ({ mode: resolveMode(flags) });
 
   switch (command) {
     case 'status': {
@@ -112,17 +118,17 @@ async function main(): Promise<void> {
         log.info(`Próxima fase elegível: ${next.id}`);
         break;
       }
-      await withLock(aiDevDir, () => runPhase(deps(), next.id, runOptions()));
+      await withLock(aiDevDir, () => runWithMode(deps(), next.id, flags));
       break;
     }
     case 'run': {
       if (!opts.phase) throw new Error('Uso: ai:run --phase <ID> [modo]');
-      await withLock(aiDevDir, () => runPhase(deps(), opts.phase, runOptions()));
+      await withLock(aiDevDir, () => runWithMode(deps(), opts.phase, flags));
       break;
     }
     case 'retry': {
       if (!opts.phase) throw new Error('Uso: ai:retry --phase <ID> [modo]');
-      await withLock(aiDevDir, () => runPhase(deps(), opts.phase, runOptions()));
+      await withLock(aiDevDir, () => runWithMode(deps(), opts.phase, flags));
       break;
     }
     case 'audit': {

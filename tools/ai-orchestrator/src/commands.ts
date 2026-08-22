@@ -17,9 +17,23 @@ import { extractPhasePrompts } from './prompts.js';
 import { readText, writeTextAtomic } from './io.js';
 import { tokenizeCommand } from './executor.js';
 import { type RunDeps } from './run.js';
-import type { PhaseState, RoadmapPhase } from './contracts.js';
+import type { PhaseState, RoadmapPhase, RunMode } from './contracts.js';
 
 const MANUAL_APPROVE_STATES: PhaseState[] = ['AUDIT_PENDING', 'CORRECTION_PENDING', 'IMPLEMENTED', 'AUDIT_FAILED'];
+
+/**
+ * Precedência de modos (a primeira flag presente vence):
+ *   --dry-run → --no-auto-commit → --autonomous → --auto-commit → --allow-dirty
+ * Sem flag: interativo (pergunta) se TTY; senão preserva o comportamento antigo.
+ */
+export function resolveRunMode(flags: string[], isTty: boolean): RunMode {
+  if (flags.includes('dry-run')) return 'dry-run';
+  if (flags.includes('no-auto-commit')) return 'no-auto-commit';
+  if (flags.includes('autonomous')) return 'autonomous';
+  if (flags.includes('auto-commit')) return 'auto-commit';
+  if (flags.includes('allow-dirty')) return 'allow-dirty';
+  return isTty ? 'interactive' : 'no-auto-commit';
+}
 
 export function printStatus(deps: RunDeps): void {
   const md = readText(safeJoin(deps.aiDevDir, basename(deps.config.roadmap)));

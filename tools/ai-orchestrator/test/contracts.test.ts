@@ -8,6 +8,7 @@ import {
   AuditResult,
   ImplementerReport,
   RunSummary,
+  RunMode,
   AutomationConfig,
 } from '../src/contracts.js';
 import { parseAudit, extractJson, AuditParseError } from '../src/llm.js';
@@ -185,5 +186,35 @@ describe('ImplementerReport / RunSummary / AutomationConfig', () => {
       const parsed = AutomationConfig.parse(JSON.parse(readFileSync(cfgPath, 'utf8')));
       assert.equal(parsed.reviewer.model, 'gpt-5.6-terra');
     }
+  });
+});
+
+describe('modo autônomo no contrato', () => {
+  test('RunMode aceita autonomous', () => {
+    // RunMode já importado no topo
+    assert.equal(RunMode.parse('autonomous'), 'autonomous');
+    assert.throws(() => RunMode.parse('autopilot'));
+  });
+
+  test('RunSummary aceita mode autonomous e continuedTo', () => {
+    // RunSummary já importado no topo
+    const parsed = RunSummary.parse({
+      runId: 'x',
+      phase: '2A.1',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      finishedAt: null,
+      status: 'AUDIT_APPROVED',
+      branch: 'phase/2A.1',
+      implementerModel: 'm',
+      reviewerModel: 'r',
+      artifactFiles: ['run.json'],
+      mode: 'autonomous',
+      initialSha: 'a'.repeat(40),
+      finalSha: 'b'.repeat(40),
+      preRunFiles: [],
+      continuedTo: '2A.2',
+    });
+    assert.equal(parsed.mode, 'autonomous');
+    assert.equal(parsed.continuedTo, '2A.2');
   });
 });

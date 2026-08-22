@@ -517,6 +517,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

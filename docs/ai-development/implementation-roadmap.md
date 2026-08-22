@@ -11,21 +11,21 @@ DeepSeek implementa
         ↓
 Testes e build
         ↓
-GPT-5.6 Terra revisa
+GPT-5.6 Luna revisa
         ↓
 Gate de aprovação
         ↓
 Próxima fase ou correção
 ```
 
-O DeepSeek é responsável pela implementação. O GPT-5.6 Terra analisa os resultados e decide se a fase pode avançar. O Terra não modifica o código.
+O DeepSeek é responsável pela implementação. O GPT-5.6 Luna analisa os resultados e decide se a fase pode avançar. O Terra não modifica o código.
 
 ## Estados
 
 - `PLANNED`: planejada.
 - `IMPLEMENTING`: em implementação.
 - `IMPLEMENTED`: implementação concluída pelo DeepSeek.
-- `AUDIT_PENDING`: aguardando revisão do GPT-5.6 Terra.
+- `AUDIT_PENDING`: aguardando revisão do GPT-5.6 Luna.
 - `AUDIT_FAILED`: revisão encontrou bloqueio.
 - `CORRECTION_PENDING`: correções aguardando implementação.
 - `AUDIT_APPROVED`: fase aprovada.
@@ -49,20 +49,20 @@ migrations validadas, quando aplicável
 
 | Fase | Descrição | Dependências | Estado | Implementador | Revisor |
 |---|---|---|---|---|---|
-| 2A | Segurança documental e metadados | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2A.1 | Testes HTTP de tenancy | 2A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2A.2 | Correção da exportação | 2A.1 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2B | Catálogo compartilhado | 2A.2 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2C | Builder do payload real | 2B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2D | Desenho da análise documental | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2E | Migration dos metadados do classificador | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2F | Idempotência e reserva | 2B, 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 3A | Unidades de análise documental | 2D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 3B | Fallback Flash/Pro | 2F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 3C | Integração SSE | 2F, 3B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 3D | Integração frontend | 3C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 4B | Piloto controlado | 4A | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 2A | Segurança documental e metadados | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2A.1 | Testes HTTP de tenancy | 2A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2A.2 | Correção da exportação | 2A.1 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2B | Catálogo compartilhado | 2A.2 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2C | Builder do payload real | 2B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2D | Desenho da análise documental | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2E | Migration dos metadados do classificador | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 2F | Idempotência e reserva | 2B, 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 3A | Unidades de análise documental | 2D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 3B | Fallback Flash/Pro | 2F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 3C | Integração SSE | 2F, 3B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 3D | Integração frontend | 3C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 4B | Piloto controlado | 4A | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -455,7 +455,7 @@ estimativa
 
 ### 4B — Piloto controlado
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_FAILED`
 
 **Dependência:** 4A aprovada.
 
@@ -504,40 +504,41 @@ Use este modelo ao concluir cada fase:
 
 | Data | Fase | Implementador | Revisor | Veredito | Avanço permitido | Observações |
 |---|---|---|---|---|---|---|
-| — | 2A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | Segurança documental aprovada |
-| 2026-08-22 | 2A.1 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
+| — | 2A | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | Segurança documental aprovada |
+| 2026-08-22 | 2A.1 | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-22 | 2A.1 | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve |
-| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
-| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
-| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2B | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 2D | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve (fase de documentação em dir protegido) |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-22 | 2E | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: migration 0019 validada (runner oficial, upgrade pré-0019, idempotência, FK, rollback com backup, 164/164 testes) |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
-| 2026-08-22 | 2F | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 2F | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-22 | 2F | DeepSeek | LOOPGAIN (determinístico) | REJECT | Não | Sem convergência entre rodadas (achados graves não reduziram). Decisão humana requerida. |
 | 2026-08-22 | 2F | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: todos os requiredFixes do revisor aplicados (generate não reexecuta em retry/concorrência, release sem suprimir erro, fingerprint de intenção por tenant, migrations 0020/0021 escopam idempotência, testes exatos por operationId); 173/173 testes; 2ª falha foi falso positivo do loopgain v1 corrigido |
-| 2026-08-22 | 3A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
-| 2026-08-22 | 3B | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
-| 2026-08-22 | 3C | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
-| 2026-08-22 | 3D | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
-| 2026-08-22 | 4A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 3A | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 3B | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 3C | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 3D | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 4A | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 4B | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

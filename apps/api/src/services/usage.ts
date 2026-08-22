@@ -790,6 +790,12 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
     if (input.req) {
       await recordAudit(input.req, 'AI_SETTLE', { alvoId: input.operationId, detalhes: { status: 'succeeded' } });
     }
+    // Fase 4B — observabilidade do piloto: alerta de custo por escritório
+    // (best-effort, NUNCA bloqueia nem quebra o fluxo de liquidação).
+    if (op?.escritorio_id) {
+      const { checarAlertaCustoPiloto } = await import('./pilotObservability.js');
+      await checarAlertaCustoPiloto(op.escritorio_id, input.req).catch(() => {});
+    }
   }
   return resultado;
 }

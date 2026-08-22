@@ -14,8 +14,11 @@ interface RateLimiterOptions {
 
 // Factory that creates an independent in-memory rate limiter.
 // Each instance keeps its own Map and lazily prunes expired entries.
+const INSTANCIAS: Array<{ limpar: () => void }> = [];
+
 export function createRateLimiter(opts: RateLimiterOptions) {
   const attempts = new Map<string, AttemptRecord>();
+  INSTANCIAS.push({ limpar: () => attempts.clear() });
 
   return function rateLimiter(req: Request, res: Response, next: NextFunction) {
     const now = Date.now();
@@ -74,3 +77,9 @@ export const aiRateLimiter = createRateLimiter({
   max: 30,
   message: 'Limite de gerações de IA atingido. Aguarde alguns minutos e tente novamente.',
 });
+
+/** Zera os contadores de TODOS os limitadores em memória (suporte a testes:
+ *  reinicia a janela entre cenários sem esperar o tempo real). */
+export function resetRateLimiters(): void {
+  for (const instancia of INSTANCIAS) instancia.limpar();
+}

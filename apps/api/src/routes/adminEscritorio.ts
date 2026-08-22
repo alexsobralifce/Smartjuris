@@ -236,6 +236,15 @@ router.post('/usuarios', async (req: AuthenticatedRequest, res) => {
       return res.status(403).json({ error: 'Limite de usuários do escritório atingido.' });
     }
 
+    // Fase 4B — piloto controlado: teto ADICIONAL de usuários por escritório.
+    const { excedeLimiteUsuariosPiloto } = await import('../services/pilotMode.js');
+    if (await excedeLimiteUsuariosPiloto(escritorioId)) {
+      return res.status(403).json({
+        error: 'O piloto controlado limitou temporariamente a criação de usuários neste escritório.',
+        code: 'PILOTO_LIMITE_USUARIOS',
+      });
+    }
+
     const [existing] = await db.select({ id: usuarios.id }).from(usuarios)
       .where(eq(usuarios.email, email)).limit(1);
     if (existing) {
@@ -245,15 +254,40 @@ router.post('/usuarios', async (req: AuthenticatedRequest, res) => {
     const senhaTemporaria = randomBytes(12).toString('base64url');
     const senhaHash = await bcrypt.hash(senhaTemporaria, 12);
 
-    const [created] = await db.insert(usuarios).values({
-      nome,
-      email,
-      senha: senhaHash,
-      role: 'user',
-      escritorioId,
-      precisaTrocarSenha: true,
-      createdBy: req.user?.id ?? null,
-    }).returning();
+    // Fase 4B — piloto: teto de usuários verificado+insert ATOMICAMENTE sob
+    // advisory lock SOMENTE com piloto ativo E limite configurado; caso
+    // contrário, caminho original sem transação/lock adicional (rollback).
+    const { configPiloto } = await import('../services/pilotMode.js');
+    const cfgPiloto = configPiloto();
+    let created;
+    if (cfgPiloto.ativo && cfgPiloto.maxUsuariosPorEscritorio != null) {
+      const { comSlotPiloto: slotUsers, ErroPilotoLimite } = await import('../services/pilotMode.js');
+      const { excedeLimiteUsuariosPiloto: excedeUsersPiloto } = await import('../services/pilotMode.js');
+      [created] = await slotUsers(`piloto:usuarios:${escritorioId}`, async (tx) => {
+        if (await excedeUsersPiloto(escritorioId)) {
+          throw new ErroPilotoLimite('PILOTO_LIMITE_USUARIOS');
+        }
+        return tx.insert(usuarios).values({
+          nome,
+          email,
+          senha: senhaHash,
+          role: 'user',
+          escritorioId,
+          precisaTrocarSenha: true,
+          createdBy: req.user?.id ?? null,
+        }).returning();
+      });
+    } else {
+      [created] = await db.insert(usuarios).values({
+        nome,
+        email,
+        senha: senhaHash,
+        role: 'user',
+        escritorioId,
+        precisaTrocarSenha: true,
+        createdBy: req.user?.id ?? null,
+      }).returning();
+    }
 
     if (modulos.length) {
       await db.insert(permissoesUsuario).values(
@@ -279,6 +313,14 @@ router.post('/usuarios', async (req: AuthenticatedRequest, res) => {
       senhaTemporaria,
     });
   } catch (error) {
+    // Fase 4B — teto do piloto atingido → 403 com código (não é falha interna).
+    const { ErroPilotoLimite } = await import('../services/pilotMode.js');
+    if (error instanceof ErroPilotoLimite) {
+      return res.status(403).json({
+        error: 'O piloto controlado limitou temporariamente a criação de usuários neste escritório.',
+        code: error.code,
+      });
+    }
     console.error('Error creating escritorio user:', error);
     res.status(500).json({ error: 'Erro ao criar usuário.' });
   }

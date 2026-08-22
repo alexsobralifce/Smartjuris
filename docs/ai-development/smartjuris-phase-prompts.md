@@ -1,12 +1,12 @@
 # SmartJuris — Prompts por Fase
 
-Este arquivo contém os prompts de implementação para o DeepSeek e os prompts de revisão para o GPT-5.6 Terra.
+Este arquivo contém os prompts de implementação para o DeepSeek e os prompts de revisão para o GPT-5.6 Luna.
 
 ## Como usar
 
 1. Envie o prompt de implementação ao DeepSeek.
 2. Aguarde o diff, testes e build.
-3. Envie o relatório ao GPT-5.6 Terra.
+3. Envie o relatório ao GPT-5.6 Luna.
 4. Só avance com `APPROVE` e `advanceAllowed: true`.
 5. Em caso de condição ou reprovação, envie as correções ao DeepSeek e repita a revisão.
 
@@ -45,7 +45,7 @@ Se uma dependência impedir o teste HTTP real, informe a limitação e não subs
 Execute testes específicos, suíte completa e build TypeScript. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2A.1 — testes HTTP de tenancy.
@@ -100,7 +100,7 @@ Não altere classificador, catálogo, créditos, reserva, fallback, SSE, anális
 Execute a suíte completa e o build. Entregue diff e relatório. Pare para revisão.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2A.2 — exportação.
@@ -169,7 +169,7 @@ Não crie migration, rota, reserva, geração, SSE ou alteração visual do fron
 Execute testes do pacote compartilhado, testes da API, build da API, build do frontend e busca por catálogos duplicados. Entregue o relatório e aguarde revisão.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2B — catálogo compartilhado.
@@ -223,7 +223,7 @@ Crie testes com banco realista para processo do mesmo escritório, processo de o
 Não conecte à geração, reserva, SSE ou frontend.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2C — builder do payload real.
@@ -286,7 +286,7 @@ escritório e decisões de projeto. NÃO crie código de implementação.
 Não altere classifier, usage, payloadBuilder, catálogo, migrations, rotas ou frontend.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2D — desenho da análise documental.
@@ -348,7 +348,7 @@ Requisitos:
 Não altere classifier, usage, payloadBuilder, rotas, catálogo ou frontend.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2E — migration dos metadados do classificador.
@@ -410,7 +410,7 @@ Não altere classifier, usage (primitivas já existem), payloadBuilder, catálog
 rotas, migrations ou frontend — apenas crie o orquestrador + testes.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 2F — idempotência e reserva.
@@ -585,7 +585,7 @@ Não altere classifier, usage, payloadBuilder, catálogo, migrations, rotas,
 SSE ou frontend — apenas o novo serviço + testes.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 3A — unidades de análise documental.
@@ -661,7 +661,7 @@ Testes com banco real (padrão de `aiOperation.test.ts`):
 Não altere rotas, SSE, frontend ou migrations.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 3B — fallback Flash/Pro.
@@ -731,7 +731,7 @@ Testes com banco real:
 Não altere frontend, migrations, classifier ou catálogo.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 3C — integração SSE.
@@ -789,7 +789,7 @@ Requisitos:
 Não altere o backend, migrations ou catálogo — apenas o frontend.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 3D — integração frontend.
@@ -848,7 +848,7 @@ Não altere código de produção além do estritamente necessário para testar
 (helpers exportados se preciso). Evidência: suíte verde + diff.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 4A — Testes end-to-end.
@@ -909,7 +909,7 @@ Não altere a lógica financeira existente (reserva/settle/fallback) — apenas
 ADICIONE a camada de controle.
 ```
 
-## GPT-5.6 Terra — revisão
+## GPT-5.6 Luna — revisão
 
 ```text
 Fase: 4B — Piloto controlado.

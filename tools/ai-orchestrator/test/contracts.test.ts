@@ -184,7 +184,7 @@ describe('ImplementerReport / RunSummary / AutomationConfig', () => {
     const cfgPath = join(here, '..', '..', '..', 'docs', 'ai-development', 'automation-config.json');
     if (existsSync(cfgPath)) {
       const parsed = AutomationConfig.parse(JSON.parse(readFileSync(cfgPath, 'utf8')));
-      assert.equal(parsed.reviewer.model, 'gpt-5.6-terra');
+      assert.equal(parsed.reviewer.model, 'gpt-5.6-luna');
     }
   });
 });

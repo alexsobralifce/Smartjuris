@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { db } from '../db/client.js';
 import { usuarios, logins, permissoesUsuario, escritorios, codigosVerificacao } from '../db/schema.js';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth.js';
 import { refreshSession } from '../middlewares/refreshSession.js';
@@ -267,6 +267,21 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
     }
     const { nome, email, senha, oab, oabUf, escritorioNome, cnpj, telefone } = parsed.data;
 
+    // Fase 4B — piloto controlado: teto de escritórios ativos no cadastro.
+    // SÓ se aplica ao fluxo SEM OTP (que cria escritório JÁ ATIVO — consome
+    // vaga imediatamente). Com OTP o escritório nasce INATIVO (não consome
+    // vaga); a vaga é reservada atomicamente na ATIVAÇÃO (/verificar-codigo).
+    const requereOtpRegistro = process.env.REQUIRE_EMAIL_OTP === 'true';
+    if (!requereOtpRegistro) {
+      const { excedeLimiteEscritoriosPiloto } = await import('../services/pilotMode.js');
+      if (await excedeLimiteEscritoriosPiloto()) {
+        return res.status(403).json({
+          error: 'O piloto controlado está em fase limitada; novos escritórios estão temporariamente bloqueados.',
+          code: 'PILOTO_LIMITE_ESCRITORIOS',
+        });
+      }
+    }
+
     // Checagem de usuário existente
     const [existing] = await db.select({
       id: usuarios.id,
@@ -284,12 +299,25 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       // PADRÃO: usuário que começou o cadastro (não verificou) é dispensado de
       // código — fica marcado como verificado direto. OTP só se REQUIRE_EMAIL_OTP=true.
       if (!requereOtp) {
-        const [upd] = await db.update(usuarios)
-          .set({ emailVerificado: true, ativo: true })
-          .where(eq(usuarios.email, email))
-          .returning({ id: usuarios.id, nome: usuarios.nome, escritorioId: usuarios.escritorioId });
+        // Fase 4B — reativação (cadastro duplicado sem OTP): a ATIVAÇÃO do
+        // escritório respeita o teto do piloto sob o MESMO advisory lock.
+        const { comTetoEscritoriosAtivos, verificarTetoUsuariosTx, configPiloto } = await import('../services/pilotMode.js');
+        const [upd] = await comTetoEscritoriosAtivos(async (tx) => {
+          const [uAntes] = await tx.select({ escritorioId: usuarios.escritorioId }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
+          const cfgLocal = configPiloto();
+          if (cfgLocal.ativo && uAntes?.escritorioId && cfgLocal.maxUsuariosPorEscritorio != null) {
+            await verificarTetoUsuariosTx(tx, uAntes.escritorioId, cfgLocal.maxUsuariosPorEscritorio);
+          }
+          const [u] = await tx.update(usuarios)
+            .set({ emailVerificado: true, ativo: true })
+            .where(eq(usuarios.email, email))
+            .returning({ id: usuarios.id, nome: usuarios.nome, escritorioId: usuarios.escritorioId });
+          if (u?.escritorioId) {
+            await tx.update(escritorios).set({ ativo: true }).where(eq(escritorios.id, u.escritorioId));
+          }
+          return u;
+        });
         if (upd?.escritorioId) {
-          await db.update(escritorios).set({ ativo: true }).where(eq(escritorios.id, upd.escritorioId));
           const [escritorio] = await db.select().from(escritorios)
             .where(eq(escritorios.id, upd.escritorioId)).limit(1);
           sendRootNewUserNotificationEmail({
@@ -355,7 +383,27 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
 
     // Criação atômica do escritório + usuário admin. Sem OTP obrigatório, nasce
     // ativo (ativação automática); com OTP, só ativa após confirmação do e-mail.
+    // Fase 4B: com piloto ativo, o teto de escritórios é verificado DENTRO da
+    // mesma transação com advisory lock (concorrência não ultrapassa o teto).
     const [esc] = await db.transaction(async (tx) => {
+      const { configPiloto, ErroPilotoLimite } = await import('../services/pilotMode.js');
+      const cfg = configPiloto();
+      // O teto de escritórios só consome vaga quando o escritório nasce ATIVO
+      // (sem OTP). Com OTP, a criação é inativa e a vaga é reservada na ativação.
+      if (cfg.ativo && !requereOtp) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('piloto:escritorios'))`);
+        const [cnt] = await tx.execute(sql`SELECT count(*)::int AS total FROM escritorios WHERE ativo = true`);
+        if (Number(cnt?.total ?? 0) >= cfg.maxEscritorios) {
+          throw new ErroPilotoLimite('PILOTO_LIMITE_ESCRITORIOS');
+        }
+      }
+      // Fase 4B — teto de USUÁRIOS também vale para o admin inicial quando o
+      // cadastro cria o usuário ATIVO (sem OTP): PILOTO_MAX_USUARIOS=0 bloqueia
+      // o próprio admin (rollback integral). Com OTP o admin nasce inativo e o
+      // teto é aplicado na ativação.
+      if (cfg.ativo && !requereOtp && cfg.maxUsuariosPorEscritorio != null && cfg.maxUsuariosPorEscritorio <= 0) {
+        throw new ErroPilotoLimite('PILOTO_LIMITE_USUARIOS');
+      }
       const [escritorioCriado] = await tx.insert(escritorios).values({
         nome: escritorioNome,
         plano: 'basico',
@@ -435,6 +483,14 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
       message: 'Cadastro realizado! Seu acesso já está ativo. O administrador será notificado para conceder os créditos.',
     });
   } catch (error) {
+    // Fase 4B — teto do piloto atingido → 403 com código (não é falha interna).
+    const { ErroPilotoLimite } = await import('../services/pilotMode.js');
+    if (error instanceof ErroPilotoLimite) {
+      return res.status(403).json({
+        error: 'O piloto controlado está em fase limitada; novos escritórios estão temporariamente bloqueados.',
+        code: error.code,
+      });
+    }
     console.error('Registro error:', error);
     res.status(500).json({ error: 'Erro ao realizar o cadastro.' });
   }
@@ -481,20 +537,47 @@ router.post('/verificar-codigo', async (req, res) => {
       return res.status(400).json({ error: 'Código de verificação incorreto.' });
     }
 
-    // Código válido: marca como utilizado e ativa emailVerificado
-    await db.update(codigosVerificacao)
-      .set({ utilizado: true })
-      .where(eq(codigosVerificacao.id, registroCodigo.id));
-
-    const [userAtualizado] = await db.update(usuarios)
-      .set({ emailVerificado: true, ativo: true })
-      .where(eq(usuarios.email, email))
-      .returning();
+    // Código válido: ATIVAÇÃO ATÔMICA (Fase 4B). Código OTP + usuário +
+    // escritório numa ÚNICA transação sob o advisory lock do piloto: se o teto
+    // de ativos bloquear, TUDO volta ao estado pré-ativação (usuário inativo/
+    // não verificado, código utilizável para ativação futura). Com piloto
+    // desligado, a transação roda sem lock (caminho original).
+    const { comTetoEscritoriosAtivos, verificarTetoUsuariosTx, ErroPilotoLimite } = await import('../services/pilotMode.js');
+    let userAtualizado;
+    try {
+      userAtualizado = await comTetoEscritoriosAtivos(async (tx) => {
+        await tx.update(codigosVerificacao)
+          .set({ utilizado: true })
+          .where(eq(codigosVerificacao.id, registroCodigo.id));
+        // Teto de usuários ativos por escritório (lock por escritório): a
+        // ativação deste usuário conta como vaga — bloqueia se já estiver no
+        // limite (rollback integral de código + usuário + escritório).
+        const { configPiloto } = await import('../services/pilotMode.js');
+        const cfgLocal = configPiloto();
+        const [u0] = await tx.select({ escritorioId: usuarios.escritorioId }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
+        if (cfgLocal.ativo && u0?.escritorioId && cfgLocal.maxUsuariosPorEscritorio != null) {
+          await verificarTetoUsuariosTx(tx, u0.escritorioId, cfgLocal.maxUsuariosPorEscritorio);
+        }
+        const [u] = await tx.update(usuarios)
+          .set({ emailVerificado: true, ativo: true })
+          .where(eq(usuarios.email, email))
+          .returning();
+        if (u?.escritorioId) {
+          await tx.update(escritorios).set({ ativo: true }).where(eq(escritorios.id, u.escritorioId));
+        }
+        return u;
+      });
+    } catch (err) {
+      if (err instanceof ErroPilotoLimite) {
+        return res.status(403).json({
+          error: 'O piloto controlado atingiu o limite de usuários ativos deste escritório; a ativação foi bloqueada.',
+          code: err.code,
+        });
+      }
+      throw err;
+    }
 
     if (userAtualizado?.escritorioId) {
-      // Ativa o escritório automaticamente ao confirmar o e-mail
-      await db.update(escritorios).set({ ativo: true }).where(eq(escritorios.id, userAtualizado.escritorioId));
-
       const [escritorio] = await db.select().from(escritorios)
         .where(eq(escritorios.id, userAtualizado.escritorioId)).limit(1);
 

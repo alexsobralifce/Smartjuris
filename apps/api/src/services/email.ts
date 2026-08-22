@@ -464,3 +464,26 @@ export async function sendDeadlineAlertEmail(params: {
     html: emailWrapper('Alerta de Prazo Processual', body),
   });
 }
+
+/** Alerta de custo do piloto controlado (Fase 4B) — observabilidade, best-effort. */
+export async function sendPilotCostAlert(params: {
+  to: string;
+  escritorioId: string;
+  ciclo: string;
+  custoCents: string;
+}): Promise<EmailResult> {
+  const body = `
+    <span class="badge" style="background: #fef3c7; color: #92400e; border-color: #fcd34d;">
+      ⚠️ Piloto — Alerta de Custo
+    </span>
+    <h2 style="margin: 0 0 16px; color: #1a2744; font-size: 20px;">Custo do escritório acima do limiar do piloto</h2>
+    <p>O escritório <strong>${params.escritorioId}</strong> consumiu <strong>${params.custoCents} cents</strong>
+    no ciclo <strong>${params.ciclo}</strong>, ultrapassando o limiar configurado do piloto.</p>
+    <p>Revise a utilização e o orçamento antes de prosseguir com o piloto controlado.</p>
+  `;
+  return sendEmail({
+    to: params.to,
+    subject: `⚠️ [Piloto] Alerta de custo — ${params.escritorioId} (${params.ciclo})`,
+    html: emailWrapper('Piloto — Alerta de Custo', body),
+  });
+}

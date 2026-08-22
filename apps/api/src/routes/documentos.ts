@@ -1,12 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../db/client.js';
-import { documentosGerados } from '../db/schema.js';
+import { documentos, documentosGerados } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
 import { checkTokenQuota } from '../services/usage.js';
 import {
   processarUploadDocumento,
+  indexarChunksDoDocumento,
   validarProcessoDoEscritorio,
   validarEscritorioInformadoNoBody,
   listarDocumentosDoEscritorio,
@@ -104,6 +105,15 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
       }
     }
 
+    // Fase 4B — piloto controlado: teto de documentos por escritório (upload).
+    const { excedeLimiteDocumentosPiloto } = await import('../services/pilotMode.js');
+    if (await excedeLimiteDocumentosPiloto(escritorioId)) {
+      return res.status(403).json({
+        error: 'O piloto controlado limitou temporariamente o upload de documentos neste escritório.',
+        code: 'PILOTO_LIMITE_DOCUMENTOS',
+      });
+    }
+
     // Cota de tokens do modo demo: bloqueia a indexação (geração de embeddings)
     const quota = await checkTokenQuota(req as AuthenticatedRequest);
     if (quota.status === 'blocked') {
@@ -126,26 +136,53 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
     const totalPages = Number((pdfData as any).numpages) || null;
 
     // 5–9. Persistência via serviço (escopo + status + failed_chunks).
+    // Fase 4B — piloto: teto de documentos verificado+persistido ATOMICAMENTE
+    // sob advisory lock, APENAS quando o piloto está ativo com limite
+    // configurado. O lock cobre só contagem + insert do documento (persistência
+    // indispensável); a indexação (embeddings) roda FORA do lock. Piloto
+    // desligado/sem limite → caminho original, sem transação/lock adicional.
     const rawChunks = pdfData.text.split('\n\n').filter((c: string) => c.trim().length > 50);
+    const arquivo = req.file; // já validado acima (`if (!req.file)` → 400)
+    const baseUpload = {
+      nome: arquivo!.originalname,
+      colecao,
+      tamanho: `${sizeMB} MB`,
+      area,
+      totalPages,
+      escritorioId,
+      processoId: processoId ?? null,
+      usuarioId: (req as any).user?.id ?? null,
+      chunkTexts: rawChunks,
+      gerarEmbedding: async (texto: string, usuarioId?: string) => generateEmbedding(texto, usuarioId),
+    };
     let resultado;
-    try {
-      resultado = await processarUploadDocumento({
-        nome: req.file.originalname,
-        colecao,
-        tamanho: `${sizeMB} MB`,
-        area,
-        totalPages,
-        escritorioId,
-        processoId: processoId ?? null,
-        usuarioId: (req as any).user?.id ?? null,
-        chunkTexts: rawChunks,
-        gerarEmbedding: async (texto, usuarioId) => generateEmbedding(texto, usuarioId),
+    const { configPiloto } = await import('../services/pilotMode.js');
+    const cfgPiloto = configPiloto();
+    if (cfgPiloto.ativo && cfgPiloto.maxDocumentosPorEscritorio != null) {
+      const { comSlotPiloto: slotDocs, ErroPilotoLimite } = await import('../services/pilotMode.js');
+      const { excedeLimiteDocumentosPiloto: excedeDocsPiloto } = await import('../services/pilotMode.js');
+      const documentoId = await slotDocs(`piloto:documentos:${escritorioId}`, async (tx) => {
+        if (await excedeDocsPiloto(escritorioId)) {
+          throw new ErroPilotoLimite('PILOTO_LIMITE_DOCUMENTOS');
+        }
+        const [doc] = await tx.insert(documentos).values({
+          nome: arquivo!.originalname,
+          colecao,
+          tamanho: `${sizeMB} MB`,
+          chunks: 0,
+          escritorioId,
+          processoId: processoId ?? null,
+          totalPages,
+          indexedStatus: 'processing',
+          failedChunks: 0,
+          updatedAt: new Date(),
+        }).returning({ id: documentos.id });
+        return doc.id;
       });
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('embeddings')) {
-        return res.status(502).json({ error: e.message });
-      }
-      throw e;
+      // Indexação FORA do lock (embeddings são lentos; não seguram o advisory lock).
+      resultado = await indexarChunksDoDocumento(documentoId, baseUpload);
+    } else {
+      resultado = await processarUploadDocumento(baseUpload);
     }
 
     await recordAudit(req, 'UPLOAD_DOCUMENTO', {
@@ -171,6 +208,17 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
 
     res.status(201).json({ ...resultado.documento, chunksIndexed: resultado.chunksIndexed });
   } catch (error) {
+    // Fase 4B — teto do piloto atingido → 403 com código (não é falha interna).
+    const { ErroPilotoLimite } = await import('../services/pilotMode.js');
+    if (error instanceof ErroPilotoLimite) {
+      return res.status(403).json({
+        error: 'O piloto controlado limitou temporariamente o upload de documentos neste escritório.',
+        code: error.code,
+      });
+    }
+    if (error instanceof Error && error.message.includes('embeddings')) {
+      return res.status(502).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Erro ao fazer upload' });
   }
 });

@@ -5,7 +5,7 @@
 Este documento define um processo faseado para evolução do SmartJuris usando dois modelos:
 
 - **DeepSeek:** implementação de código, testes e build.
-- **GPT-5.6 Terra:** revisão técnica independente dos resultados.
+- **GPT-5.6 Luna:** revisão técnica independente dos resultados.
 
 A próxima fase só pode começar após a aprovação do resultado da fase atual.
 
@@ -18,7 +18,7 @@ DeepSeek executa testes e build
         ↓
 DeepSeek entrega diff e relatório
         ↓
-GPT-5.6 Terra revisa
+GPT-5.6 Luna revisa
         ↓
 Gate valida resultado
         ↓
@@ -65,20 +65,20 @@ Não avance quando houver:
 
 | Fase | Descrição | Implementador | Revisor | Estado | Dependências |
 |---|---|---|---|---|---|
-| 2A | Segurança documental e metadados | DeepSeek | GPT-5.6 Terra | `AUDIT_APPROVED` | — |
-| 2A.1 | Testes HTTP de tenancy | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2A |
-| 2A.2 | Correção da exportação | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2A.1 |
-| 2B | Catálogo compartilhado | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2A.2 |
-| 2C | Builder do payload real | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2B |
-| 2D | Desenho da análise documental | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2C |
-| 2E | Migration dos metadados do classificador | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2C |
-| 2F | Idempotência e reserva | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2B, 2C |
-| 3A | Unidades de análise documental | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2D |
-| 3B | Fallback Flash/Pro | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2F |
-| 3C | Integração SSE | DeepSeek | GPT-5.6 Terra | `PLANNED` | 2F, 3B |
-| 3D | Integração frontend | DeepSeek | GPT-5.6 Terra | `PLANNED` | 3C |
-| 4A | Testes end-to-end | DeepSeek | GPT-5.6 Terra | `PLANNED` | 3D |
-| 4B | Piloto controlado | DeepSeek | GPT-5.6 Terra | `PLANNED` | 4A |
+| 2A | Segurança documental e metadados | DeepSeek | GPT-5.6 Luna | `AUDIT_APPROVED` | — |
+| 2A.1 | Testes HTTP de tenancy | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2A |
+| 2A.2 | Correção da exportação | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2A.1 |
+| 2B | Catálogo compartilhado | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2A.2 |
+| 2C | Builder do payload real | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2B |
+| 2D | Desenho da análise documental | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2C |
+| 2E | Migration dos metadados do classificador | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2C |
+| 2F | Idempotência e reserva | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2B, 2C |
+| 3A | Unidades de análise documental | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2D |
+| 3B | Fallback Flash/Pro | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2F |
+| 3C | Integração SSE | DeepSeek | GPT-5.6 Luna | `PLANNED` | 2F, 3B |
+| 3D | Integração frontend | DeepSeek | GPT-5.6 Luna | `PLANNED` | 3C |
+| 4A | Testes end-to-end | DeepSeek | GPT-5.6 Luna | `PLANNED` | 3D |
+| 4B | Piloto controlado | DeepSeek | GPT-5.6 Luna | `PLANNED` | 4A |
 
 ## Metadados por fase
 
@@ -103,7 +103,7 @@ Cada fase deve registrar:
 3. Enviar prompt da fase ao DeepSeek.
 4. Receber código, diff, testes e build.
 5. Marcar como `IMPLEMENTED`.
-6. Enviar resultado ao GPT-5.6 Terra.
+6. Enviar resultado ao GPT-5.6 Luna.
 7. Marcar como `AUDIT_PENDING`.
 8. Validar o resultado estruturado.
 9. Se aprovado, marcar como `AUDIT_APPROVED`.

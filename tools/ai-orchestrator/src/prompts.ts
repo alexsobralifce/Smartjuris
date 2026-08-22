@@ -38,7 +38,7 @@ export function extractPhasePrompts(md: string, phaseId: string): PhasePrompt {
       section = 'implementer';
       continue;
     }
-    if (/^## GPT-5.6 Terra — revisão/.test(line)) {
+    if (/^## GPT-5.6 Luna — revisão/.test(line)) {
       section = 'reviewer';
       continue;
     }

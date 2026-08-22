@@ -19,6 +19,7 @@ import permissoesRoutes from './routes/permissoes.js';
 import rootStatsRoutes from './routes/rootStats.js';
 import rootCreditosRoutes from './routes/rootCreditos.js';
 import rootDocumentosRoutes from './routes/rootDocumentos.js';
+import pilotoRoutes from './routes/piloto.js';
 import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 import agendaRoutes from './routes/agenda.js';
 
@@ -75,6 +76,7 @@ app.use('/api/root/escritorios', authMiddleware, refreshSession, requireRoot, es
 app.use('/api/root/documentos', authMiddleware, refreshSession, requireRoot, rootDocumentosRoutes);
 app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootCreditosRoutes);
 app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootStatsRoutes);
+app.use('/api/root/piloto', authMiddleware, refreshSession, requireRoot, pilotoRoutes);
 
 // Admin do escritório — admin role + tenant internamente + forcePasswordChange
 app.use('/api/admin/escritorio', authMiddleware, refreshSession, requireAdmin, forcePasswordChange, adminEscritorioRoutes);

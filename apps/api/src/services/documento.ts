@@ -42,9 +42,6 @@ export interface DocumentoUploadResult {
  * parcial é registrada em `failed_chunks` e o documento vai para `failed`.
  */
 export async function processarUploadDocumento(input: DocumentoUploadInput): Promise<DocumentoUploadResult> {
-  const gerar = input.gerarEmbedding ?? generateEmbedding;
-  const totalChunks = input.chunkTexts.length;
-
   const [novo] = await db.insert(documentos).values({
     nome: input.nome,
     colecao: input.colecao,
@@ -58,7 +55,16 @@ export async function processarUploadDocumento(input: DocumentoUploadInput): Pro
     updatedAt: new Date(),
   }).returning({ id: documentos.id });
 
-  const documentoId = novo.id;
+  return indexarChunksDoDocumento(novo.id, input);
+}
+
+/** Indexa (chunks + embeddings) um documento JÁ persistido e devolve o
+ *  resultado consolidado. Extraído na 4B para o upload do piloto persistir o
+ *  documento (contagem) sob advisory lock SEM segurar o lock durante a
+ *  geração de embeddings (processamento pesado). */
+export async function indexarChunksDoDocumento(documentoId: string, input: DocumentoUploadInput): Promise<DocumentoUploadResult> {
+  const gerar = input.gerarEmbedding ?? generateEmbedding;
+  const totalChunks = input.chunkTexts.length;
   const metadata: Record<string, string> = { fonte: input.nome };
   if (input.area) metadata.area = input.area;
 

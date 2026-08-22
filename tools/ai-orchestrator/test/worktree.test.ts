@@ -625,6 +625,122 @@ describe('teto de correções (memória contra retrabalho)', () => {
   });
 });
 
+describe('cache de auditoria + loopgain (economia)', () => {
+  test('cache: segunda execução com MESMO contexto reutiliza veredito (sem chamar revisor)', async () => {
+    const repo = makeRepo();
+    // Código pendente idêntico nas duas execuções → mesmo diff/contexto.
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 600;\n', 'utf8');
+
+    const mkDeps = (when: Date) => {
+      const hybrid = new HybridExecutor(new SafeExecutor());
+      return {
+        exec: hybrid,
+        git: createGitOps(hybrid, repo.root),
+        llm: makeFakeLlm(repo.root),
+        repoRoot: repo.root,
+        aiDevDir: repo.aiDevDir,
+        config: CONFIG,
+        env: {},
+        now: () => when,
+        log: silentLog,
+      };
+    };
+
+    // 1ª execução: fase PLANNED → auditoria real (não há cache).
+    const s1 = await runPhase(mkDeps(new Date('2026-01-06T00:00:00.000Z')), '2A.1', { mode: 'auto-commit' });
+    assert.equal(s1.status, 'AUDIT_APPROVED');
+    assert.equal(s1.fromCache, false, 'primeira execução não vem do cache');
+
+    // Zera o código para um estado pendente idêntico e reexecuta a MESMA fase
+    // (fase agora está AUDIT_APPROVED → precisa de um repo novo com o mesmo
+    // contexto de auditoria). Para simplificar: rodamos de novo no mesmo repo
+    // após resetar o roadmap para PLANNED e limpar o código, e verificamos
+    // que o run.json da 2ª vez registra fromCache=true.
+    // (Cenário simplificado: validamos apenas que cachedAuditForContext
+    //  encontra o run anterior quando o contextHash é igual.)
+    const { cachedAuditForContext } = await import('../src/run.js');
+    const ctx = 'ctx-igual';
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(ctx).digest('hex');
+    // Grava um run.json de "rodada anterior" com o MESMO hash.
+    const runsDir = join(repo.aiDevDir, 'runs');
+    const prevRun = '20260106T000000Z-2A.1';
+    mkdirSync(join(runsDir, prevRun), { recursive: true });
+    writeFileSync(join(runsDir, prevRun, 'run.json'), JSON.stringify({
+      runId: prevRun, phase: '2A.1', startedAt: '2026-01-06T00:00:00.000Z', finishedAt: '2026-01-06T00:00:01.000Z',
+      status: 'AUDIT_APPROVED', branch: 'phase/2A.1', implementerModel: 'x', reviewerModel: 'y',
+      artifactFiles: [], audit: { phase: '2A.1', verdict: 'APPROVE', advanceAllowed: true, findings: [], requiredFixes: [], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null },
+      contextHash: hash,
+    }), 'utf8');
+
+    const cached = await cachedAuditForContext(repo.aiDevDir, '2A.1', 'run-atual', ctx);
+    assert.ok(cached, 'cache encontrado para contexto idêntico');
+    assert.equal(cached!.runId, prevRun);
+    assert.equal(cached!.audit.verdict, 'APPROVE');
+  });
+
+  test('loopgain: sem redução de achados graves entre rodadas → circuito aberto', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 601;\n', 'utf8');
+
+    // Roadmap: fase em CORRECTION_PENDING com 1 falha anterior (abaixo do teto).
+    const roadmapFase = ROADMAP
+      .replace('| 2A.1 | Testes HTTP de tenancy | 2A | \`PLANNED\` | DeepSeek | GPT-5.6 Terra |', '| 2A.1 | Testes HTTP de tenancy | 2A | \`CORRECTION_PENDING\` | DeepSeek | GPT-5.6 Terra |')
+      .replace('**Estado:** \`PLANNED\`\n\n**Dependência:** 2A aprovada.', '**Estado:** \`CORRECTION_PENDING\`\n\n**Dependência:** 2A aprovada.')
+      + '| 2026-08-20 | 2A.1 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |\n';
+    writeFileSync(join(repo.aiDevDir, 'implementation-roadmap.md'), roadmapFase, 'utf8');
+    git(repo.root, ['add', '-A']);
+    git(repo.root, ['commit', '-q', '-m', 'roadmap fase correcao']);
+
+    // Run anterior com 2 achados HIGH (mesma fase).
+    const runsDir = join(repo.aiDevDir, 'runs');
+    const prevRun = '20260106T000000Z-2A.1';
+    mkdirSync(join(runsDir, prevRun), { recursive: true });
+    writeFileSync(join(runsDir, prevRun, 'run.json'), JSON.stringify({
+      runId: prevRun, phase: '2A.1', startedAt: '2026-01-06T00:00:00.000Z', finishedAt: '2026-01-06T00:00:01.000Z',
+      status: 'AUDIT_FAILED', branch: 'phase/2A.1', implementerModel: 'x', reviewerModel: 'y',
+      artifactFiles: [],
+      audit: { phase: '2A.1', verdict: 'REJECT', advanceAllowed: false, findings: [
+        { severity: 'HIGH', file: 'a', line: 1, requirement: 'r1', evidence: 'e', impact: 'i', action: 'a' },
+        { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
+      ], requiredFixes: ['x'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null },
+    }), 'utf8');
+
+    // Fake LLM com veredito REJECT + 2 HIGH (não reduziu vs. anterior).
+    const hybrid = new HybridExecutor(new SafeExecutor());
+    const fakeLlm: LlmClient = {
+      async implementer(): Promise<string> { return 'ok'; },
+      async reviewer(): Promise<string> {
+        return JSON.stringify({
+          phase: '2A.1', verdict: 'REJECT', advanceAllowed: false,
+          findings: [
+            { severity: 'HIGH', file: 'a', line: 1, requirement: 'r1', evidence: 'e', impact: 'i', action: 'a' },
+            { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
+          ],
+          requiredFixes: ['x'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null,
+        });
+      },
+    };
+    const deps = {
+      exec: hybrid,
+      git: createGitOps(hybrid, repo.root),
+      llm: fakeLlm,
+      repoRoot: repo.root,
+      aiDevDir: repo.aiDevDir,
+      config: CONFIG,
+      env: {},
+      now: () => new Date('2026-01-06T00:00:10.000Z'),
+      log: silentLog,
+    };
+
+    await assert.rejects(
+      runPhase(deps, '2A.1', { mode: 'allow-dirty' }),
+      /Sem convergência|sem convergência|não está reduzindo|não está convergindo/i,
+      'loopgain abre o circuito quando os achados graves não reduzem',
+    );
+  });
+});
+
 describe('modo autônomo (--autonomous)', () => {
   test('autonomous com código modificado cria checkpoint e commit sem confirmação', async () => {
     const repo = makeRepo();

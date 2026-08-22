@@ -172,5 +172,9 @@ export const RunSummary = z.object({
   preRunFiles: z.array(z.string()).optional(),
   // Modo autônomo: próxima fase elegível para a qual esta fase avançou.
   continuedTo: z.string().nullable().optional(),
+  // Cache de auditoria: hash do contexto de revisão (reuso de veredito) e
+  // flag indicando que o veredito veio do cache (sem chamada ao revisor).
+  contextHash: z.string().optional(),
+  fromCache: z.boolean().optional(),
 }).strict();
 export type RunSummary = z.infer<typeof RunSummary>;

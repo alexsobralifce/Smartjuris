@@ -104,6 +104,99 @@ export async function previousRunBaseSha(aiDevDir: string, phaseId: string, curr
   return candidatos[0].sha;
 }
 
+/**
+ * Cache de auditoria: se o contexto de revisão (diff + evidências) já foi
+ * auditado em uma rodada anterior da MESMA fase com resultado idêntico,
+ * reusa o veredito — ZERO chamada ao revisor (economia de tokens).
+ * O cache é válido apenas quando o contexto é byte-a-byte igual.
+ */
+export async function cachedAuditForContext(
+  aiDevDir: string,
+  phaseId: string,
+  currentRunId: string,
+  context: string,
+): Promise<{ audit: import('./contracts.js').AuditResult; runId: string } | null> {
+  const { createHash } = await import('node:crypto');
+  const { readdir, readFile } = await import('node:fs/promises');
+  const ctxHash = createHash('sha256').update(context).digest('hex');
+  const runsDir = safeJoin(aiDevDir, 'runs');
+  let entries: string[] = [];
+  try {
+    entries = await readdir(runsDir);
+  } catch {
+    return null;
+  }
+  const candidatos: { ts: number; runId: string; ctxHash: string; audit: unknown }[] = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(`-${phaseId}`) || entry === currentRunId) continue;
+    try {
+      const raw = await readFile(safeJoin(runsDir, entry, 'run.json'), 'utf8');
+      const parsed = JSON.parse(raw) as { audit?: unknown; contextHash?: string };
+      if (!parsed.audit) continue;
+      // Aceita cache se o run anterior registrou o MESMO contextHash.
+      if (parsed.contextHash && parsed.contextHash === ctxHash) {
+        const m = entry.match(/^(\d{8}T\d{6}Z)/);
+        candidatos.push({ ts: m ? Date.parse(m[1]) : 0, runId: entry, ctxHash: parsed.contextHash, audit: parsed.audit });
+      }
+    } catch {
+      // ignora run.json inválido
+    }
+  }
+  if (candidatos.length === 0) return null;
+  candidatos.sort((a, b) => b.ts - a.ts);
+  const best = candidatos[0];
+  return { audit: best.audit as import('./contracts.js').AuditResult, runId: best.runId };
+}
+
+/**
+ * LOOPGAIN (convergência): conta achados HIGH/BLOCKER de um audit e, se a
+ * rodada anterior da fase teve o MESMO número (ou mais), o loop NÃO está
+ * convergindo — abre o circuito antes do teto de tentativas, exigindo decisão
+ * humana. Retorna a rodada anterior se a convergência falhou.
+ */
+export async function convergenciaFalhou(
+  aiDevDir: string,
+  phaseId: string,
+  currentRunId: string,
+  audit: import('./contracts.js').AuditResult,
+): Promise<{ anterior: string; gravesAtual: number; gravesAnterior: number } | null> {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const runsDir = safeJoin(aiDevDir, 'runs');
+  let entries: string[] = [];
+  try {
+    entries = await readdir(runsDir);
+  } catch {
+    return null;
+  }
+  const gravesAtual = audit.findings.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER').length;
+  if (gravesAtual === 0) return null; // convergiu (sem achados graves)
+
+  const anteriores: { ts: number; runId: string; graves: number }[] = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(`-${phaseId}`) || entry === currentRunId) continue;
+    try {
+      const raw = await readFile(safeJoin(runsDir, entry, 'run.json'), 'utf8');
+      const parsed = JSON.parse(raw) as { audit?: { findings?: { severity?: string }[] } };
+      if (!parsed.audit?.findings) continue;
+      const m = entry.match(/^(\d{8}T\d{6}Z)/);
+      anteriores.push({
+        ts: m ? Date.parse(m[1]) : 0,
+        runId: entry,
+        graves: parsed.audit.findings.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER').length,
+      });
+    } catch {
+      // ignora
+    }
+  }
+  if (anteriores.length === 0) return null; // primeira rodada de correção
+  anteriores.sort((a, b) => b.ts - a.ts);
+  const ultimo = anteriores[0];
+  if (gravesAtual >= ultimo.graves && ultimo.graves > 0) {
+    return { anterior: ultimo.runId, gravesAtual, gravesAnterior: ultimo.graves };
+  }
+  return null; // reduziu achados → convergindo
+}
+
 export function compactTimestamp(date: Date): string {
   return date
     .toISOString()
@@ -414,12 +507,36 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     artifact('08-review-context.txt', context);
     artifact('12-audit-history.txt', auditHistory || '(sem histórico anterior)');
     artifact('13-corrections-applied.txt', correctionsApplied);
-    deps.log.info(`Chamando revisor (${runSummary.reviewerModel})...`);
-    const { audit, rawResponses, corrected } = await validateAuditWithRetry(deps.llm, context);
-    artifact('09-review-response.txt', rawResponses.join('\n\n--- RESPOSTA CORRIGIDA ---\n\n'));
+
+    // Cache de auditoria: contexto idêntico a uma rodada anterior da mesma
+    // fase → reusa o veredito (economia total de tokens). O contextHash é
+    // registrado no run.json para cache em rodadas futuras.
+    const { createHash } = await import('node:crypto');
+    const contextHash = createHash('sha256').update(context).digest('hex');
+    runSummary.contextHash = contextHash;
+    const cached = await cachedAuditForContext(deps.aiDevDir, phaseId, runId, context);
+    let audit: import('./contracts.js').AuditResult;
+    let rawResponses: string[];
+    let corrected = false;
+    let fromCache = false;
+    if (cached) {
+      audit = cached.audit;
+      rawResponses = [`[cache] veredito da rodada ${cached.runId} reutilizado (contexto idêntico).`];
+      fromCache = true;
+      deps.log.info(`Auditoria reutilizada do cache (rodada ${cached.runId}) — sem chamada ao revisor.`);
+      artifact('15-audit-cache.txt', `Contexto idêntico ao run ${cached.runId}; veredito reutilizado.`);
+    } else {
+      deps.log.info(`Chamando revisor (${runSummary.reviewerModel})...`);
+      const res = await validateAuditWithRetry(deps.llm, context);
+      audit = res.audit;
+      rawResponses = res.rawResponses;
+      corrected = res.corrected;
+      artifact('09-review-response.txt', rawResponses.join('\n\n--- RESPOSTA CORRIGIDA ---\n\n'));
+      if (corrected) deps.log.warn('Auditoria corrigida após feedback de validação (1 tentativa).');
+    }
     artifact('10-audit-result.json', JSON.stringify(audit, null, 2));
     runSummary.audit = audit;
-    if (corrected) deps.log.warn('Auditoria corrigida após feedback de validação (1 tentativa).');
+    runSummary.fromCache = fromCache;
 
     // 12) Gate de aprovação
     const gate: EvidenceGate = {
@@ -438,6 +555,33 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
         2,
       ),
     );
+    // LOOPGAIN: se a rodada de correção NÃO reduziu os achados graves em
+    // relação à anterior, o loop não está convergindo — abre o circuito
+    // (BLOCKED) e exige decisão humana em vez de gastar mais tokens.
+    if (previousState === 'CORRECTION_PENDING' || previousState === 'AUDIT_FAILED') {
+      const loop = await convergenciaFalhou(deps.aiDevDir, phaseId, runId, audit);
+      if (loop) {
+        const motivo = `Rodada de correção sem convergência: ${loop.gravesAtual} achado(s) grave(s) (HIGH/BLOCKER) agora vs. ${loop.gravesAnterior} na rodada ${loop.anterior}. O loop não está reduzindo o retrabalho — circuito aberto para decisão humana.`;
+        deps.log.warn(`[loopgain] ${motivo}`);
+        artifact('16-loopgain.txt', motivo);
+        const loopRow = buildHistoryRow({
+          date: now().toISOString().slice(0, 10),
+          phase: phaseId,
+          implementer: phase.implementer || 'DeepSeek',
+          reviewer: 'LOOPGAIN (determinístico)',
+          verdict: 'REJECT',
+          advanceAllowed: false,
+          note: 'Sem convergência entre rodadas (achados graves não reduziram). Decisão humana requerida.',
+        });
+        writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_FAILED' }, [loopRow]));
+        runSummary.status = 'AUDIT_FAILED';
+        runSummary.finishedAt = now().toISOString();
+        runSummary.error = motivo;
+        artifact('run.json', JSON.stringify(runSummary, null, 2));
+        throw new Error(motivo);
+      }
+    }
+
     const approved = canAdvance(audit) && evidenceOk(gate);
     const { state, advanceAllowed, reason } = auditNextState(audit, gate);
     assertTransition('AUDIT_PENDING', state);

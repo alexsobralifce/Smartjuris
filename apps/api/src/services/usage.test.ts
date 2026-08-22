@@ -1,0 +1,363 @@
+import { test, describe, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { sql, eq } from 'drizzle-orm';
+import { db, client } from '../db/client.js';
+import { escritorios, usuarios } from '../db/schema.js';
+import {
+  calculateAiCostCents,
+  calculateAiSettlementCents,
+  estimateAiOperation,
+  avaliarElegibilidade,
+  reserveAiUsage,
+  settleAiUsage,
+  releaseAiUsageReservation,
+  cicloAtual,
+  PLANS,
+  OPERATION_LIMITS,
+  type AiEstimateResult,
+  type CreditStateEscritorio,
+} from './usage.js';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function comEnv(env: Record<string, string>, fn: () => void): void {
+  const prev = new Map<string, string | undefined>();
+  for (const k of Object.keys(env)) {
+    prev.set(k, process.env[k]);
+    process.env[k] = env[k];
+  }
+  try {
+    fn();
+  } finally {
+    for (const [k, v] of prev) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+function estimativaSimples(operation: 'SIMPLE_PETITION' | 'APPEAL' | 'COMPLEX_DOCUMENT' = 'SIMPLE_PETITION'): AiEstimateResult {
+  return estimateAiOperation({ operation, pagesRelevant: 2, annexPages: 5, ragContextChars: 2_000 });
+}
+
+let dbDisponivel = true;
+try {
+  await db.execute(sql`SELECT 1`);
+} catch {
+  dbDisponivel = false;
+}
+
+// Fecha o pool do postgres para o processo do test runner encerrar.
+after(() => client.end({ timeout: 5 }));
+
+async function criarEscritorioTeste(credits = 20, plano = 'basico'): Promise<{ escId: string; userId: string }> {
+  const [esc] = await db.insert(escritorios).values({
+    nome: `Escritório Teste ${randomUUID().slice(0, 8)}`,
+    plano,
+    creditsAvailable: credits,
+    reserveCentsUsed: 0,
+    cycleMonth: cicloAtual(),
+  }).returning({ id: escritorios.id });
+  const [user] = await db.insert(usuarios).values({
+    nome: 'Usuário Teste',
+    email: `teste-${randomUUID()}@smartjuris.test`,
+    senha: 'x',
+    role: 'user',
+    escritorioId: esc.id,
+  }).returning({ id: usuarios.id });
+  return { escId: esc.id, userId: user.id };
+}
+
+async function limparEscritorioTeste(escId: string): Promise<void> {
+  await db.execute(sql`DELETE FROM credit_ledger WHERE escritorio_id = ${escId}`);
+  await db.execute(sql`DELETE FROM ai_operations WHERE escritorio_id = ${escId}`);
+  await db.execute(sql`DELETE FROM token_usage WHERE usuario_id IN (SELECT id FROM usuarios WHERE escritorio_id = ${escId})`);
+  await db.execute(sql`DELETE FROM usuarios WHERE escritorio_id = ${escId}`);
+  await db.delete(escritorios).where(eq(escritorios.id, escId));
+}
+
+async function saldoEscritorio(escId: string): Promise<{ credits: number; reserveUsed: number }> {
+  const rows = await db.execute(sql`
+    SELECT credits_available, reserve_cents_used FROM escritorios WHERE id = ${escId}
+  `) as any[];
+  return { credits: Number(rows[0]?.credits_available ?? 0), reserveUsed: Number(rows[0]?.reserve_cents_used ?? 0) };
+}
+
+// ---------------------------------------------------------------------------
+// Preços: Flash, Pro, pico, fora de pico, arredondamento
+// ---------------------------------------------------------------------------
+
+describe('calculateAiCostCents', () => {
+  test('Flash em pico usa preços de pico e converte para BRL em centavos (ceil)', () => {
+    comEnv({
+      DEEPSEEK_INPUT_COST_PEAK: '0.44',
+      DEEPSEEK_OUTPUT_COST_PEAK: '1.32',
+      USD_BRL_RATE: '5.00',
+    }, () => {
+      const r = calculateAiCostCents({ model: 'deepseek-v4-flash', inputTokens: 1_000_000, outputTokens: 500_000, isPeak: true });
+      assert.equal(r.inputCostCents, 44);
+      assert.equal(r.outputCostCents, 66);
+      assert.equal(r.usdCents, 110);
+      assert.equal(r.brlCents, 550);
+    });
+  });
+
+  test('Flash fora de pico usa preços reduzidos', () => {
+    comEnv({
+      DEEPSEEK_INPUT_COST_OFFPEAK: '0.22',
+      DEEPSEEK_OUTPUT_COST_OFFPEAK: '0.66',
+      USD_BRL_RATE: '5.00',
+    }, () => {
+      const r = calculateAiCostCents({ model: 'flash', inputTokens: 1_000_000, outputTokens: 500_000, isPeak: false });
+      assert.equal(r.inputCostCents, 22);
+      assert.equal(r.outputCostCents, 33);
+      assert.equal(r.brlCents, 275);
+    });
+  });
+
+  test('Pro em pico usa tabela própria (3x Flash por padrão)', () => {
+    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+      const r = calculateAiCostCents({ model: 'deepseek-v4-pro', inputTokens: 1_000_000, outputTokens: 500_000, isPeak: true });
+      assert.equal(r.inputCostCents, 132);
+      assert.equal(r.outputCostCents, 198);
+      assert.equal(r.brlCents, 1650);
+    });
+  });
+
+  test('Pro fora de pico usa tabela própria', () => {
+    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+      const r = calculateAiCostCents({ model: 'pro', inputTokens: 1_000_000, outputTokens: 500_000, isPeak: false });
+      assert.equal(r.inputCostCents, 66);
+      assert.equal(r.outputCostCents, 99);
+      assert.equal(r.brlCents, 825);
+    });
+  });
+
+  test('Reserva arredonda SEMPRE para cima (1 token => 1 centavo)', () => {
+    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+      const r = calculateAiCostCents({ model: 'flash', inputTokens: 1, outputTokens: 1, isPeak: true });
+      assert.equal(r.usdCents, 2);
+      assert.equal(r.brlCents, 10);
+    });
+  });
+
+  test('Liquidação arredonda para o centavo mais próximo (difere da reserva)', () => {
+    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+      const reserva = calculateAiCostCents({ model: 'flash', inputTokens: 100_000, outputTokens: 0, isPeak: true });
+      const liquida = calculateAiSettlementCents({ model: 'flash', inputTokens: 100_000, outputTokens: 0, isPeak: true });
+      // 100_000 * 0.44/1M = 0.044 USD => ceil 5 centavos; nearest 4 centavos
+      assert.equal(reserva.brlCents, 25);
+      assert.equal(liquida.brlCents, 20);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Estimativa
+// ---------------------------------------------------------------------------
+
+describe('estimateAiOperation', () => {
+  test('SIMPLE_PETITION: 1 crédito, margem de 15% na entrada', () => {
+    const e = estimativaSimples('SIMPLE_PETITION');
+    assert.equal(e.creditsRequired, OPERATION_LIMITS.SIMPLE_PETITION.credits);
+    // entrada bruta = (2*3000 + 2000) * 0.25 = 2000; +15% => ceil(2300)
+    assert.equal(e.inputTokensEstimated, 2300);
+    assert.equal(e.eligible, true);
+  });
+
+  test('APPEAL exige Pro e 4 créditos', () => {
+    const e = estimativaSimples('APPEAL');
+    assert.equal(e.creditsRequired, 4);
+    assert.equal(OPERATION_LIMITS.APPEAL.model, 'pro');
+  });
+
+  test('Volumes acima do teto tornam a operação inelegível e avisam', () => {
+    const e = estimateAiOperation({ operation: 'COMPLEX_DOCUMENT', pagesRelevant: 50, annexPages: 5, ragContextChars: 0 });
+    assert.equal(e.pagesOverLimit, true);
+    assert.equal(e.eligible, false);
+    assert.ok(e.warnings.some((w) => w.includes('DOCUMENT_ANALYSIS_20_PAGES')));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Elegibilidade (pura)
+// ---------------------------------------------------------------------------
+
+describe('avaliarElegibilidade', () => {
+  const estimativa = estimativaSimples('SIMPLE_PETITION');
+
+  test('Saldo suficiente => allowed', () => {
+    const state: CreditStateEscritorio = { creditsAvailable: 20, reserveCentsUsed: 0, cycleMonth: cicloAtual(), plano: 'basico' };
+    const r = avaliarElegibilidade(state, estimativa, PLANS.ESSENTIAL);
+    assert.equal(r.allowed, true);
+    assert.equal(r.creditsRequired, 1);
+  });
+
+  test('Saldo insuficiente => bloqueado', () => {
+    const state: CreditStateEscritorio = { creditsAvailable: 0, reserveCentsUsed: 0, cycleMonth: cicloAtual(), plano: 'basico' };
+    const r = avaliarElegibilidade(state, estimativa, PLANS.ESSENTIAL);
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, 'creditos-insuficientes');
+  });
+
+  test('Custo da operação acima do teto do plano => bloqueado', () => {
+    const state: CreditStateEscritorio = { creditsAvailable: 20, reserveCentsUsed: 0, cycleMonth: cicloAtual(), plano: 'basico' };
+    const cara = { ...estimativa, estimatedCostCents: 300 };
+    const r = avaliarElegibilidade(state, cara, PLANS.ESSENTIAL);
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, 'custo-da-operacao-excede-teto-do-plano');
+  });
+
+  test('Orçamento interno do ciclo excedido => bloqueado', () => {
+    const state: CreditStateEscritorio = { creditsAvailable: 20, reserveCentsUsed: 4_400, cycleMonth: cicloAtual(), plano: 'basico' };
+    const cara = { ...estimativa, estimatedCostCents: 200 };
+    const r = avaliarElegibilidade(state, cara, PLANS.ESSENTIAL);
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, 'orcamento-interno-do-ciclo-insuficiente');
+  });
+
+  test('Rollover de ciclo: mês antigo usa o saldo do plano', () => {
+    const state: CreditStateEscritorio = { creditsAvailable: 0, reserveCentsUsed: 4_400, cycleMonth: '2020-01', plano: 'basico' };
+    const r = avaliarElegibilidade(state, estimativa, PLANS.ESSENTIAL, '2026-08');
+    assert.equal(r.allowed, true);
+    assert.equal(r.creditsAvailable, 20);
+  });
+
+  test('Warnings: saldo baixo e reserva acima de 80%', () => {
+    const state: CreditStateEscritorio = { creditsAvailable: 2, reserveCentsUsed: 3_800, cycleMonth: cicloAtual(), plano: 'basico' };
+    const r = avaliarElegibilidade(state, estimativa, PLANS.ESSENTIAL);
+    assert.ok(r.warnings.some((w) => w.includes('abaixo de 20%')));
+    assert.ok(r.warnings.some((w) => w.includes('acima de 80%')));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reserva / Liquidação / Liberação (banco local; pula se indisponível)
+// ---------------------------------------------------------------------------
+
+describe('reserveAiUsage (banco)', { skip: !dbDisponivel }, () => {
+  test('Reserva debita créditos, cria ledger e operação; chave repetida não debita de novo', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      const estimativa = estimativaSimples('SIMPLE_PETITION');
+      const chave = randomUUID();
+
+      const r1 = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: chave, operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r1.ok, true);
+      assert.equal(r1.creditsReserved, 1);
+      assert.ok((r1.costCentsReserved ?? 0) > 0);
+      let saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 19);
+
+      // Idempotência: mesma chave => mesma operação, sem novo débito.
+      const r2 = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: chave, operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r2.alreadyReserved, true);
+      assert.equal(r2.operationId, r1.operationId);
+      saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 19);
+
+      const ops = await db.execute(sql`SELECT COUNT(*)::int AS n FROM ai_operations WHERE idempotency_key = ${chave}`) as any[];
+      assert.equal(ops[0].n, 1);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Saldo insuficiente => reserva negada sem débito', async () => {
+    const { escId, userId } = await criarEscritorioTeste(0);
+    try {
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativaSimples() });
+      assert.equal(r.ok, false);
+      assert.equal(r.reason, 'creditos-insuficientes');
+      const saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 0);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+});
+
+describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
+  test('Liquida com uso real, converte reserva em consumo e mantém token_usage', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      const estimativa = estimativaSimples('SIMPLE_PETITION');
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r.ok, true);
+      const antes = await saldoEscritorio(escId);
+      assert.equal(antes.reserveUsed, r.costCentsReserved);
+
+      const s = await settleAiUsage({ operationId: r.operationId!, modelUsed: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 300 });
+      assert.equal(s.ok, true);
+      assert.equal(s.status, 'succeeded');
+
+      const depois = await saldoEscritorio(escId);
+      assert.ok(depois.reserveUsed < antes.reserveUsed, 'diferença de reserva liberada');
+
+      const ops = await db.execute(sql`SELECT status, credits_settled, cost_cents_actual FROM ai_operations WHERE id = ${r.operationId}`) as any[];
+      assert.equal(ops[0].status, 'succeeded');
+      assert.equal(Number(ops[0].credits_settled), 1);
+
+      const tokens = await db.execute(sql`SELECT COUNT(*)::int AS n FROM token_usage WHERE operacao = 'SIMPLE_PETITION' AND usuario_id = ${userId}`) as any[];
+      assert.equal(tokens[0].n, 1);
+
+      // Dupla liquidação é no-op.
+      const s2 = await settleAiUsage({ operationId: r.operationId!, modelUsed: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 300 });
+      assert.equal(s2.alreadySettled, true);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+});
+
+describe('releaseAiUsageReservation (banco)', { skip: !dbDisponivel }, () => {
+  test('Libera reserva sem consumo e impede dupla liberação', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      const estimativa = estimativaSimples('SIMPLE_PETITION');
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r.ok, true);
+      let saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 19);
+
+      const l1 = await releaseAiUsageReservation({ operationId: r.operationId!, reason: 'timeout' });
+      assert.equal(l1.ok, true);
+      assert.equal(l1.creditsReleased, 1);
+      saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 20);
+
+      // Dupla liberação não devolve de novo.
+      const l2 = await releaseAiUsageReservation({ operationId: r.operationId!, reason: 'timeout' });
+      assert.equal(l2.alreadyReleased, true);
+      saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 20);
+
+      const ops = await db.execute(sql`SELECT status FROM ai_operations WHERE id = ${r.operationId}`) as any[];
+      assert.equal(ops[0].status, 'failed');
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Consumo parcial registra ajuste e libera apenas o excedente', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      const estimativa = estimativaSimples('SIMPLE_PETITION');
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r.ok, true);
+
+      const l = await releaseAiUsageReservation({ operationId: r.operationId!, reason: 'stream-interrompido', partialInputTokens: 500, partialOutputTokens: 100 });
+      assert.equal(l.ok, true);
+
+      const ledger = await db.execute(sql`SELECT kind FROM credit_ledger WHERE operation_id = ${r.operationId} ORDER BY kind`) as any[];
+      const kinds = (ledger as any[]).map((x) => x.kind);
+      assert.ok(kinds.includes('ADJUST'));
+      assert.ok(kinds.includes('RELEASE'));
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+});

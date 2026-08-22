@@ -61,6 +61,18 @@ export const documentos = pgTable('documentos', {
   tamanho: text('tamanho').notNull(),
   indexado: timestamp('indexado', { withTimezone: true }).defaultNow(),
   chunks: integer('chunks').notNull(),
+  // Fase 2A — isolamento multi-tenant e metadados mínimos:
+  // `escritorio_id` é obrigatório para NOVOS documentos (derivado do contexto
+  // autenticado); registros legados ficam NULL e entram em quarentena
+  // (indexed_status='unscoped') até associação manual pelo root.
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
+  processoId: uuid('processo_id').references((): AnyPgColumn => processos.id),
+  totalPages: integer('total_pages'),
+  indexedStatus: text('indexed_status').notNull().default('pending'), // pending|processing|indexed|failed|unscoped
+  failedChunks: integer('failed_chunks').notNull().default(0),
+  indexedAt: timestamp('indexed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
 });
 
 export const chunks = pgTable('chunks', {
@@ -70,6 +82,10 @@ export const chunks = pgTable('chunks', {
   texto: text('texto').notNull(),
   embedding: vector('embedding'),
   metadata: jsonb('metadata'),
+  // Fase 2A — o chunk herda o escopo do documento de origem (nunca é enviado
+  // pelo cliente) e só é recuperável dentro do mesmo escritório.
+  escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
+  processoId: uuid('processo_id').references((): AnyPgColumn => processos.id),
 }, (table) => ({
   embeddingIndex: index('embedding_index').using('hnsw', table.embedding.op('vector_cosine_ops')),
 }));
@@ -117,6 +133,10 @@ export const escritorios = pgTable('escritorios', {
   email: text('email'),
   site: text('site'),
   logoUrl: text('logo_url'),
+  // Camada de créditos: saldo do ciclo e reserva de custo (centavos inteiros).
+  creditsAvailable: integer('credits_available').notNull().default(0),
+  reserveCentsUsed: integer('reserve_cents_used').notNull().default(0),
+  cycleMonth: text('cycle_month').notNull().default(sql`to_char(now(), 'YYYY-MM')`),
 });
 
 export const permissoesUsuario = pgTable('permissoes_usuario', {
@@ -285,6 +305,52 @@ export const appLogs = pgTable('app_logs', {
 }, (table) => ({
   createdIdx: index('app_logs_created_idx').on(table.createdAt),
   levelIdx: index('app_logs_level_idx').on(table.level),
+}));
+
+// Operações de IA com reserva prévia — fonte auditável da execução de LLM.
+export const aiOperations = pgTable('ai_operations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  escritorioId: uuid('escritorio_id').notNull(),
+  usuarioId: uuid('usuario_id'),
+  operationType: text('operation_type').notNull(),
+  status: text('status').notNull().default('reserved'),
+  model: text('model'),
+  modelUsed: text('model_used'),
+  fallbackReason: text('fallback_reason'),
+  creditsReserved: integer('credits_reserved').notNull().default(0),
+  creditsSettled: integer('credits_settled').notNull().default(0),
+  costCentsReserved: integer('cost_cents_reserved').notNull().default(0),
+  costCentsActual: integer('cost_cents_actual').notNull().default(0),
+  tokensIn: integer('tokens_in').notNull().default(0),
+  tokensOut: integer('tokens_out').notNull().default(0),
+  maxInputTokens: integer('max_input_tokens'),
+  maxOutputTokens: integer('max_output_tokens'),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+}, (table) => ({
+  escIdx: index('ai_operations_esc_idx').on(table.escritorioId, table.createdAt),
+  statusIdx: index('ai_operations_status_idx').on(table.status),
+}));
+
+// Ledger de créditos (append-only): reserva, liquidação, liberação, ajuste.
+export const creditLedger = pgTable('credit_ledger', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  escritorioId: uuid('escritorio_id').notNull(),
+  usuarioId: uuid('usuario_id'),
+  operationId: uuid('operation_id'),
+  operationType: text('operation_type'),
+  kind: text('kind').notNull(),
+  creditsDelta: integer('credits_delta').notNull().default(0),
+  costCents: integer('cost_cents').notNull().default(0),
+  model: text('model'),
+  idempotencyKey: text('idempotency_key').unique(),
+  status: text('status'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  escIdx: index('credit_ledger_esc_idx').on(table.escritorioId, table.createdAt),
 }));
 
 

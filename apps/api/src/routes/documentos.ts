@@ -1,15 +1,21 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../db/client.js';
-import { documentos, chunks, documentosGerados } from '../db/schema.js';
+import { documentosGerados } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
 import { checkTokenQuota } from '../services/usage.js';
+import {
+  processarUploadDocumento,
+  validarProcessoDoEscritorio,
+  validarEscritorioInformadoNoBody,
+  listarDocumentosDoEscritorio,
+} from '../services/documento.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
+import { tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
 import { parseBody, formatZodError, colecaoSchema } from '../validation/schemas.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
-import { eq } from 'drizzle-orm';
 
 const router = Router();
 
@@ -42,9 +48,15 @@ function handleUploadError(err: unknown, _req: Request, res: Response, next: Nex
   next(err);
 }
 
+// GET / — lista SOMENTE os documentos do escritório autenticado.
+// Documentos sem escopo (quarentena 'unscoped') nunca aparecem aqui.
 router.get('/', async (req, res) => {
   try {
-    const data = await db.select().from(documentos).orderBy(documentos.indexado);
+    const escritorioId = tenantScopeEscritorioId(req as AuthenticatedRequest);
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+    const data = await listarDocumentosDoEscritorio(escritorioId);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar documentos' });
@@ -56,11 +68,41 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
+
+    // 1. Escopo derivado do CONTEXTO AUTENTICADO (nunca do body).
+    const escritorioId = tenantScopeEscritorioId(req as AuthenticatedRequest);
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+
+    // 11. Nunca confia em escritorio_id enviado pelo frontend: diferente → rejeita.
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const escInformado = body.escritorioId ?? body.escritorio_id;
+    const escCheck = validarEscritorioInformadoNoBody(escInformado, escritorioId);
+    if (!escCheck.ok) {
+      await recordAudit(req, 'UPLOAD_DOCUMENTO_BLOQUEADO', {
+        detalhes: { motivo: 'escritorio-id-informado-diferente' },
+      });
+      return res.status(403).json({ error: escCheck.motivo });
+    }
+
     const parsed = parseBody(colecaoSchema, req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
-    const colecao = parsed.data.colecao;
+    const { colecao, area, processoId } = parsed.data;
+
+    // 3/10. processoId (se enviado) deve pertencer ao MESMO escritório.
+    if (processoId) {
+      const pertence = await validarProcessoDoEscritorio(processoId, escritorioId);
+      if (!pertence) {
+        await recordAudit(req, 'UPLOAD_DOCUMENTO_BLOQUEADO', {
+          alvoId: processoId,
+          detalhes: { motivo: 'processo-de-outro-escritorio' },
+        });
+        return res.status(403).json({ error: 'Processo informado não pertence ao escritório do usuário.' });
+      }
+    }
 
     // Cota de tokens do modo demo: bloqueia a indexação (geração de embeddings)
     const quota = await checkTokenQuota(req as AuthenticatedRequest);
@@ -70,8 +112,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
         code: 'TOKEN_LIMIT_EXCEEDED',
       });
     }
-    
-    // Mock upload flow for Phase 1 -> Now Real Flow!
+
     const sizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
 
     // Valida magic bytes do PDF (conteúdo deve começar com %PDF)
@@ -79,67 +120,56 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
     if (!header.startsWith('%PDF')) {
       return res.status(400).json({ error: 'Arquivo inválido: o conteúdo não é um PDF válido.' });
     }
-    
-    // Parse PDF
+
+    // 4. numPages do PDF → total_pages (pdf-parse expõe `numpages`).
     const pdfData = await pdfParse(req.file.buffer);
-    const text = pdfData.text;
+    const totalPages = Number((pdfData as any).numpages) || null;
 
-    // Simple chunking (e.g. by paragraphs or fixed length)
-    const rawChunks = text.split('\n\n').filter((c: string) => c.trim().length > 50);
-    
-    const novo = await db.insert(documentos).values({
-      nome: req.file.originalname,
-      colecao,
-      tamanho: `${sizeMB} MB`,
-      chunks: rawChunks.length,
-    }).returning();
-    
-    const docId = novo[0].id;
-
-    // Process chunks and get embeddings
-    let indexedCount = 0;
-    for (const chunkText of rawChunks) {
-      try {
-        const embedding = await generateEmbedding(chunkText, (req as any).user?.id);
-        await db.insert(chunks).values({
-          documentoId: docId,
-          colecao,
-          texto: chunkText,
-          embedding,
-          metadata: { fonte: req.file.originalname, ...(parsed.data.area ? { area: parsed.data.area } : {}) }
-        });
-        indexedCount += 1;
-      } catch (e) {
-        console.error('Error generating embedding for chunk:', e);
+    // 5–9. Persistência via serviço (escopo + status + failed_chunks).
+    const rawChunks = pdfData.text.split('\n\n').filter((c: string) => c.trim().length > 50);
+    let resultado;
+    try {
+      resultado = await processarUploadDocumento({
+        nome: req.file.originalname,
+        colecao,
+        tamanho: `${sizeMB} MB`,
+        area,
+        totalPages,
+        escritorioId,
+        processoId: processoId ?? null,
+        usuarioId: (req as any).user?.id ?? null,
+        chunkTexts: rawChunks,
+        gerarEmbedding: async (texto, usuarioId) => generateEmbedding(texto, usuarioId),
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('embeddings')) {
+        return res.status(502).json({ error: e.message });
       }
-    }
-
-    // Nenhum chunk foi indexado (ex.: serviço de embeddings indisponível):
-    // remove o registro enganoso do documento e falha a operação em vez de retornar 201.
-    if (indexedCount === 0) {
-      await db.delete(documentos).where(eq(documentos.id, docId));
-      await db.delete(documentosGerados).where(eq(documentosGerados.documentoId, docId));
-      return res.status(502).json({ error: 'Falha ao indexar o documento: serviço de embeddings indisponível.' });
-    }
-
-    // Mantém a contagem de chunks do documento coerente com o que realmente foi indexado
-    if (indexedCount !== rawChunks.length) {
-      await db.update(documentos).set({ chunks: indexedCount }).where(eq(documentos.id, docId));
+      throw e;
     }
 
     await recordAudit(req, 'UPLOAD_DOCUMENTO', {
-      alvoId: docId,
-      detalhes: { nome: req.file.originalname, colecao, tamanho: `${sizeMB} MB`, chunks: indexedCount },
+      alvoId: resultado.documento.id,
+      detalhes: {
+        nome: req.file.originalname,
+        colecao,
+        tamanho: `${sizeMB} MB`,
+        chunks: resultado.chunksIndexed,
+        failedChunks: resultado.failedChunks,
+        totalPages,
+        processoId: processoId ?? null,
+        status: resultado.status,
+      },
     });
 
     await db.insert(documentosGerados).values({
       usuarioId: (req as any).user?.id || null,
-      documentoId: docId,
+      documentoId: resultado.documento.id,
       tipo: 'upload',
       titulo: req.file.originalname,
     });
 
-    res.status(201).json({ ...novo[0], chunksIndexed: indexedCount });
+    res.status(201).json({ ...resultado.documento, chunksIndexed: resultado.chunksIndexed });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer upload' });
   }

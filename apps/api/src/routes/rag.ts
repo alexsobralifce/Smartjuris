@@ -1,14 +1,21 @@
 import { Router } from 'express';
 import type OpenAI from 'openai';
 import { db } from '../db/client.js';
-import { chunks, processos, clientes, usuarios, escritorios } from '../db/schema.js';
+import { processos, clientes, usuarios, escritorios } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { decryptField } from '../services/crypto.js';
 import { deepseekClient, deepseekModel, deepseekModelPro, selecionarModeloDeepSeek } from '../services/ai.js';
+import {
+  validarProcessoDoEscritorio,
+  buscarChunksPorEmbedding,
+  buscarChunksPorKeywords,
+} from '../services/documento.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
-import { cosineDistance, sql, desc, or, and, eq } from 'drizzle-orm';
+import { tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
+import { recordAudit } from '../middlewares/audit.js';
+import { and, eq } from 'drizzle-orm';
 import { parseBody, formatZodError, ragGenerateSchema } from '../validation/schemas.js';
 import { AREAS, MODELOS_PECA, buscarModelo } from '../services/modelosPeca.js';
 
@@ -61,6 +68,25 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
     }
     const { tipo, area, dadosCaso, isComplex } = parsed.data;
 
+    // Fase 2A — escopo derivado do contexto autenticado (nunca do cliente).
+    const escritorioId = tenantScopeEscritorioId(req as AuthenticatedRequest);
+    if (!escritorioId) {
+      await recordAudit(req, 'RAG_BLOQUEADO', { detalhes: { motivo: 'sem-escopo-escritorio' } });
+      return res.status(403).json({ error: 'Sem escopo de escritório para geração de peças.' });
+    }
+
+    // processoId (se enviado) deve pertencer ao MESMO escritório.
+    if (parsed.data.processoId) {
+      const pertence = await validarProcessoDoEscritorio(parsed.data.processoId, escritorioId);
+      if (!pertence) {
+        await recordAudit(req, 'RAG_BLOQUEADO', {
+          alvoId: parsed.data.processoId,
+          detalhes: { motivo: 'processo-de-outro-escritorio' },
+        });
+        return res.status(403).json({ error: 'Processo informado não pertence ao escritório do usuário.' });
+      }
+    }
+
     // Estrutura obrigatória da peça a partir do catálogo de modelos
     const modelo = buscarModelo(tipo, area);
     const estrutura = modelo
@@ -75,12 +101,15 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
     let blocoDados = '';
     try {
       const autorId = (req as AuthenticatedRequest).user?.id;
-      const escritorioId = (req as AuthenticatedRequest).user?.escritorioId;
       const linhas: string[] = [];
 
+      const processoIdVinculado = parsed.data.processoId;
       let processoRow: typeof processos.$inferSelect | undefined;
-      if (parsed.data.processoId) {
-        [processoRow] = await db.select().from(processos).where(eq(processos.id, parsed.data.processoId)).limit(1);
+      if (processoIdVinculado) {
+        // Defesa em profundidade: processo já validado no mesmo escritório acima.
+        [processoRow] = await db.select().from(processos)
+          .where(and(eq(processos.id, processoIdVinculado), eq(processos.escritorioId, escritorioId)))
+          .limit(1);
       }
 
       if (processoRow) {
@@ -190,31 +219,13 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 
       if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 30, label: 'Buscando jurisprudência no RAG...' })}\n\n`);
 
-      // Similarity search (HNSW / cosine distance), restrito à área da peça.
-      const areaFiltro = sql`${chunks.metadata}->>'area' = ${area}`;
-      const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
-      relevantChunks = await db
-        .select({
-          texto: chunks.texto,
-          metadata: chunks.metadata,
-          similarity
-        })
-        .from(chunks)
-        .where(areaFiltro)
-        .orderBy((t) => desc(t.similarity))
-        .limit(5);
-      // Sem chunks da área indexados (ex.: base sem metadata de área), cai para a
-      // busca geral para nunca devolver resultado vazio.
+      // Similarity search (HNSW / cosine distance), SEMPRE escopada ao
+      // escritório autenticado; a área da peça é filtro ADICIONAL (Fase 2A).
+      relevantChunks = await buscarChunksPorEmbedding(escritorioId, area, embedding);
+      // Sem chunks da área indexados (ex.: base sem metadata de área), cai para
+      // a busca geral DO MESMO ESCRITÓRIO para nunca devolver resultado vazio.
       if (relevantChunks.length === 0) {
-        relevantChunks = await db
-          .select({
-            texto: chunks.texto,
-            metadata: chunks.metadata,
-            similarity
-          })
-          .from(chunks)
-          .orderBy((t) => desc(t.similarity))
-          .limit(5);
+        relevantChunks = await buscarChunksPorEmbedding(escritorioId, null, embedding);
       }
     } catch {
       // Fallback: busca por palavras-chave quando os embeddings estão indisponíveis
@@ -241,23 +252,16 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       // Fallback mínimo quando nenhuma keyword restar
       const effectiveKeywords = keywords.length > 0 ? keywords : [tipo, area].filter(Boolean);
 
-      const likeClauses = effectiveKeywords.map(k => sql`${chunks.texto} ILIKE ${'%' + k.replace(/'/g, "''") + '%'}`);
+      // Fallback por palavras-chave escopado ao escritório + área da peça.
+      let rows = await buscarChunksPorKeywords(escritorioId, area, effectiveKeywords);
 
-      // Busca por palavras-chave filtrada pela ÁREA da peça (o fallback anterior
-      // não filtrava e recuperava chunks de áreas erradas, ex.: CTN numa peça cível).
-      const areaFiltroFallback = sql`${chunks.metadata}->>'area' = ${area}`;
-      let rows = likeClauses.length > 0
-        ? await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).where(and(areaFiltroFallback, or(...likeClauses))).limit(5)
-        : [];
-
-      // Nunca devolve vazio: sem correspondência na área, repete a busca geral.
+      // Nunca devolve vazio: sem correspondência na área, repete a busca geral
+      // (ainda DENTRO do mesmo escritório).
       if (rows.length === 0) {
-        rows = likeClauses.length > 0
-          ? await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).where(or(...likeClauses)).limit(5)
-          : await db.select({ texto: chunks.texto, metadata: chunks.metadata }).from(chunks).limit(5);
+        rows = await buscarChunksPorKeywords(escritorioId, null, effectiveKeywords);
       }
 
-      relevantChunks = rows.map(r => ({ texto: r.texto, metadata: r.metadata, similarity: 0 }));
+      relevantChunks = rows;
     }
 
     const contexto = relevantChunks.map(c => c.texto).join('\n\n');

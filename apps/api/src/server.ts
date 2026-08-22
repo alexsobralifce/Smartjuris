@@ -18,6 +18,7 @@ import adminEscritorioRoutes from './routes/adminEscritorio.js';
 import permissoesRoutes from './routes/permissoes.js';
 import rootStatsRoutes from './routes/rootStats.js';
 import rootCreditosRoutes from './routes/rootCreditos.js';
+import rootDocumentosRoutes from './routes/rootDocumentos.js';
 import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 import agendaRoutes from './routes/agenda.js';
 
@@ -71,6 +72,7 @@ app.use('/api/auth', authRoutes);
 
 // Plataforma — root only
 app.use('/api/root/escritorios', authMiddleware, refreshSession, requireRoot, escritorioRoutes);
+app.use('/api/root/documentos', authMiddleware, refreshSession, requireRoot, rootDocumentosRoutes);
 app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootCreditosRoutes);
 app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootStatsRoutes);
 

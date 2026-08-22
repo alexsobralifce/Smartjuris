@@ -111,6 +111,13 @@ export const colecaoSchema = z.object({
   colecao: z.string().default('Jurisprudência'),
   // Área do direito da fonte — usada para filtrar a recuperação no RAG.
   area: z.string().optional(),
+  // Vínculo opcional a um processo do MESMO escritório (validado na rota).
+  processoId: z.string().uuid().optional().nullable(),
+});
+
+// --- Root: associação manual de documento sem escopo (quarentena) a um escritório ---
+export const documentoEscritorioSchema = z.object({
+  escritorioId: z.string().uuid(),
 });
 
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown) {

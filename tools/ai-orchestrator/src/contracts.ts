@@ -41,6 +41,9 @@ export type Roadmap = z.infer<typeof Roadmap>;
 
 // --- Configuração de automação (automation-config.json) ---
 
+export const PreflightMode = z.enum(['collect-all', 'fail-fast']);
+export type PreflightMode = z.infer<typeof PreflightMode>;
+
 export const AutomationConfig = z.object({
   project: z.string(),
   roadmap: z.string(),
@@ -51,6 +54,8 @@ export const AutomationConfig = z.object({
     provider: z.string(),
     model: z.string(),
     complexModel: z.string(),
+    /** A partir de quantas tentativas de correção o implementador sobe para complexModel (flash→pro). */
+    escalateAfterAttempts: z.number().int().nonnegative().default(2).optional(),
   }),
   reviewer: z.object({
     provider: z.string(),
@@ -64,6 +69,20 @@ export const AutomationConfig = z.object({
     blockOnHigh: z.boolean(),
     blockOnBlocker: z.boolean(),
   }),
+  preflight: z.object({
+    mode: PreflightMode,
+  }).default({ mode: 'collect-all' }).optional(),
+  pricing: z.object({
+    version: z.string(),
+    overheadMultiplier: z.number().positive(),
+    models: z.array(z.object({
+      provider: z.string(),
+      model: z.string(),
+      inputMissUsdPerMillion: z.number().nonnegative(),
+      inputHitUsdPerMillion: z.number().nonnegative(),
+      outputUsdPerMillion: z.number().nonnegative(),
+    })),
+  }).default({ version: 'unconfigured', overheadMultiplier: 1, models: [] }).optional(),
   commands: z.object({
     apiTests: z.string(),
     webTests: z.string(),
@@ -147,7 +166,7 @@ export type ImplementerReport = z.infer<typeof ImplementerReport>;
 
 // --- Resumo de execução (run.json) ---
 
-export const RUN_MODES = ['interactive', 'auto-commit', 'no-auto-commit', 'allow-dirty', 'dry-run', 'autonomous'] as const;
+export const RUN_MODES = ['interactive', 'auto-commit', 'no-auto-commit', 'allow-dirty', 'dry-run', 'autonomous', 'manual-approval'] as const;
 export const RunMode = z.enum(RUN_MODES);
 export type RunMode = z.infer<typeof RunMode>;
 
@@ -177,5 +196,19 @@ export const RunSummary = z.object({
   // flag indicando que o veredito veio do cache (sem chamada ao revisor).
   contextHash: z.string().optional(),
   fromCache: z.boolean().optional(),
+  skippedReviewer: z.boolean().optional(),
+  skipReason: z.enum(['preflight_failed', 'no_diff']).optional(),
+  reviewedSha: z.string().nullable().optional(),
+  manualApproval: z.object({
+    approvedBy: z.string(),
+    reason: z.string(),
+    approvedAt: z.string(),
+  }).optional(),
+  tokenUsage: z.object({
+    promptTokens: z.number().int().nonnegative(),
+    completionTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+  }).optional(),
+  costEstimateUsd: z.number().nonnegative().nullable().optional(),
 }).strict();
 export type RunSummary = z.infer<typeof RunSummary>;

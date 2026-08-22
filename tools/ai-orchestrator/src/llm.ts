@@ -7,9 +7,21 @@ import { z } from 'zod';
 import { AuditResult, type AuditResult as AuditResultType } from './contracts.js';
 import type { EffectiveEnv } from './config.js';
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LlmCompletion {
+  content: string;
+  usage: TokenUsage;
+}
+
 export interface LlmClient {
-  implementer(prompt: string): Promise<string>;
-  reviewer(context: string, correctionHint?: string): Promise<string>;
+  /** `complex=true` usa o modelo pro (escada flash→pro em rodadas de correção avançadas). */
+  implementer(prompt: string, opts?: { complex?: boolean }): Promise<LlmCompletion>;
+  reviewer(context: string, correctionHint?: string): Promise<LlmCompletion>;
 }
 
 export async function chatCompletion(opts: {
@@ -24,7 +36,7 @@ export async function chatCompletion(opts: {
    *  OpenAI mais novos exigem `max_completion_tokens`. */
   completionTokensField?: 'max_tokens' | 'max_completion_tokens';
   timeoutMs?: number;
-}): Promise<string> {
+}): Promise<LlmCompletion> {
   const url = `${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const field = opts.completionTokensField ?? 'max_tokens';
   const body: Record<string, unknown> = {
@@ -65,17 +77,23 @@ export async function chatCompletion(opts: {
       }
       const data = (await res.json()) as {
         choices?: { message?: { content?: unknown; reasoning_content?: unknown } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       };
       const message = data.choices?.[0]?.message;
+      const usage: TokenUsage = {
+        promptTokens: data.usage?.prompt_tokens ?? 0,
+        completionTokens: data.usage?.completion_tokens ?? 0,
+        totalTokens: data.usage?.total_tokens ?? 0,
+      };
       const content = message?.content;
       if (typeof content === 'string' && content.trim() !== '') {
-        return content;
+        return { content, usage };
       }
       // Modelos de raciocínio (ex.: deepseek-v4-flash) podem consumir todo o
       // max_tokens no `reasoning_content` e devolver `content` vazio. Nesse
       // caso, usa o raciocínio como fallback em vez de derrubar a fase.
       if (typeof message?.reasoning_content === 'string' && message.reasoning_content.trim() !== '') {
-        return message.reasoning_content;
+        return { content: message.reasoning_content, usage };
       }
       lastError = new Error('LLM retornou resposta vazia.');
       continue; // tenta novamente uma vez
@@ -171,11 +189,11 @@ export function parseAudit(jsonText: string): AuditResultType {
 
 export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmClient {
   return {
-    async implementer(prompt: string): Promise<string> {
+    async implementer(prompt: string, opts?: { complex?: boolean }): Promise<LlmCompletion> {
       return chatCompletion({
         baseUrl: env.deepseekBaseUrl,
         apiKey: env.deepseekApiKey,
-        model: env.deepseekModel,
+        model: opts?.complex ? env.deepseekModelPro : env.deepseekModel,
         system: 'Você é o implementador do SmartJuris. Implemente apenas a fase solicitada, execute testes e build e reporte evidências. Não invente dados nem altere arquivos fora do escopo.',
         user: prompt,
         temperature: 0.3,
@@ -183,7 +201,7 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },
-    async reviewer(context: string, correctionHint?: string): Promise<string> {
+    async reviewer(context: string, correctionHint?: string): Promise<LlmCompletion> {
       const user = correctionHint
         ? `${context}\n\nA resposta anterior não seguiu o contrato. Erro: ${correctionHint}\nResponda novamente somente com o JSON válido do contrato.`
         : context;
@@ -200,20 +218,36 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
   };
 }
 
+export interface AuditWithRetryResult {
+  audit: AuditResultType;
+  rawResponses: string[];
+  corrected: boolean;
+  /** Tokens somados de TODAS as chamadas ao revisor (inclui retry de contrato). */
+  usage: TokenUsage;
+}
+
+function sumUsage(items: TokenUsage[]): TokenUsage {
+  return {
+    promptTokens: items.reduce((acc, u) => acc + u.promptTokens, 0),
+    completionTokens: items.reduce((acc, u) => acc + u.completionTokens, 0),
+    totalTokens: items.reduce((acc, u) => acc + u.totalTokens, 0),
+  };
+}
+
 export function validateAuditWithRetry(
   llm: LlmClient,
   context: string,
-): Promise<{ audit: AuditResultType; rawResponses: string[]; corrected: boolean }> {
+): Promise<AuditWithRetryResult> {
   return (async () => {
     const raw1 = await llm.reviewer(context);
     try {
-      const audit = parseAudit(raw1);
-      return { audit, rawResponses: [raw1], corrected: false };
+      const audit = parseAudit(raw1.content);
+      return { audit, rawResponses: [raw1.content], corrected: false, usage: raw1.usage };
     } catch (err) {
       const hint = (err as Error).message;
       const raw2 = await llm.reviewer(context, hint);
-      const audit = parseAudit(raw2); // lança AuditParseError se persistir
-      return { audit, rawResponses: [raw1, raw2], corrected: true };
+      const audit = parseAudit(raw2.content); // lança AuditParseError se persistir
+      return { audit, rawResponses: [raw1.content, raw2.content], corrected: true, usage: sumUsage([raw1.usage, raw2.usage]) };
     }
   })();
 }

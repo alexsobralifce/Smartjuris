@@ -14,9 +14,9 @@ import {
   buildHistoryRow,
 } from './roadmap.js';
 import { extractPhasePrompts } from './prompts.js';
-import { readText, writeTextAtomic } from './io.js';
+import { readText, writeTextAtomic, mkdirRecursive, writeArtifact } from './io.js';
 import { tokenizeCommand } from './executor.js';
-import { type RunDeps } from './run.js';
+import { compactTimestamp, type RunDeps } from './run.js';
 import type { PhaseState, RoadmapPhase, RunMode } from './contracts.js';
 
 const MANUAL_APPROVE_STATES: PhaseState[] = ['AUDIT_PENDING', 'CORRECTION_PENDING', 'IMPLEMENTED', 'AUDIT_FAILED'];
@@ -95,13 +95,16 @@ export async function printRelatorio(deps: RunDeps): Promise<void> {
     verdict: string | null;
     graves: number | null;
     achados: number | null;
+    costUsd: number | null;
+    promptTokens: number;
+    completionTokens: number;
   }>>();
   for (const entry of entries) {
     const m = entry.match(/^(\d{8}T\d{6}Z)-(.+)$/);
     if (!m) continue;
     const fase = m[2];
     const dir = safeJoin(runsDir, entry);
-    let run: { status?: string; reviewerModel?: string } = {};
+    let run: { status?: string; reviewerModel?: string; costEstimateUsd?: number | null; tokenUsage?: { promptTokens?: number; completionTokens?: number } } = {};
     try {
       run = JSON.parse(readFileSync(safeJoin(dir, 'run.json'), 'utf8'));
     } catch {
@@ -125,6 +128,9 @@ export async function printRelatorio(deps: RunDeps): Promise<void> {
       verdict: audit?.verdict ?? null,
       graves: audit ? achados.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER').length : null,
       achados: audit ? achados.length : null,
+      costUsd: typeof run.costEstimateUsd === 'number' ? run.costEstimateUsd : null,
+      promptTokens: run.tokenUsage?.promptTokens ?? 0,
+      completionTokens: run.tokenUsage?.completionTokens ?? 0,
     };
     const lista = porFase.get(fase) ?? [];
     lista.push(item);
@@ -138,16 +144,28 @@ export async function printRelatorio(deps: RunDeps): Promise<void> {
   console.log(`Gate de avanço  : testes=${deps.config.limits.requireTests ? 'obrigatórios' : 'não'} · build=${deps.config.limits.requireBuild ? 'obrigatório' : 'não'} · diff=${deps.config.limits.requireDiff ? 'obrigatório' : 'não'}`);
   console.log('');
 
-  console.log('Fase        Estado               Rounds  Último veredito      Revisor         Achados (HIGH)');
+  const custoTotalFase = (runs: Array<{ costUsd: number | null }>): string => {
+    const sum = runs.reduce((acc, r) => acc + (r.costUsd ?? 0), 0);
+    const any = runs.some((r) => r.costUsd !== null);
+    return any ? `$${sum.toFixed(4)}` : '—';
+  };
+  const tokensTotalFase = (runs: Array<{ promptTokens: number; completionTokens: number }>): string => {
+    const p = runs.reduce((a, r) => a + r.promptTokens, 0);
+    const c = runs.reduce((a, r) => a + r.completionTokens, 0);
+    return p + c > 0 ? `${p}/${c}` : '—';
+  };
+
+  console.log('Fase        Estado               Rounds  Verdict    Revisor     Tokens(in/out)  Custo (USD)');
   for (const phase of phases) {
     const runs = porFase.get(phase.id) ?? [];
     const ultimo = runs.length > 0 ? runs[runs.length - 1] : null;
     const rounds = runs.length > 0 ? String(runs.length) : '—';
     const veredito = ultimo?.verdict ?? '—';
     const revisor = ultimo && ultimo.reviewer !== '?' ? ultimo.reviewer : '—';
-    const achados = ultimo && ultimo.achados != null ? `${ultimo.achados} (${ultimo.graves ?? 0})` : '—';
+    const tokens = tokensTotalFase(runs);
+    const custo = custoTotalFase(runs);
     console.log(
-      `${phase.id.padEnd(11)} ${phase.status.padEnd(20)} ${rounds.padEnd(7)} ${String(veredito).padEnd(19)} ${String(revisor).padEnd(16)} ${achados}`,
+      `${phase.id.padEnd(11)} ${phase.status.padEnd(20)} ${rounds.padEnd(7)} ${String(veredito).padEnd(10)} ${String(revisor).padEnd(11)} ${tokens.padEnd(14)} ${custo}`,
     );
   }
 
@@ -184,7 +202,8 @@ export async function printRelatorio(deps: RunDeps): Promise<void> {
  * Aprovação MANUAL (gate humano) via CLI. O roadmap só muda depois de
  * validação do estado atual e da transição permitida.
  */
-export function approvePhase(deps: RunDeps, phaseId: string, opts: { next?: boolean } = {}): void {
+export function approvePhase(deps: RunDeps, phaseId: string, opts: { next?: boolean; reason: string }): void {
+  if (!opts.reason.trim()) throw new Error('A aprovação manual exige --reason <justificativa>.');
   const roadmapFile = safeJoin(deps.aiDevDir, basename(deps.config.roadmap));
   const md = readText(roadmapFile);
   const { phases } = parseRoadmap(md);
@@ -196,19 +215,50 @@ export function approvePhase(deps: RunDeps, phaseId: string, opts: { next?: bool
     );
   }
   assertTransition(phase.status, 'AUDIT_APPROVED');
+  const approvedAt = new Date().toISOString();
+  const runId = `${compactTimestamp(new Date(approvedAt))}-${phaseId}`;
+  const runDir = safeJoin(deps.aiDevDir, 'runs', runId);
+  const audit = {
+    phase: phaseId,
+    verdict: 'APPROVE' as const,
+    advanceAllowed: true,
+    findings: [],
+    requiredFixes: [],
+    missingTests: [],
+    scopeViolations: [],
+    migrationRisks: [],
+    securityRisks: [],
+    financialRisks: [],
+    rollbackRisks: [],
+    nextPhase: null,
+  };
+  const manualApproval = { approvedBy: 'Humano (CLI)', reason: opts.reason.trim(), approvedAt };
+  mkdirRecursive(runDir);
+  writeArtifact(runDir, '10-audit-result.json', JSON.stringify(audit, null, 2));
+  writeArtifact(runDir, '17-manual-approval.json', JSON.stringify(manualApproval, null, 2));
+  writeArtifact(runDir, 'run.json', JSON.stringify({
+    runId,
+    phase: phaseId,
+    startedAt: approvedAt,
+    finishedAt: approvedAt,
+    status: 'AUDIT_APPROVED',
+    branch: null,
+    implementerModel: 'N/A',
+    reviewerModel: 'Humano (CLI)',
+    artifactFiles: ['10-audit-result.json', '17-manual-approval.json', 'run.json'],
+    mode: 'manual-approval',
+    manualApproval,
+  }, null, 2));
   const historyRow = buildHistoryRow({
-    date: new Date().toISOString().slice(0, 10),
+    date: approvedAt.slice(0, 10),
     phase: phaseId,
     implementer: phase.implementer || 'DeepSeek',
     reviewer: 'Humano (CLI)',
     verdict: 'APPROVE',
     advanceAllowed: true,
-    note: 'Aprovação manual via ai:approve',
+    note: `Aprovação manual: ${opts.reason.trim()}`,
   });
-  writeTextAtomic(
-    roadmapFile,
-    renderRoadmap(md, { [phaseId]: 'AUDIT_APPROVED' }, [historyRow]),
-  );
+  writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_APPROVED' }, [historyRow]));
   deps.log.info(`Fase ${phaseId} marcada como AUDIT_APPROVED (aprovação manual).`);
 
   if (opts.next) {

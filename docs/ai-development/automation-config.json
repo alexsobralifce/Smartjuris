@@ -7,19 +7,43 @@
   "implementer": {
     "provider": "deepseek",
     "model": "deepseek-v4-flash",
-    "complexModel": "deepseek-v4-pro"
+    "complexModel": "deepseek-v4-pro",
+    "escalateAfterAttempts": 2
   },
   "reviewer": {
     "provider": "openai",
     "model": "gpt-5.6-luna"
   },
   "limits": {
-    "maxCorrectionAttempts": 20,
+    "maxCorrectionAttempts": 4,
     "requireTests": true,
     "requireBuild": true,
     "requireDiff": true,
     "blockOnHigh": true,
     "blockOnBlocker": true
+  },
+  "preflight": {
+    "mode": "collect-all"
+  },
+  "pricing": {
+    "version": "2026-03-16",
+    "overheadMultiplier": 1.3,
+    "models": [
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "inputMissUsdPerMillion": 0.351,
+        "inputHitUsdPerMillion": 0.091,
+        "outputUsdPerMillion": 1.43
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-pro",
+        "inputMissUsdPerMillion": 0.715,
+        "inputHitUsdPerMillion": 0.182,
+        "outputUsdPerMillion": 2.847
+      }
+    ]
   },
   "commands": {
     "apiTests": "pnpm --filter @lexia/api test",

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel do Orquestrador — SmartJuris</title>
+<style>
+  :root {
+    --bg: #f4f3f0;
+    --surface: #ffffff;
+    --border: #d8d6d0;
+    --fg: #18170f;
+    --muted: #7a7870;
+    --ok: #2d6a4f;
+    --ok-bg: #d8ede4;
+    --warn: #92400e;
+    --warn-bg: #fef3c7;
+    --bad: #7f1d1d;
+    --bad-bg: #fee2e2;
+    --accent: #1a2744;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    padding: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  h1 { font-size: 22px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card .label { font-size: 12px; color: var(--muted); }
+  .card .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .card.ok .value { color: var(--ok); }
+  .card.bad .value { color: var(--bad); }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .st-ok { background: var(--ok-bg); color: var(--ok); }
+  .st-warn { background: var(--warn-bg); color: var(--warn); }
+  .st-bad { background: var(--bad-bg); color: var(--bad); }
+  .st-neutral { background: #e8eaf0; color: var(--accent); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #bbb; }
+  .dot.live { background: #22c55e; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; font-size: 14px; border-bottom: 1px solid var(--border); }
+  th { background: #eeede9; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  .checks { font-size: 13px; white-space: nowrap; }
+  .checks .ok { color: var(--ok); }
+  .checks .bad { color: var(--bad); }
+  .checks .na { color: var(--muted); }
+  .section-title { font-size: 16px; margin: 22px 0 10px; }
+  .last-runs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .run-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .run-chip small { color: var(--muted); }
+  .empty { color: var(--muted); padding: 16px; }
+  footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 640px) { table { font-size: 12px; } th, td { padding: 7px 8px; } }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Painel do Orquestrador</h1>
+    <div class="sub">
+      <span class="dot" id="liveDot"></span>
+      <span id="updatedAt">carregando…</span>
+    </div>
+  </header>
+
+  <div class="cards" id="cards"></div>
+
+  <h2 class="section-title">Fases</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Fase</th>
+        <th>Estado</th>
+        <th class="num">Rodadas</th>
+        <th>Último veredito</th>
+        <th>Testes / Build / Diff</th>
+        <th class="num">Custo (US$)</th>
+        <th class="num">Tokens</th>
+        <th class="num">Achados abertos</th>
+      </tr>
+    </thead>
+    <tbody id="phaseRows"></tbody>
+  </table>
+
+  <h2 class="section-title">Últimos runs</h2>
+  <div class="last-runs" id="lastRuns"></div>
+
+  <footer>
+    Auto-atualiza a cada 3s. Revisor: <span id="cfgReviewer"></span> · Teto de correções:
+    <span id="cfgTeto"></span> · Pre-flight: <span id="cfgPreflight"></span>
+  </footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function badge(estado) {
+  const e = String(estado);
+  let cls = 'st-neutral';
+  if (/AUDIT_APPROVED|APPROVE/.test(e)) cls = 'st-ok';
+  else if (/CORRECTION|REJECT|FAILED/.test(e)) cls = 'st-bad';
+  else if (/PENDING|IMPLEMENT|PLANNED/.test(e)) cls = 'st-warn';
+  return `<span class="status ${cls}">${e}</span>`;
+}
+
+function check(v) {
+  if (v === true) return '<span class="ok">✔</span>';
+  if (v === false) return '<span class="bad">✖</span>';
+  return '<span class="na">—</span>';
+}
+
+function usd(v) { return v === null || v === undefined ? '—' : '$' + Number(v).toFixed(4); }
+function k(v) {
+  const n = Number(v) || 0;
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return String(n);
+}
+
+function render(s) {
+  $('updatedAt').textContent = 'atualizado às ' + new Date(s.geradoEm).toLocaleTimeString('pt-BR');
+  $('liveDot').classList.add('live');
+  $('cfgReviewer').textContent = s.config.revisor;
+  $('cfgTeto').textContent = s.config.tetoCorrecoes;
+  $('cfgPreflight').textContent = s.config.preflight;
+
+  const t = s.totais;
+  $('cards').innerHTML = `
+    <div class="card"><div class="label">Custo total (US$)</div><div class="value">${usd(t.custoUsd)}</div></div>
+    <div class="card"><div class="label">Tokens</div><div class="value">${k(t.tokens)}</div></div>
+    <div class="card"><div class="label">Runs</div><div class="value">${t.runs}</div></div>
+    <div class="card ok"><div class="label">Fases aprovadas</div><div class="value">${t.fasesAprovadas}</div></div>
+    <div class="card ${t.fasesPendentes > 0 ? 'bad' : 'ok'}"><div class="label">Fases pendentes</div><div class="value">${t.fasesPendentes}</div></div>
+    <div class="card"><div class="label">Revisor poupado</div><div class="value">${t.revisorPoupado}</div></div>
+  `;
+
+  $('phaseRows').innerHTML = s.fases.map((f) => `
+    <tr>
+      <td><strong>${f.id}</strong></td>
+      <td>${badge(f.estado)}</td>
+      <td class="num">${f.rounds}</td>
+      <td>${f.ultimoVeredito ? badge(f.ultimoVeredito) : '—'}</td>
+      <td class="checks">${check(f.testesOk)} ${check(f.buildOk)} ${check(f.diffOk)}</td>
+      <td class="num">${usd(f.custoUsd)}</td>
+      <td class="num">${k(f.tokens)}</td>
+      <td class="num">${f.ledgerAbertos || '—'}</td>
+    </tr>
+  `).join('');
+
+  $('lastRuns').innerHTML = s.ultimosRuns.length
+    ? s.ultimosRuns.map((r) => `
+        <div class="run-chip">
+          ${r.fase} · ${badge(r.status)}<br>
+          <small>${r.veredito ?? 'sem veredito'}${r.skip ? ' · pre-flight' : ''}${r.cache ? ' · cache' : ''} · ${usd(r.custoUsd)} · ${k(r.promptTokens + r.completionTokens)} tok</small>
+        </div>
+      `).join('')
+    : '<div class="empty">Nenhum run ainda — execute <code>pnpm ai:run --phase &lt;ID&gt;</code> para começar.</div>';
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/snapshot', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    render(await res.json());
+  } catch (err) {
+    $('updatedAt').textContent = 'erro ao atualizar: ' + err.message;
+    $('liveDot').classList.remove('live');
+  }
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

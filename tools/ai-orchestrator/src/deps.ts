@@ -27,12 +27,12 @@ export function createRealDeps(opts: {
   const exec = new SafeExecutor();
 
   const llm: LlmClient = {
-    async implementer(prompt: string): Promise<string> {
+    async implementer(prompt: string, implOpts?: { complex?: boolean }) {
       const eff = loadEnv(opts.env, opts.config);
       return chatCompletion({
         baseUrl: eff.deepseekBaseUrl,
         apiKey: eff.deepseekApiKey,
-        model: eff.deepseekModel,
+        model: implOpts?.complex ? eff.deepseekModelPro : eff.deepseekModel,
         system:
           'Você é o implementador do SmartJuris. Implemente apenas a fase solicitada, execute testes e build e reporte evidências. Não invente dados nem altere arquivos fora do escopo.',
         user: prompt,
@@ -41,7 +41,7 @@ export function createRealDeps(opts: {
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },
-    async reviewer(context: string, correctionHint?: string): Promise<string> {
+    async reviewer(context: string, correctionHint?: string) {
       const eff = loadEnv(opts.env, opts.config);
       const user = correctionHint
         ? `${context}\n\nA resposta anterior não seguiu o contrato. Erro: ${correctionHint}\nResponda novamente somente com o JSON válido do contrato.`

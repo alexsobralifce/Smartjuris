@@ -134,6 +134,10 @@ export interface ReviewContextInput {
   auditHistory: string;
   /** Mudanças feitas nesta rodada em resposta às condições anteriores. */
   correctionsApplied: string;
+  /** Findings abertos do ledger (round 2+): o revisor valida SOMENTE estes itens. */
+  openFindings?: string;
+  /** Se true, é uma rodada de correção: auditoria focada no delta, sem novas exigências. */
+  isCorrection?: boolean;
 }
 
 /** Formato de passagem para o Terra (smartjuris-phase-prompts.md). */
@@ -181,6 +185,25 @@ export function buildReviewContext(input: ReviewContextInput): string {
   if (input.correctionsApplied.trim()) {
     parts.push('', 'Correções aplicadas NESTA rodada em resposta às condições anteriores:', input.correctionsApplied.trim());
   }
+
+  // Rodada de correção (round 2+): o revisor recebe o LEDGER de itens abertos e
+  // valida EXCLUSIVAMENTE se cada um foi resolvido — sem criar novas exigências.
+  if (input.isCorrection) {
+    parts.push(
+      '',
+      'MODO: VALIDAÇÃO DE CORREÇÃO (delta).',
+      'Você está avaliando EXCLUSIVAMENTE a correção dos itens abertos abaixo.',
+      'Para cada item, o veredito deve refletir apenas se foi RESOLVIDO (não reaparece como HIGH/BLOCKER) ou UNRESOLVIDO (continua HIGH/BLOCKER).',
+      'É PROIBIDO adicionar novos achados LOW/MEDIUM ou sugestões cosméticas/estilo.',
+      'Novos achados só são permitidos se forem HIGH/BLOCKER introduzidos diretamente nas linhas MODIFICADAS deste delta (nunca em arquivos/linhas não tocados).',
+    );
+    if (input.openFindings?.trim()) {
+      parts.push('', 'Itens abertos (avaliar apenas estes):', input.openFindings.trim());
+    } else {
+      parts.push('', 'Itens abertos: (nenhum — se o diff resolveu tudo, aprove sem novas exigências).');
+    }
+  }
+
   parts.push(
     '',
     'REGRAS DE REVISÃO:',

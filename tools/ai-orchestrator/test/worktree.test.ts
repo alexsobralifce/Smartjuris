@@ -197,30 +197,33 @@ class HybridExecutor implements Executor {
 function makeFakeLlm(repoRoot?: string): LlmClient {
   let counter = 1000;
   return {
-    async implementer(): Promise<string> {
+    async implementer() {
       if (repoRoot) {
         // Simula a implementação modificando um arquivo RASTREADO com conteúdo
         // DIFERENTE a cada fase (o diff da fase precisa ser não-vazio).
         counter += 1;
         writeFileSync(join(repoRoot, 'apps', 'api', 'src', 'code.ts'), `export const a = ${counter}; // implementado\n`, 'utf8');
       }
-      return 'Fase implementada. Testes: PASS. Build: PASS.';
+      return { content: 'Fase implementada. Testes: PASS. Build: PASS.', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
     },
-    async reviewer(): Promise<string> {
-      return JSON.stringify({
-        phase: '2A.1',
-        verdict: 'APPROVE',
-        advanceAllowed: true,
-        findings: [{ severity: 'PASS', file: null, line: null, requirement: 'tenancy', evidence: 'teste', impact: 'nenhum', action: 'nenhuma' }],
-        requiredFixes: [],
-        missingTests: [],
-        scopeViolations: [],
-        migrationRisks: [],
-        securityRisks: [],
-        financialRisks: [],
-        rollbackRisks: [],
-        nextPhase: '2A.2',
-      });
+    async reviewer() {
+      return {
+        content: JSON.stringify({
+          phase: '2A.1',
+          verdict: 'APPROVE',
+          advanceAllowed: true,
+          findings: [{ severity: 'PASS', file: null, line: null, requirement: 'tenancy', evidence: 'teste', impact: 'nenhum', action: 'nenhuma' }],
+          requiredFixes: [],
+          missingTests: [],
+          scopeViolations: [],
+          migrationRisks: [],
+          securityRisks: [],
+          financialRisks: [],
+          rollbackRisks: [],
+          nextPhase: '2A.2',
+        }),
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      };
     },
   };
 }
@@ -571,6 +574,18 @@ describe('teto de correções (memória contra retrabalho)', () => {
         '| 2026-08-21 | 2A.1 | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |',
       ].join('\n') + '\n';
     writeFileSync(join(repo.aiDevDir, 'implementation-roadmap.md'), roadmapComHistorico, 'utf8');
+    // Rodadas anteriores em DISCO (fonte canônica da contagem de tentativas).
+    const runsDir = join(repo.aiDevDir, 'runs');
+    for (const [runId, status] of [
+      ['20260820T000000Z-2A.1', 'AUDIT_FAILED'],
+      ['20260821T000000Z-2A.1', 'CORRECTION_PENDING'],
+    ] as const) {
+      mkdirSync(join(runsDir, runId), { recursive: true });
+      writeFileSync(join(runsDir, runId, 'run.json'), JSON.stringify({
+        runId, phase: '2A.1', startedAt: '2026-08-20T00:00:00.000Z', finishedAt: '2026-08-20T00:00:01.000Z',
+        status, branch: 'phase/2A.1', implementerModel: 'x', reviewerModel: 'y', artifactFiles: [],
+      }), 'utf8');
+    }
     // Roadmap modificado é protegido: commita antes de rodar a fase.
     git(repo.root, ['add', '-A']);
     git(repo.root, ['commit', '-q', '-m', 'roadmap historico']);
@@ -710,16 +725,22 @@ describe('cache de auditoria + loopgain (economia)', () => {
     // Fake LLM com veredito REJECT + 2 HIGH (não reduziu vs. anterior).
     const hybrid = new HybridExecutor(new SafeExecutor());
     const fakeLlm: LlmClient = {
-      async implementer(): Promise<string> { return 'ok'; },
-      async reviewer(): Promise<string> {
-        return JSON.stringify({
-          phase: '2A.1', verdict: 'REJECT', advanceAllowed: false,
-          findings: [
-            { severity: 'HIGH', file: 'a', line: 1, requirement: 'r1', evidence: 'e', impact: 'i', action: 'a' },
-            { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
-          ],
-          requiredFixes: ['x'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null,
-        });
+      async implementer() {
+        writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 699; // correcao\n', 'utf8');
+        return { content: 'ok', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
+      },
+      async reviewer() {
+        return {
+          content: JSON.stringify({
+            phase: '2A.1', verdict: 'REJECT', advanceAllowed: false,
+            findings: [
+              { severity: 'HIGH', file: 'a', line: 1, requirement: 'r1', evidence: 'e', impact: 'i', action: 'a' },
+              { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
+            ],
+            requiredFixes: ['x'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null,
+          }),
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        };
       },
     };
     const deps = {
@@ -773,16 +794,22 @@ describe('cache de auditoria + loopgain (economia)', () => {
     // (progresso real: 1 resolvido, 1 novo equivalente) → NÃO abre circuito.
     const hybrid = new HybridExecutor(new SafeExecutor());
     const fakeLlm: LlmClient = {
-      async implementer(): Promise<string> { return 'ok'; },
-      async reviewer(): Promise<string> {
-        return JSON.stringify({
-          phase: '2A.1', verdict: 'REJECT', advanceAllowed: false,
-          findings: [
-            { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
-            { severity: 'HIGH', file: 'c', line: 3, requirement: 'r3', evidence: 'e', impact: 'i', action: 'a' },
-          ],
-          requiredFixes: ['y'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null,
-        });
+      async implementer() {
+        writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 700; // correcao\n', 'utf8');
+        return { content: 'ok', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
+      },
+      async reviewer() {
+        return {
+          content: JSON.stringify({
+            phase: '2A.1', verdict: 'REJECT', advanceAllowed: false,
+            findings: [
+              { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
+              { severity: 'HIGH', file: 'c', line: 3, requirement: 'r3', evidence: 'e', impact: 'i', action: 'a' },
+            ],
+            requiredFixes: ['y'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null,
+          }),
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        };
       },
     };
     const deps = {
@@ -882,9 +909,11 @@ describe('modo autônomo (--autonomous)', () => {
     const countApproved = (roadmapText.match(/`AUDIT_APPROVED`/g) ?? []).length;
     assert.ok(countApproved >= 3, `2A + 2A.1 + 2A.2 aprovadas: ${countApproved}`);
 
-    // Dois run dirs distintos.
+    // Dois run dirs distintos (ignora o subdiretório `ledger` do findings ledger).
     const runsDir = join(repo.aiDevDir, 'runs');
-    const dirs = execFileSync('ls', ['-1', runsDir], { cwd: repo.root, encoding: 'utf8' }).trim().split('\n');
+    const dirs = execFileSync('ls', ['-1', runsDir], { cwd: repo.root, encoding: 'utf8' })
+      .trim().split('\n')
+      .filter((d) => d && d !== 'ledger');
     assert.equal(dirs.length, 2, `run dirs: ${dirs.join(', ')}`);
 
     // Commits de roadmap das duas fases presentes no histórico.
@@ -904,23 +933,26 @@ describe('modo autônomo (--autonomous)', () => {
       llm: {
         async implementer() {
           writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 401;\n', 'utf8');
-          return 'implementado';
+          return { content: 'implementado', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
         },
         async reviewer() {
-          return JSON.stringify({
-            phase: '2A.1',
-            verdict: 'APPROVE',
-            advanceAllowed: true,
-            findings: [{ severity: 'BLOCKER', file: 'x', line: 1, requirement: 'r', evidence: 'e', impact: 'i', action: 'a' }],
-            requiredFixes: [],
-            missingTests: [],
-            scopeViolations: [],
-            migrationRisks: [],
-            securityRisks: [],
-            financialRisks: [],
-            rollbackRisks: [],
-            nextPhase: null,
-          });
+          return {
+            content: JSON.stringify({
+              phase: '2A.1',
+              verdict: 'APPROVE',
+              advanceAllowed: true,
+              findings: [{ severity: 'BLOCKER', file: 'x', line: 1, requirement: 'r', evidence: 'e', impact: 'i', action: 'a' }],
+              requiredFixes: [],
+              missingTests: [],
+              scopeViolations: [],
+              migrationRisks: [],
+              securityRisks: [],
+              financialRisks: [],
+              rollbackRisks: [],
+              nextPhase: null,
+            }),
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          };
         },
       } as LlmClient,
       repoRoot: repo.root,

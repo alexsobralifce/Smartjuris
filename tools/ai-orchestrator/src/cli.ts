@@ -9,6 +9,7 @@
 //   pnpm ai:approve --phase 2A.1         → gate de aprovação manual (humano)
 //   pnpm ai:retry --phase 2A.1 [modo]    → reexecuta fase em CORRECTION/AUDIT_FAILED
 //   pnpm ai:dry-run --phase 2A.1         → plano offline, sem mutações
+//   pnpm ai:dashboard [--port 3177]      → painel web em tempo real (custos + verificações)
 //
 // Modos de working tree (run/next/retry):
 //   --auto-commit     checkpoint automático antes da fase
@@ -25,6 +26,7 @@ import { createRealDeps } from './deps.js';
 import { runPhase, runAutonomousChain } from './run.js';
 import { reAuditRun } from './auditRun.js';
 import { printStatus, printRelatorio, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
+import { startDashboardServer } from './dashboard.js';
 import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
@@ -33,9 +35,10 @@ const USAGE = `Uso:
   ai:audit --run <run-id> [--force]        reexecuta a auditoria de um run
   ai:status                                tabela do roadmap
   ai:relatorio                             relatório de andamento (implementações + validações)
-  ai:approve --phase <ID> [--next]         aprovação manual (humano)
+  ai:approve --phase <ID> --reason <texto> [--next] aprovação manual (humano)
   ai:retry --phase <ID> [modo]             reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
   ai:dry-run [--phase <ID>]                plano offline sem mutações
+  ai:dashboard [--port 3177]               painel web em tempo real (custos + verificações)
 
 Modos de working tree (run/next/retry):
   --auto-commit       cria checkpoint automático (git add filtrado + commit) antes da fase
@@ -142,10 +145,21 @@ async function main(): Promise<void> {
       break;
     }
     case 'approve': {
-      if (!opts.phase) throw new Error('Uso: ai:approve --phase <ID> [--next]');
+      if (!opts.phase || !opts.reason) throw new Error('Uso: ai:approve --phase <ID> --reason <justificativa> [--next]');
       await withLock(aiDevDir, () => {
-        approvePhase(deps(), opts.phase, { next: flags.includes('next') });
+        approvePhase(deps(), opts.phase, { next: flags.includes('next'), reason: opts.reason });
         return Promise.resolve();
+      });
+      break;
+    }
+    case 'dashboard': {
+      // Painel web em tempo real: serve o dashboard.html + /api/snapshot (leitura ao vivo).
+      const port = Number(opts.port ?? env.AI_DASHBOARD_PORT ?? 3177);
+      if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('Porta inválida: ' + opts.port);
+      const url = startDashboardServer({ aiDevDir, config, port, log });
+      log.info(`Painel disponível em ${url}/  (Ctrl+C para encerrar)`);
+      await new Promise<void>((resolve) => {
+        process.on('SIGINT', () => { log.info('Painel encerrado.'); resolve(); });
       });
       break;
     }

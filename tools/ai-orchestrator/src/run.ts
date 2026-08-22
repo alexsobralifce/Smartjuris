@@ -37,7 +37,9 @@ import {
   isValidPhaseId,
 } from './roadmap.js';
 import { extractPhasePrompts, buildImplementerEnvelope, buildReviewContext } from './prompts.js';
-import { auditNextState, canAdvance, evidenceOk, type EvidenceGate } from './audit.js';
+import { openFindings, readLedger, reconcileLedger, type LedgerEntry } from './ledger.js';
+import { estimateCostUsd, sumTokenUsage, type CostEstimate } from './pricing.js';
+import { auditNextState, evidenceOk, type EvidenceGate } from './audit.js';
 import {
   prepareWorkingTree,
   commitRoadmapUpdate,
@@ -234,6 +236,43 @@ export function aiDevRelative(repoRoot: string, aiDevDir: string): string {
   return relative(repoRoot, aiDevDir);
 }
 
+interface PhaseRunRecord {
+  runId: string;
+  status?: string;
+  initialSha?: string | null;
+  reviewedSha?: string | null;
+}
+
+export async function phaseRunRecords(aiDevDir: string, phaseId: string, currentRunId?: string): Promise<PhaseRunRecord[]> {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const runsDir = safeJoin(aiDevDir, 'runs');
+  try {
+    const entries = await readdir(runsDir);
+    const records = await Promise.all(entries
+      .filter((entry) => entry.endsWith(`-${phaseId}`) && entry !== currentRunId)
+      .map(async (runId) => {
+        try {
+          const raw = await readFile(safeJoin(runsDir, runId, 'run.json'), 'utf8');
+          const run = JSON.parse(raw) as Omit<PhaseRunRecord, 'runId'>;
+          return { runId, ...run };
+        } catch {
+          return null;
+        }
+      }));
+    return records.filter((record): record is PhaseRunRecord => record !== null)
+      .sort((a, b) => a.runId.localeCompare(b.runId));
+  } catch {
+    return [];
+  }
+}
+
+export async function correctionAttemptCount(aiDevDir: string, phaseId: string): Promise<number> {
+  const records = await phaseRunRecords(aiDevDir, phaseId);
+  return records.filter((run) =>
+    run.status === 'CORRECTION_PENDING' || run.status === 'AUDIT_FAILED',
+  ).length;
+}
+
 export function formatEvidence(results: ExecResult[]): string {
   return results
     .map((r) => {
@@ -366,12 +405,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     //    PARA o ciclo e exige decisão humana (ai:approve ou reescopo) — evita
     //    retrabalho infinito e gasto de tokens em re-auditorias sem memória.
     if (previousState !== 'PLANNED') {
-      const history = extractAuditHistory(md, phaseId);
-      const falhas = history.filter((h) => {
-        // Linha: | data | fase | implementador | revisor | VEREDITO | avançou | nota |
-        const cells = h.split('|').map((c) => c.trim());
-        return /CORRECTION|REJECT|APPROVE_WITH_CONDITIONS/i.test(cells[5] ?? '');
-      }).length;
+      const falhas = await correctionAttemptCount(deps.aiDevDir, phaseId);
       if (falhas >= deps.config.limits.maxCorrectionAttempts) {
         throw new Error(
           `Fase ${phaseId} atingiu o limite de ${deps.config.limits.maxCorrectionAttempts} tentativas de correção (` +
@@ -441,6 +475,9 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     artifact('00-prompt-implementer.txt', envelope);
     const alreadyImplemented = mode === 'allow-dirty' && prep.preRunFiles.length > 0;
     let response: string;
+    const usageAccum: import('./llm.js').TokenUsage[] = [];
+    let implementerModelUsed: string | null = null;
+    let reviewerUsage: import('./llm.js').TokenUsage | null = null;
     if (alreadyImplemented) {
       deps.log.info(
         `Diff da fase já presente no working tree (${prep.preRunFiles.length} arquivo(s)); pulando o implementador.`,
@@ -451,41 +488,96 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       ].join('\n');
       artifact('01-response-implementer.txt', response);
     } else {
-      deps.log.info(`Chamando implementador (${runSummary.implementerModel}) para ${phaseId}...`);
-      response = await deps.llm.implementer(envelope);
+      // Escada flash→pro: a partir de `escalateAfterAttempts` tentativas de
+      // correção, sobe o implementador para o modelo complexo (ex.: deepseek-v4-pro).
+      const attemptsSoFar = previousState !== 'PLANNED' ? await correctionAttemptCount(deps.aiDevDir, phaseId) : 0;
+      const escalateAfter = deps.config.implementer.escalateAfterAttempts ?? 2;
+      const useComplex = attemptsSoFar >= escalateAfter;
+      const modelLabel = useComplex ? deps.config.implementer.complexModel : deps.config.implementer.model;
+      deps.log.info(`Chamando implementador (${modelLabel}${useComplex ? ' [escalado]' : ''}) para ${phaseId}...`);
+      const impl = await deps.llm.implementer(envelope, { complex: useComplex });
+      response = impl.content;
+      usageAccum.push(impl.usage);
+      implementerModelUsed = modelLabel;
       artifact('01-response-implementer.txt', response);
     }
 
-    // 7) Evidências: testes e builds (apenas comandos permitidos)
-    const tests = await deps.exec.runConfigCommand(deps.config.commands.apiTests, {
-      cwd: deps.repoRoot,
-      timeoutMs: 600_000,
+    // 7) Coleta o diff antes do pre-flight: ausência de mudança não justifica
+    // executar suites caras nem chamar o revisor.
+    const previousRuns = await phaseRunRecords(deps.aiDevDir, phaseId, runId);
+    const previousRun = previousRuns.at(-1);
+    const diffBase = previousState !== 'PLANNED'
+      ? previousRun?.reviewedSha ?? previousRun?.initialSha ?? null
+      : null;
+    const gitArtifacts = await deps.git.collectDiffArtifacts([aiDevRel], diffBase ?? undefined);
+    artifact('14-diff-base.txt', diffBase ?? '(HEAD — primeira rodada)');
+    artifact('02-git-status.txt', gitArtifacts.status);
+    artifact('03-git-diff-stat.txt', gitArtifacts.diffStat);
+    artifact('04-git-diff.txt', gitArtifacts.diff);
+
+    const runCommand = async (command: string, timeoutMs: number): Promise<ExecResult> =>
+      deps.exec.runConfigCommand(command, { cwd: deps.repoRoot, timeoutMs });
+    const skippedCommand = (command: string): ExecResult => ({
+      command,
+      ok: false,
+      code: null,
+      stdout: '',
+      stderr: 'Ignorado pelo pre-flight fail-fast após falha anterior.',
+      durationMs: 0,
     });
-    const webTests = await deps.exec.runConfigCommand(deps.config.commands.webTests, {
-      cwd: deps.repoRoot,
-      timeoutMs: 600_000,
-    });
-    const buildApi = await deps.exec.runConfigCommand(deps.config.commands.apiBuild, {
-      cwd: deps.repoRoot,
-      timeoutMs: 600_000,
-    });
-    const buildWeb = await deps.exec.runConfigCommand(deps.config.commands.webBuild, {
-      cwd: deps.repoRoot,
-      timeoutMs: 900_000,
-    });
+
+    const preflightMode = deps.config.preflight?.mode ?? 'collect-all';
+    const tests = await runCommand(deps.config.commands.apiTests, 600_000);
+    const webTests = preflightMode === 'fail-fast' && !tests.ok
+      ? skippedCommand(deps.config.commands.webTests)
+      : await runCommand(deps.config.commands.webTests, 600_000);
+    const buildApi = preflightMode === 'fail-fast' && (!tests.ok || !webTests.ok)
+      ? skippedCommand(deps.config.commands.apiBuild)
+      : await runCommand(deps.config.commands.apiBuild, 600_000);
+    const buildWeb = preflightMode === 'fail-fast' && (!tests.ok || !webTests.ok || !buildApi.ok)
+      ? skippedCommand(deps.config.commands.webBuild)
+      : await runCommand(deps.config.commands.webBuild, 900_000);
     const testsText = formatEvidence([tests, webTests]);
     const buildText = formatEvidence([buildApi, buildWeb]);
     artifact('05-tests.txt', testsText);
     artifact('06-build.txt', buildText);
 
-    // 8) Artefatos git (diff da fase, excluindo o próprio diretório ai-development).
-    //    Se é uma RODADA DE CORREÇÃO, o diff apresentado é o DELTA desde a
-    //    rodada anterior (menos tokens, foco no que mudou); na primeira rodada
-    //    usa HEAD (diff acumulado).
-    const diffBase = previousState !== 'PLANNED'
-      ? await previousRunBaseSha(deps.aiDevDir, phaseId, runId)
-      : null;
-    const gitArtifacts = await deps.git.collectDiffArtifacts([aiDevRel], diffBase ?? undefined);
+    const gate: EvidenceGate = {
+      testsPass: tests.ok && webTests.ok,
+      buildsPass: buildApi.ok && buildWeb.ok,
+      hasDiff: gitArtifacts.diff.trim().length > 0,
+      requireTests: deps.config.limits.requireTests,
+      requireBuild: deps.config.limits.requireBuild,
+      requireDiff: deps.config.limits.requireDiff,
+    };
+    artifact('11-evidence.json', JSON.stringify({ testsPass: gate.testsPass, buildsPass: gate.buildsPass, hasDiff: gate.hasDiff }, null, 2));
+
+    if (!evidenceOk(gate)) {
+      const noDiff = !gate.hasDiff;
+      const reason = noDiff
+        ? 'Nenhuma alteração detectada; pre-flight e auditoria foram poupados.'
+        : 'Pré-condições locais falharam (testes/build). Auditor poupado para economizar tokens.';
+      const state: PhaseState = noDiff ? 'AUDIT_FAILED' : 'CORRECTION_PENDING';
+      runSummary.status = state;
+      runSummary.skippedReviewer = true;
+      runSummary.skipReason = noDiff ? 'no_diff' : 'preflight_failed';
+      runSummary.finishedAt = now().toISOString();
+      runSummary.error = reason;
+      const row = buildHistoryRow({
+        date: now().toISOString().slice(0, 10),
+        phase: phaseId,
+        implementer: phase.implementer || 'DeepSeek',
+        reviewer: 'PRE-FLIGHT (determinístico)',
+        verdict: noDiff ? 'REJECT' : 'APPROVE_WITH_CONDITIONS',
+        advanceAllowed: false,
+        note: reason,
+      });
+      writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: state }, [row]));
+      artifact('run.json', JSON.stringify(runSummary, null, 2));
+      return runSummary;
+    }
+
+    // 8) Artefatos git já foram coletados antes do pre-flight.
     artifact('14-diff-base.txt', diffBase ?? '(HEAD — primeira rodada)');
     artifact('02-git-status.txt', gitArtifacts.status);
     artifact('03-git-diff-stat.txt', gitArtifacts.diffStat);
@@ -512,12 +604,19 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     //     móvel" que causava 7-10 re-auditorias por fase.
     const auditHistory = extractAuditHistory(md, phaseId).slice(-6).join('\n');
     const preRunFiles = prep.preRunFiles;
-    const correctionsApplied =
-      previousState === 'CORRECTION_PENDING' || previousState === 'AUDIT_FAILED'
-        ? 'Rodada de correção em resposta às condições anteriores. Arquivos tocados nesta rodada:\n' +
-          (preRunFiles.length > 0 ? preRunFiles.map((f) => `  - ${f}`).join('\n') : '  (sem arquivos seguros — ver diff)') +
-          '\nDiff completo da fase (HEAD) é apresentado acima; revise as condições pendentes, não reabra tópicos resolvidos.'
-        : 'Primeira auditoria desta fase (sem rodadas anteriores).';
+    const isCorrection = previousState === 'CORRECTION_PENDING' || previousState === 'AUDIT_FAILED';
+    const correctionsApplied = isCorrection
+      ? 'Rodada de correção em resposta às condições anteriores. Arquivos tocados nesta rodada:\n' +
+        (preRunFiles.length > 0 ? preRunFiles.map((f) => `  - ${f}`).join('\n') : '  (sem arquivos seguros — ver diff)') +
+        '\nDiff completo da fase (HEAD) é apresentado acima; revise as condições pendentes, não reabra tópicos resolvidos.'
+      : 'Primeira auditoria desta fase (sem rodadas anteriores).';
+    // FINDINGS LEDGER: no round 2+, o revisor valida APENAS os itens abertos
+    // (com ID estável) — fim do "alvo móvel" que causava 20-32 rounds por fase.
+    const ledgerBefore = await readLedger(deps.aiDevDir, phaseId);
+    const openItems = openFindings(ledgerBefore);
+    const openFindingsText = openItems
+      .map((f: LedgerEntry) => `- ${f.id} [${f.severity}] ${f.requirement}${f.file ? ` (${f.file})` : ''}`)
+      .join('\n');
     const context = buildReviewContext({
       phaseId,
       phaseName: prompts.name,
@@ -533,10 +632,13 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       risks: '',
       auditHistory,
       correctionsApplied,
+      openFindings: openFindingsText,
+      isCorrection,
     });
     artifact('08-review-context.txt', context);
     artifact('12-audit-history.txt', auditHistory || '(sem histórico anterior)');
     artifact('13-corrections-applied.txt', correctionsApplied);
+    artifact('18-ledger-open.txt', openFindingsText || '(sem itens abertos)');
 
     // Cache de auditoria: contexto idêntico a uma rodada anterior da mesma
     // fase → reusa o veredito (economia total de tokens). O contextHash é
@@ -561,30 +663,37 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       audit = res.audit;
       rawResponses = res.rawResponses;
       corrected = res.corrected;
+      usageAccum.push(res.usage);
+      reviewerUsage = res.usage;
       artifact('09-review-response.txt', rawResponses.join('\n\n--- RESPOSTA CORRIGIDA ---\n\n'));
       if (corrected) deps.log.warn('Auditoria corrigida após feedback de validação (1 tentativa).');
     }
     artifact('10-audit-result.json', JSON.stringify(audit, null, 2));
     runSummary.audit = audit;
     runSummary.fromCache = fromCache;
+    runSummary.reviewedSha = (await deps.git.headSha()) ?? runSummary.finalSha;
 
-    // 12) Gate de aprovação
-    const gate: EvidenceGate = {
-      testsPass: tests.ok && webTests.ok,
-      buildsPass: buildApi.ok && buildWeb.ok,
-      hasDiff: gitArtifacts.diff.trim().length > 0,
-      requireTests: deps.config.limits.requireTests,
-      requireBuild: deps.config.limits.requireBuild,
-      requireDiff: deps.config.limits.requireDiff,
-    };
-    artifact(
-      '11-evidence.json',
-      JSON.stringify(
-        { testsPass: gate.testsPass, buildsPass: gate.buildsPass, hasDiff: gate.hasDiff },
-        null,
-        2,
-      ),
-    );
+    // Reconcilia o findings ledger com este veredito (IDs estáveis entre rodadas).
+    const ledgerAfter = await reconcileLedger(deps.aiDevDir, phaseId, runId, audit);
+    artifact('19-ledger.json', JSON.stringify(ledgerAfter, null, 2));
+
+    // Telemetria: consolida tokens e custo (implementador + revisor) no run.json.
+    const tokenUsage = sumTokenUsage(usageAccum);
+    runSummary.tokenUsage = tokenUsage;
+    const implCost = implementerModelUsed
+      ? estimateCostUsd(deps.config, 'deepseek', implementerModelUsed, usageAccum[0])
+      : null;
+    const revCost = reviewerUsage
+      ? estimateCostUsd(deps.config, deps.config.reviewer.provider, deps.config.reviewer.model, reviewerUsage)
+      : null;
+    const costParts = [implCost, revCost].filter((c): c is CostEstimate => c !== null);
+    const costEstimate: CostEstimate | null = costParts.length > 0
+      ? { baseUsd: costParts.reduce((a, c) => a + c.baseUsd, 0), billedUsd: costParts.reduce((a, c) => a + c.billedUsd, 0), inputCacheAccounting: 'UNAVAILABLE_ASSUMED_MISS' }
+      : null;
+    runSummary.costEstimateUsd = costEstimate?.billedUsd ?? null;
+    artifact('20-usage.json', JSON.stringify({ tokenUsage, costEstimateUsd: runSummary.costEstimateUsd }, null, 2));
+
+    // 12) Gate de aprovação já foi validado antes de chamar o revisor.
     // LOOPGAIN: se a rodada de correção NÃO reduziu os achados graves em
     // relação à anterior, o loop não está convergindo — abre o circuito
     // (BLOCKED) e exige decisão humana em vez de gastar mais tokens.
@@ -612,8 +721,8 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       }
     }
 
-    const approved = canAdvance(audit) && evidenceOk(gate);
     const { state, advanceAllowed, reason } = auditNextState(audit, gate);
+    const approved = state === 'AUDIT_APPROVED';
     assertTransition('AUDIT_PENDING', state);
     const historyRow = buildHistoryRow({
       date: now().toISOString().slice(0, 10),

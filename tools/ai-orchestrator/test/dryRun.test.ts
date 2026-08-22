@@ -112,17 +112,17 @@ class FakeLlm implements LlmClient {
   reviewerCalls = 0;
   implementerError?: Error;
 
-  async implementer(_prompt: string): Promise<string> {
+  async implementer(_prompt: string): Promise<{ content: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }> {
     this.implementerCalls += 1;
     if (this.implementerError) throw this.implementerError;
-    return 'Fase implementada. Testes: PASS. Build: PASS.';
+    return { content: 'Fase implementada. Testes: PASS. Build: PASS.', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } };
   }
-  async reviewer(_context: string, correctionHint?: string): Promise<string> {
+  async reviewer(_context: string, correctionHint?: string): Promise<{ content: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }> {
     this.reviewerCalls += 1;
-    if (correctionHint && this.reviewerResponses.length > 1) {
-      return this.reviewerResponses[1];
-    }
-    return this.reviewerResponses[0] ?? '{}';
+    const content = (correctionHint && this.reviewerResponses.length > 1)
+      ? this.reviewerResponses[1]
+      : this.reviewerResponses[0] ?? '{}';
+    return { content, usage: { promptTokens: 200, completionTokens: 80, totalTokens: 280 } };
   }
 }
 
@@ -379,14 +379,17 @@ describe('dry-run completo do pipeline (runPhase)', () => {
     assert.match(readRoadmap(), /^\| 2A\.1 \| Testes HTTP de tenancy \| 2A \| `PLANNED` \| DeepSeek \| GPT-5\.6 Terra \|$/m);
   });
 
-  test('evidências falhando (testes FAIL) bloqueiam mesmo com APPROVE', async () => {
+  test('evidências falhando (testes FAIL) bloqueiam e POUPAM o revisor', async () => {
     writeFileSync(roadmapPath, ROADMAP_FIXTURE, 'utf8');
     const exec = new FakeExecutor();
     exec.failCommands.add('pnpm --filter @lexia/api test');
     const llm = new FakeLlm();
     llm.reviewerResponses = [validApproveJson()];
     const summary = await runPhase(makeDeps(exec, new FakeGit(), llm), '2A.1');
-    assert.equal(summary.status, 'AUDIT_FAILED');
+    assert.equal(summary.status, 'CORRECTION_PENDING');
+    assert.equal(summary.skippedReviewer, true, 'revisor poupado quando testes falham');
+    assert.equal(summary.skipReason, 'preflight_failed');
+    assert.equal(llm.reviewerCalls, 0, 'nenhuma chamada ao revisor com teste falhando');
   });
 
   test('working tree sujo (fora do ai-development) aborta sem mutar o roadmap', async () => {

@@ -313,6 +313,64 @@ Liste qualquer lacuna do desenho e retorne o veredito em JSON.
 
 ---
 
+# 2E — Migration dos metadados do classificador
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2E — migration dos metadados do classificador.
+
+Confirme que 2C está `AUDIT_APPROVED`.
+
+Crie a migration `0019_classifier_metadata.sql` adicionando as seguintes colunas
+à tabela `ai_operations` (metadados de classificação, NUNCA financeiros):
+
+- `classification` (text, nullable);
+- `classification_reason` (text, nullable);
+- `warnings` (jsonb, nullable — lista de avisos);
+- `prompt_version` (text, nullable);
+- `parent_operation_id` (uuid, nullable — referência a ai_operations.id);
+- `sub_operations` (jsonb, nullable — lista de ids).
+
+Requisitos:
+
+- Compatível com dados legados: todas as colunas nullable com DEFAULT quando
+  aplicável; registros existentes não são alterados financeiramente.
+- Rollback definido: inclua um bloco de comentário com o SQL de rollback
+  (DROP COLUMN) no próprio arquivo.
+- Atualize o schema Drizzle (`apps/api/src/db/schema.ts`) com os novos campos.
+- Nenhum dado financeiro (créditos, custo, reserva, ledger) é confundido com
+  metadado de classificação: mantenha créditos/custos nas colunas existentes.
+- Testes em banco real: crie/atualize testes que insiram uma operação com os
+  novos metadados, consultem e validem que a migration é idempotente e não
+  afeta reservas/ledger existentes.
+
+Não altere classifier, usage, payloadBuilder, rotas, catálogo ou frontend.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2E — migration dos metadados do classificador.
+
+Analise a migration e os testes.
+
+Confirme:
+- colunas novas em `ai_operations` (classification, classification_reason,
+  warnings, prompt_version, parent_operation_id, sub_operations);
+- compatível com dados legados (nullable/defaults, sem alteração financeira);
+- rollback definido no arquivo;
+- schema Drizzle atualizado e em sincronia;
+- testes em banco real: inserção com metadados, consulta, idempotência,
+  reservas/ledger intactos;
+- nenhum metadado confundido com dado financeiro;
+- nenhuma alteração fora do escopo.
+
+Retorne o veredito em JSON.
+```
+
+---
+
 # Formato de passagem para o Terra
 
 ```text

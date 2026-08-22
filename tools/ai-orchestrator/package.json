@@ -1,0 +1,17 @@
+{
+  "name": "@lexia/ai-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "test": "tsx --test test/roadmap.test.ts test/gate.test.ts test/contracts.test.ts test/safety.test.ts test/dryRun.test.ts",
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "zod": "^3.23.8"
+  }
+}

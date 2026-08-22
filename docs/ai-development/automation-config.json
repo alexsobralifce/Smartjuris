@@ -1,0 +1,31 @@
+{
+  "project": "smartjuris",
+  "roadmap": "docs/ai-development/implementation-roadmap.md",
+  "phasePrompts": "docs/ai-development/smartjuris-phase-prompts.md",
+  "templates": "docs/ai-development/smartjuris-prompt-templates.md",
+  "governance": "docs/ai-development/smartjuris-ai-development-chain.md",
+  "implementer": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "complexModel": "deepseek-v4-pro"
+  },
+  "reviewer": {
+    "provider": "openai",
+    "model": "gpt-5.6-terra"
+  },
+  "limits": {
+    "maxCorrectionAttempts": 2,
+    "requireTests": true,
+    "requireBuild": true,
+    "requireDiff": true,
+    "blockOnHigh": true,
+    "blockOnBlocker": true
+  },
+  "commands": {
+    "apiTests": "pnpm --filter @lexia/api test",
+    "apiBuild": "pnpm --filter @lexia/api build",
+    "webBuild": "pnpm --filter @lexia/web build",
+    "gitStatus": "git status --short",
+    "diffStat": "git diff --stat"
+  }
+}

@@ -13,6 +13,10 @@ logs/
 .tmp-*
 .slim/deepwork/
 
+# Artefatos de execução do orquestrador local (não são código-fonte).
+# Roadmap, prompts e templates NÃO são ignorados.
+/docs/ai-development/runs/
+/docs/ai-development/.orchestrator.lock
 # Platform-managed agentplat state, not project source. In the
 # client-initiated single-repo workspace layout (make's `Path: "."` spec) the
 # repo root IS the workspace root, so these land inside this repo rather than

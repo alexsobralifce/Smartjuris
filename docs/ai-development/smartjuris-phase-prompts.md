@@ -1,0 +1,340 @@
+# SmartJuris — Prompts por Fase
+
+Este arquivo contém os prompts de implementação para o DeepSeek e os prompts de revisão para o GPT-5.6 Terra.
+
+## Como usar
+
+1. Envie o prompt de implementação ao DeepSeek.
+2. Aguarde o diff, testes e build.
+3. Envie o relatório ao GPT-5.6 Terra.
+4. Só avance com `APPROVE` e `advanceAllowed: true`.
+5. Em caso de condição ou reprovação, envie as correções ao DeepSeek e repita a revisão.
+
+---
+
+# 2A.1 — Testes HTTP de tenancy
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2A.1 — testes HTTP de tenancy.
+
+Confirme primeiro que a Fase 2A está marcada como `AUDIT_APPROVED` em `docs/ai-development/implementation-roadmap.md`.
+
+Implemente somente testes de integração HTTP para documentos e RAG.
+
+Cubra:
+- upload por usuário autenticado;
+- listagem restrita ao escritório;
+- tentativa de acessar documento de outro escritório;
+- tentativa de vincular documento a processo de outro escritório;
+- rejeição de `escritorio_id` enviado pelo cliente;
+- RAG restrito ao escritório;
+- quarentena de documentos sem escopo;
+- acesso root à quarentena;
+- bloqueio de usuário comum em rota root;
+- persistência de `total_pages`, `indexed_status` e `failed_chunks`;
+- auditoria de bloqueios.
+
+Use banco de teste, autenticação e middlewares reais. Use mocks somente para Ollama, embeddings e DeepSeek.
+
+Não altere classificador, catálogo, reserva, geração, fallback, SSE, frontend ou migrations.
+
+Se uma dependência impedir o teste HTTP real, informe a limitação e não substitua silenciosamente o teste por teste de serviço.
+
+Execute testes específicos, suíte completa e build TypeScript. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2A.1 — testes HTTP de tenancy.
+
+Analise o diff, os testes e os resultados executados.
+
+Verifique:
+- se são testes HTTP reais;
+- se autenticação e cookies são exercitados;
+- se o escritório vem da sessão;
+- se documentos e chunks de outro escritório não aparecem;
+- se processos de outro escritório são rejeitados;
+- se o RAG respeita `escritorio_id`;
+- se documentos sem escopo ficam em quarentena;
+- se o root é o único autorizado a associá-los;
+- se os mocks estão limitados às dependências externas.
+
+Responda somente neste formato JSON:
+
+{
+  "verdict": "APPROVE | APPROVE_WITH_CONDITIONS | REJECT",
+  "findings": [],
+  "requiredFixes": [],
+  "missingTests": [],
+  "advanceAllowed": false
+}
+```
+
+---
+
+# 2A.2 — Correção da exportação
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2A.2 — correção da exportação.
+
+Confirme no roadmap que 2A.1 está `AUDIT_APPROVED`.
+
+Aplique estas regras:
+- `revisao`: bloqueada;
+- `aprovado`: permitida;
+- `protocolado`: permitida;
+- `reprovado`: bloqueada.
+
+O backend deve aplicar a regra. Preserve autenticação, tenancy, ownership, auditoria, PDF, DOCX e timbre.
+
+Crie testes para todos os status e acessos indevidos.
+
+Não altere classificador, catálogo, créditos, reserva, fallback, SSE, análise documental, landing page ou migrations.
+
+Execute a suíte completa e o build. Entregue diff e relatório. Pare para revisão.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2A.2 — exportação.
+
+Analise o diff e os testes.
+
+Confirme:
+- revisão bloqueada no backend;
+- aprovação e protocolo permitidos;
+- reprovação bloqueada;
+- tenancy preservada;
+- tentativa bloqueada auditada;
+- frontend não é a única camada de proteção;
+- nenhuma regra de IA ou crédito foi alterada.
+
+Retorne o veredito no formato JSON aprovado.
+```
+
+---
+
+# 2B — Catálogo compartilhado
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2B — catálogo compartilhado.
+
+Confirme no roadmap que 2A.2 está `AUDIT_APPROVED`.
+
+Crie uma fonte única de verdade em `packages/shared` para planos e operações de IA.
+
+Planos canônicos:
+- ESSENTIAL;
+- PROFESSIONAL;
+- OFFICE.
+
+Aliases:
+- basico/starter → ESSENTIAL;
+- pro/profissional → PROFESSIONAL;
+- office/enterprise → OFFICE.
+
+Operações:
+- SIMPLE_PETITION;
+- SECTION_REVIEW;
+- STANDARD_PETITION;
+- DOCUMENT_ANALYSIS_20_PAGES;
+- JURISPRUDENCE_RESEARCH;
+- APPEAL;
+- COMPLEX_DOCUMENT.
+
+Cada operação deve conter classificação, modelo, créditos, maxInputTokens, maxOutputTokens, maxOutputPages, maxAttachmentPages, resultLimit, blockSizePages, isDraftingOperation, requiresHumanReview, isAnalysisOperation e isStandaloneSearch.
+
+Valores:
+- SIMPLE_PETITION: Flash, 1 crédito, 8.000 entrada, 2.500 saída, 3 páginas, 10 anexos.
+- SECTION_REVIEW: Flash, 1 crédito, 8.000 entrada, 2.000 saída, 3 páginas, 10 anexos.
+- STANDARD_PETITION: Flash, 2 créditos, 25.000 entrada, 10.000 saída, 12 páginas, 20 anexos.
+- DOCUMENT_ANALYSIS_20_PAGES: Flash, 1 crédito por bloco, 25.000 entrada, 4.000 saída, bloco de 20 páginas.
+- JURISPRUDENCE_RESEARCH: Flash, 1 crédito standalone, 12.000 entrada, 3.000 saída, máximo de 8 resultados.
+- APPEAL: Pro, 4 créditos, 35.000 entrada, 13.000 saída, 15 páginas, 40 anexos.
+- COMPLEX_DOCUMENT: Pro, 6 créditos, 45.000 entrada, 18.000 saída, 20 páginas, 60 anexos.
+
+Atualize `classifier.ts` e `usage.ts` para importar a mesma fonte. Remova catálogos duplicados e preserve adaptadores de compatibilidade.
+
+Não crie migration, rota, reserva, geração, SSE ou alteração visual do frontend.
+
+Execute testes do pacote compartilhado, testes da API, build da API, build do frontend e busca por catálogos duplicados. Entregue o relatório e aguarde revisão.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2B — catálogo compartilhado.
+
+Analise diff, arquivos, testes, builds e busca por duplicidades.
+
+Verifique:
+- única fonte em `packages/shared`;
+- `classifier.ts` e `usage.ts` importando a mesma definição;
+- ausência de limites duplicados;
+- aliases sem migração silenciosa;
+- enum de operação fechado;
+- valores exatamente iguais ao contrato;
+- compatibilidade NodeNext/ESM;
+- compilação dos workspaces;
+- análise por bloco de 20 páginas;
+- pesquisa limitada a 8 resultados;
+- ausência de alterações fora do escopo.
+
+Retorne JSON com verdict, findings, requiredFixes, missingTests e advanceAllowed.
+```
+
+---
+
+# 2C — Builder do payload real
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2C — builder do payload real.
+
+Confirme que 2B está `AUDIT_APPROVED`.
+
+Crie uma função backend para montar o input do classificador usando dados autenticados e do banco.
+
+O frontend pode enviar apenas:
+- `pieceType`/`tipo`;
+- `area`;
+- `dadosCaso`;
+- `processoId`;
+- `includeJurisprudence`;
+- `outputSize`;
+- `idempotencyKey`.
+
+O backend deve derivar escritório, usuário, plano, saldo, processo, número real, documentos, páginas, indexação, RAG, limites e modelo.
+
+Nunca aceite do cliente créditos, custo, modelo, páginas, limites, escritório, número real do processo ou permissões.
+
+Crie testes com banco realista para processo do mesmo escritório, processo de outro escritório, documento sem escopo, plano legado, saldo real, peça simples, peça padrão, peça complexa, ausência de processo e chave de idempotência ausente.
+
+Não conecte à geração, reserva, SSE ou frontend.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2C — builder do payload real.
+
+Analise a origem de cada campo do payload.
+
+Confirme:
+- escritório da autenticação;
+- plano e saldo do banco;
+- processo filtrado por escritório;
+- documentos sem escopo excluídos;
+- créditos, modelo e limites do cliente ignorados;
+- plano legado normalizado;
+- processo falso rejeitado;
+- idempotencyKey validada;
+- testes com banco/fixtures realistas;
+- campos indisponíveis nulos ou com warning.
+
+Liste qualquer campo artificial ou não confiável e retorne o veredito em JSON.
+```
+
+---
+
+# Formato de passagem para o Terra
+
+```text
+Fase: [ID]
+
+Objetivo:
+[objetivo]
+
+Dependências:
+[dependências aprovadas]
+
+Arquivos alterados:
+[lista]
+
+Diff:
+[git diff da fase]
+
+Testes:
+[comandos e resultados]
+
+Build:
+[comando e resultado]
+
+Migration:
+[se aplicável]
+
+Decisões tomadas:
+[decisões]
+
+Limitações:
+[limitações]
+
+Riscos:
+[riscos]
+
+Analise a implementação e retorne somente o contrato JSON de revisão.
+```
+
+## Comandos de evidência
+
+```bash
+git status --short
+git diff --stat
+git diff -- <arquivos da fase>
+pnpm --filter @lexia/api test
+pnpm --filter @lexia/api build
+pnpm --filter @lexia/web build
+```
+
+Quando houver migration:
+
+```bash
+pnpm --filter @lexia/api db:migrate
+```
+
+---
+
+# Regra de avanço
+
+Só avance quando:
+
+```text
+DeepSeek concluiu implementação
+Terra retornou APPROVE
+advanceAllowed=true
+não existem BLOCKER/HIGH
+requiredFixes está vazio
+os testes estão verdes
+build está verde
+o diff está dentro do escopo
+```
+
+Se houver condições:
+
+```text
+AUDIT_PENDING
+→ CORRECTION_PENDING
+→ DeepSeek corrige
+→ testes/build novamente
+→ Terra revisa novamente
+```
+
+Se houver reprovação:
+
+```text
+AUDIT_PENDING
+→ AUDIT_FAILED
+→ relatório de correção
+```
+
+A próxima fase não pode iniciar até a aprovação.

@@ -146,9 +146,14 @@ export interface ChunkRag {
   similarity: number;
 }
 
-function condicoesEscopo(escritorioId: string, area: string | null): SQL[] {
+/** Condições de escopo: escritório OBRIGATÓRIO + filtros adicionais de área
+ *  e/ou PROCESSO (o chunk herda processo_id do documento de origem — 2A).
+ *  O `processoId` é sempre validado como pertencente ao escritório pelo
+ *  chamador antes de chegar aqui. */
+function condicoesEscopo(escritorioId: string, area: string | null, processoId?: string | null): SQL[] {
   const conds: SQL[] = [eq(chunks.escritorioId, escritorioId)];
   if (area) conds.push(sql`${chunks.metadata}->>'area' = ${area}`);
+  if (processoId) conds.push(eq(chunks.processoId, processoId));
   return conds;
 }
 
@@ -162,13 +167,14 @@ export async function buscarChunksPorEmbedding(
   escritorioId: string,
   area: string | null,
   embedding: number[],
-  limit = 5
+  limit = 5,
+  processoId?: string | null,
 ): Promise<ChunkRag[]> {
   const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
   return db
     .select({ texto: chunks.texto, metadata: chunks.metadata, similarity })
     .from(chunks)
-    .where(whereDe(condicoesEscopo(escritorioId, area)))
+    .where(whereDe(condicoesEscopo(escritorioId, area, processoId)))
     .orderBy((t) => desc(t.similarity))
     .limit(limit);
 }
@@ -177,9 +183,10 @@ export async function buscarChunksPorKeywords(
   escritorioId: string,
   area: string | null,
   keywords: string[],
-  limit = 5
+  limit = 5,
+  processoId?: string | null,
 ): Promise<ChunkRag[]> {
-  const conds = condicoesEscopo(escritorioId, area);
+  const conds = condicoesEscopo(escritorioId, area, processoId);
   const likeClauses = keywords.map((k) => sql`${chunks.texto} ILIKE ${'%' + k.replace(/'/g, "''") + '%'}`);
   if (likeClauses.length > 0) conds.push(or(...likeClauses) as SQL);
   const rows = await db

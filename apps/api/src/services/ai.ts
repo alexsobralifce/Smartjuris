@@ -158,6 +158,25 @@ function promptDeGeracao(payload: ClassifierOutput): string {
 }
 
 /** Gera a peça com o modelo FLASH ou PRO e retorna o uso real. */
+/** Normaliza um erro do provedor na política 3B (fail-closed):
+ *  - 4xx do CLIENTE (400-499 exceto 408): confirmado SEM processamento →
+ *    autoriza fallback/liberação;
+ *  - 5xx/408: PODE ter processado → ambíguo (reserva retida p/ reconciliação);
+ *  - sem resposta (timeout/rede/abort): ambíguo.
+ * Usada pelo adaptador de geração e pelo streaming SSE. */
+export function normalizarErroProvedor(err: unknown): ErroGeracaoIA {
+  const e = err as { status?: number; message?: string; code?: string; cause?: unknown };
+  const status = typeof e?.status === 'number' ? e.status : undefined;
+  const mensagem = e?.message ? String(e.message) : String(err);
+  if (status != null && status >= 400 && status < 500 && status !== 408) {
+    return new ErroGeracaoIA(`provedor rejeitou a requisição (HTTP ${status})`, { confirmadoSemProcessamento: true });
+  }
+  if (status != null && status >= 500) {
+    return new ErroGeracaoIA(`erro interno do provedor (HTTP ${status}); uso possivelmente processado`, { ambigua: true });
+  }
+  return new ErroGeracaoIA(`falha sem resposta do provedor: ${mensagem}`, { ambigua: true });
+}
+
 export async function gerarOperacaoIA(op: {
   operationId: string;
   payload: ClassifierOutput;
@@ -196,20 +215,6 @@ export async function gerarOperacaoIA(op: {
       outputTokens: usage.completion_tokens,
     };
   } catch (err) {
-    const e = err as { status?: number; message?: string; code?: string; cause?: unknown };
-    const status = typeof e?.status === 'number' ? e.status : undefined;
-    const mensagem = e?.message ? String(e.message) : String(err);
-    // CONFIRMAÇÃO de não-processamento: apenas erros 4xx do CLIENTE (400-499,
-    // exceto 408) — o provedor REJEITOU a requisição (validação, autenticação,
-    // rate-limit 429) sem gerar. Esses permitem liberar a reserva e reexecutar.
-    if (status != null && status >= 400 && status < 500 && status !== 408) {
-      throw new ErroGeracaoIA(`provedor rejeitou a requisição (HTTP ${status})`, { confirmadoSemProcessamento: true });
-    }
-    // 5xx e 408: o provedor PODE ter processado/faturado — ambíguo (fail-closed).
-    if (status != null && status >= 500) {
-      throw new ErroGeracaoIA(`erro interno do provedor (HTTP ${status}); uso possivelmente processado`, { ambigua: true });
-    }
-    // Sem resposta (timeout/rede/DNS/abort) → ambíguo (fail-closed).
-    throw new ErroGeracaoIA(`falha sem resposta do provedor: ${mensagem}`, { ambigua: true });
+    throw normalizarErroProvedor(err);
   }
 }

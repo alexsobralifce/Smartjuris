@@ -59,7 +59,7 @@ migrations validadas, quando aplicável
 | 2F | Idempotência e reserva | 2B, 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 3A | Unidades de análise documental | 2D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 3B | Fallback Flash/Pro | 2F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 3C | Integração SSE | 2F, 3B | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 3C | Integração SSE | 2F, 3B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 3D | Integração frontend | 3C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 4A | Testes end-to-end | 3D | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 4B | Piloto controlado | 4A | `PLANNED` | DeepSeek | GPT-5.6 Terra |
@@ -392,7 +392,7 @@ Implementar unidades de análise por bloco/página.
 
 ### 3C — Integração SSE
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependências:** 2F e 3B aprovadas.
 
@@ -535,6 +535,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2F | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: todos os requiredFixes do revisor aplicados (generate não reexecuta em retry/concorrência, release sem suprimir erro, fingerprint de intenção por tenant, migrations 0020/0021 escopam idempotência, testes exatos por operationId); 173/173 testes; 2ª falha foi falso positivo do loopgain v1 corrigido |
 | 2026-08-22 | 3A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 3B | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 3C | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

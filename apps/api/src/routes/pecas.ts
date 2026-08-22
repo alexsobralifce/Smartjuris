@@ -8,8 +8,30 @@ import { recordAudit } from '../middlewares/audit.js';
 import { parseBody, formatZodError, pecasSchema, pecasPatchSchema, uuidSchema } from '../validation/schemas.js';
 import { montarPecaDocumento } from '../services/letterhead.js';
 import { renderPdf, renderDocx } from '../services/documentExport.js';
+import { gerarPecaComSSE } from '../services/geracaoSSE.js';
+import { z } from 'zod';
 
 const router = Router();
+
+// Fase 3C — Geração com streaming SSE integrada ao orquestrador (2F/3B):
+// estimativa → reserva → RAG → redação (SSE) → settle → saldo atualizado.
+const gerarSSESchema = z.object({
+  pieceType: z.string().trim().max(200).optional(),
+  area: z.string().trim().max(100).optional(),
+  dadosCaso: z.string().trim().max(50_000).optional(),
+  processoId: z.string().uuid().optional().nullable(),
+  outputSize: z.enum(['SHORT', 'STANDARD', 'COMPLETE']).optional(),
+  includeJurisprudence: z.boolean().optional(),
+  idempotencyKey: z.string().trim().min(1).max(200),
+});
+
+router.post('/gerar-sse', async (req, res) => {
+  const parsed = gerarSSESchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Dados inválidos', detalhes: parsed.error.flatten().fieldErrors });
+  }
+  await gerarPecaComSSE(req as any, res, parsed.data);
+});
 
 router.get('/', async (req, res) => {
   try {

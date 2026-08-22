@@ -14,7 +14,7 @@
     "model": "gpt-5.6-terra"
   },
   "limits": {
-    "maxCorrectionAttempts": 2,
+    "maxCorrectionAttempts": 20,
     "requireTests": true,
     "requireBuild": true,
     "requireDiff": true,

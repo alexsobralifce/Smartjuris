@@ -218,6 +218,33 @@ BLOCKED → PLANNED
 - [ ] Limitações documentadas.
 - [ ] Resultado enviado ao revisor.
 
+## Checklist pré-auditoria (padrões recorrentes do revisor)
+
+> Aprendido nas fases 3A/3B/3C/3D (10–18 rounds cada). Incorporar TODOS os itens
+> aplicáveis ANTES da primeira auditoria corta rounds previsíveis de correção.
+> O orquestrador injeta esta lista no envelope do implementador
+> (`REVIEWER_TEST_PATTERNS` em `tools/ai-orchestrator/src/prompts.ts`).
+
+1. **Migration nova** — teste em banco LIMPO (aplica coluna/índice) + UPGRADE a
+   partir do estado ANTERIOR à migration (recria o que foi removido) +
+   reaplicação idempotente + rollback documentado no arquivo SQL.
+2. **Concorrência / corrida idempotente** — requisições simultâneas com a mesma
+   chave produzem exatamente UMA linha; violação de unicidade (23505) é
+   recuperada devolvendo o registro vencedor (nunca 500); a chave NORMALIZADA
+   (trim) é a mesma em todos os caminhos (checagem, insert, catch).
+3. **Fluxo/UI (quando houver frontend)** — chamadores coalescidos da mesma
+   geração aplicam o id retornado e TODOS concluem a transição de interface;
+   retry após falha de persistência NÃO fica bloqueado (chave liberada); a
+   chave de idempotência cobre o payload COMPLETO (qualquer campo alterado
+   gera chave nova).
+4. **Evidências** — suítes de teste do backend E do frontend executadas e
+   apresentadas ao revisor (o orquestrador roda `apiTests` + `webTests` +
+   builds em todo run); sem isso o revisor rejeita por falta de evidência.
+5. **Fail-closed (quando envolver IA)** — erros estruturados SEM detalhes
+   internos de provedor; evento SSE terminal ÚNICO; uso REAL de tokens (via
+   `stream_options.include_usage`, nunca aproximado); reserva retida em falhas
+   ambíguas; isolamento de tenant em TODA consulta.
+
 ## Checklist de avanço
 
 - [ ] Veredito `APPROVE`.

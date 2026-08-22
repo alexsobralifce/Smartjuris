@@ -96,9 +96,26 @@ export function buildImplementerEnvelope(input: ImplementerEnvelopeInput): strin
     'Critério de conclusão:',
     input.completionCriteria,
     '',
+    'Padrões de teste exigidos na pré-auditoria (incorpore JÁ na primeira rodada):',
+    REVIEWER_TEST_PATTERNS,
+    '',
     'Implemente somente esta fase. Ao concluir, entregue diff, testes, build, riscos e limitações. Pare para revisão.',
   ].join('\n');
 }
+
+/**
+ * Padrões de teste que o revisor exige recorrentemente (aprendido nas fases
+ * 3A/3B/3C/3D — 15+ rounds cada). Incluir ANTES da primeira auditoria evita
+ * rounds de correção previsíveis. Ver checklist completo em
+ * docs/ai-development/smartjuris-prompt-templates.md.
+ */
+export const REVIEWER_TEST_PATTERNS = [
+  '1. Migration nova: teste em banco LIMPO (aplica coluna/índice) + UPGRADE a partir do estado anterior (recria) + reaplicação idempotente + rollback documentado.',
+  '2. Concorrência/corrida: requisições simultâneas idempotentes → exatamente UMA linha; violação de unicidade (23505) recupera e devolve o registro vencedor; chave normalizada (trim) idêntica em TODOS os caminhos (checagem, insert, catch).',
+  '3. Fluxo/UI (quando houver frontend): chamadores coalescidos aplicam o id e concluem a transição; retry após falha NÃO fica bloqueado (chave liberada); chave de idempotência cobre o payload COMPLETO.',
+  '4. Evidências: suítes de teste do backend E do frontend executadas (o orquestrador roda ambas); builds verdes.',
+  '5. Fail-closed (quando IA): erros estruturados SEM detalhes internos de provedor; evento SSE terminal ÚNICO; uso REAL de tokens (nunca aproximado); reserva retida em falhas ambíguas; tenant isolado em toda consulta.',
+].join('\n');
 
 export interface ReviewContextInput {
   phaseId: string;

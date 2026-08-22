@@ -150,8 +150,14 @@ export function renderRoadmap(
     if (/^## Roadmap geral/.test(line)) inGeneralTable = true;
     else if (/^##\s+/.test(line)) {
       inGeneralTable = false;
-      inHistory = /^## Histórico de auditoria/.test(line);
-      historyLastDataRow = -1;
+      // Só rearma o contador ao ENTRAR no histórico; títulos seguintes
+      // (ex.: "## Critério final") não podem apagar a posição já registrada.
+      if (/^## Histórico de auditoria/.test(line)) {
+        inHistory = true;
+        historyLastDataRow = -1;
+      } else {
+        inHistory = false;
+      }
     }
 
     if (inGeneralTable) {

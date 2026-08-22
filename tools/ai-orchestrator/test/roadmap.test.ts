@@ -132,6 +132,42 @@ describe('roadmap render (conservador)', () => {
       /Histórico de auditoria/,
     );
   });
+
+  test('regressão: histórico seguido de outra seção "##" não perde a posição', () => {
+    // O arquivo real tem "## Critério final" DEPOIS do histórico; o contador
+    // não pode ser resetado por títulos posteriores.
+    const md = [
+      '## Roadmap geral',
+      '| Fase | Descrição | Dependências | Estado | Implementador | Revisor |',
+      '|---|---|---|---|---|---|',
+      '| 2A.1 | Testes | 2A | `PLANNED` | DeepSeek | GPT-5.6 Terra |',
+      '',
+      '## Histórico de auditoria',
+      '',
+      '| Data | Fase | Implementador | Revisor | Veredito | Avanço permitido | Observações |',
+      '|---|---|---|---|---|---|---|',
+      '| — | 2A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | aprovada |',
+      '',
+      '## Critério final',
+      '',
+      'Quando todas as fases estiverem aprovadas.',
+    ].join('\n');
+    const row = buildHistoryRow({
+      date: '2026-08-22',
+      phase: '2A.1',
+      implementer: 'DeepSeek',
+      reviewer: 'GPT-5.6 Terra',
+      verdict: 'APPROVE',
+      advanceAllowed: true,
+      note: 'gate ok',
+    });
+    const out = renderRoadmap(md, { '2A.1': 'AUDIT_APPROVED' }, [row]);
+    const histIdx = out.indexOf('## Histórico de auditoria');
+    const rowIdx = out.indexOf('| 2026-08-22 | 2A.1 | DeepSeek |');
+    const critIdx = out.indexOf('## Critério final');
+    assert.ok(histIdx >= 0 && rowIdx > histIdx && rowIdx < critIdx, 'linha inserida entre histórico e Critério final');
+    assert.ok(out.includes('## Critério final'));
+  });
 });
 
 describe('máquina de estados', () => {

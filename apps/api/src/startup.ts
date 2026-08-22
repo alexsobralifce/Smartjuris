@@ -1,4 +1,5 @@
 import { db, client } from './db/client.js';
+import { runMigrations } from './db/migrate.js';
 import { sql, eq } from 'drizzle-orm';
 import { readdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -19,88 +20,6 @@ function generateRandomPassword(length: number): string {
     password += charset[bytes[i] % charset.length];
   }
   return password;
-}
-
-async function runMigrations() {
-  console.log('🔄 Running migrations...');
-  
-  // Enable pgvector extension
-  await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector;`);
-  
-  // Drizzle migrations table
-  await db.execute(sql`
-    CREATE SCHEMA IF NOT EXISTS drizzle;
-    CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
-      id SERIAL PRIMARY KEY,
-      hash text NOT NULL,
-      created_at bigint
-    );
-  `);
-
-  // Try candidate directories
-  const candidateDirs = [
-    join(__dirname, 'db', 'migrations'),
-    join(__dirname, '..', 'src', 'db', 'migrations'),
-    join(process.cwd(), 'apps', 'api', 'src', 'db', 'migrations'),
-    join(process.cwd(), 'src', 'db', 'migrations'),
-  ];
-
-  let migrationsDir = '';
-  for (const dir of candidateDirs) {
-    if (existsSync(dir)) {
-      migrationsDir = dir;
-      break;
-    }
-  }
-
-  if (!migrationsDir) {
-    console.log('⚠️ No migrations directory found in candidate paths:', candidateDirs);
-    return;
-  }
-
-  console.log(`📂 Using migrations dir: ${migrationsDir}`);
-
-  const files = (await readdir(migrationsDir)).filter(f => f.endsWith('.sql')).sort();
-
-  // Idempotently add content_hash column (backward compatible with legacy filename-only records)
-  await db.execute(sql`ALTER TABLE drizzle.__drizzle_migrations ADD COLUMN IF NOT EXISTS content_hash text;`);
-
-  // Get applied migrations
-  const applied = await db.execute(sql`SELECT hash, content_hash FROM drizzle.__drizzle_migrations`);
-  const appliedMap = new Map<string, string | null>();
-  for (const row of applied as any[]) {
-    appliedMap.set(row.hash, row.content_hash ?? null);
-  }
-
-  for (const file of files) {
-    const name = file.replace('.sql', '');
-    const sqlContent = await readFile(join(migrationsDir, file), 'utf-8');
-    const contentHash = createHash('sha256').update(sqlContent).digest('hex');
-    const prior = appliedMap.get(name);
-
-    if (prior !== undefined) {
-      if (prior === contentHash) {
-        console.log(`  ✓ Already applied: ${file}`);
-        continue;
-      }
-      if (prior === null) {
-        await db.execute(sql`UPDATE drizzle.__drizzle_migrations SET content_hash = ${contentHash} WHERE hash = ${name}`);
-        console.log(`  ✓ Already applied (hash backfilled): ${file}`);
-        continue;
-      }
-      console.log(`  ⚠️ ${file} was modified after being applied — skipping (manual review required).`);
-      continue;
-    }
-
-    // Execute raw statements inside a transaction
-    await client.begin(async (tx) => {
-      await tx.unsafe(sqlContent);
-      await tx`INSERT INTO drizzle.__drizzle_migrations (hash, content_hash, created_at) VALUES (${name}, ${contentHash}, ${Date.now()})`;
-    });
-    console.log(`  ✅ Applied: ${file}`);
-  }
-
-  console.log('✅ Migrations complete.');
 }
 
 async function runSeedIfEmpty() {
@@ -357,7 +276,11 @@ async function ensureRootAuthUser() {
 }
 
 async function start() {
-  await runMigrations();
+  const allowLegacyBackfill = process.env.ALLOW_LEGACY_BACKFILL === 'true';
+  if (allowLegacyBackfill) {
+    console.log('🔓 ALLOW_LEGACY_BACKFILL=true: backfill de content_hash de migrations legadas autorizado.');
+  }
+  await runMigrations({ allowLegacyBackfill });
   await ensureRootUser();
   await ensureRootAuthUser();
   await runSeedIfEmpty();

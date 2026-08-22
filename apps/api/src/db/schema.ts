@@ -327,12 +327,20 @@ export const aiOperations = pgTable('ai_operations', {
   maxInputTokens: integer('max_input_tokens'),
   maxOutputTokens: integer('max_output_tokens'),
   error: text('error'),
+  // Fase 2E — metadados de classificação (nunca financeiros).
+  classification: text('classification'),
+  classificationReason: text('classification_reason'),
+  warnings: jsonb('warnings'),
+  promptVersion: text('prompt_version'),
+  parentOperationId: uuid('parent_operation_id').references((): AnyPgColumn => aiOperations.id),
+  subOperations: jsonb('sub_operations'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
 }, (table) => ({
   escIdx: index('ai_operations_esc_idx').on(table.escritorioId, table.createdAt),
   statusIdx: index('ai_operations_status_idx').on(table.status),
+  parentIdx: index('ai_operations_parent_idx').on(table.parentOperationId),
 }));
 
 // Ledger de créditos (append-only): reserva, liquidação, liberação, ajuste.

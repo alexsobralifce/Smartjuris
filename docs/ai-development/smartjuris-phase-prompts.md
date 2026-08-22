@@ -751,3 +751,60 @@ Confirme:
 
 Retorne o veredito em JSON.
 ```
+
+# 3D — Integração frontend
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 3D — integração frontend.
+
+Confirme que 3C (integração SSE) está `AUDIT_APPROVED`.
+
+Integre o frontend (React/Vite) ao novo endpoint SSE de geração
+(`POST /api/pecas/gerar-sse`, Fase 3C), substituindo a chamada antiga ao
+`/api/rag/generate`.
+
+Alterações esperadas (roadmap 3D):
+- REMOVER o `isComplex` manual do fluxo de geração (a escolha de modelo agora
+  é decisão de servidor — classificação 2C + fallback 3B; o cliente não manda
+  modelo);
+- ENVIAR `pieceType` (e demais campos do contrato: area, dadosCaso,
+  processoId, outputSize, includeJurisprudence, idempotencyKey) ao novo
+  endpoint;
+- consumir os eventos SSE tipados da 3C: operacao → progresso → texto →
+  concluido / erro (com reconciliacao quando ambíguo);
+- exibir progresso, texto parcial streaming e estado final (saldo/erro) no
+  componente `GeradorPecas`;
+- idempotencyKey: gerar/estabilizar por peça (evitar dupla cobrança em
+  reconexão), sem expor créditos/modelo ao cliente.
+
+Requisitos:
+- NUNCA enviar créditos/custo/modelo/limites do cliente (backend revalida);
+- manter o design System (paleta tokens CSS existente);
+- usar `authFetch`/client existente (cookie httpOnly) para autenticação;
+- testes: unitários do parsing de eventos SSE e da montagem do body (sem
+  depender de servidor); build web verde + `verify:ui` (zero cores hardcoded).
+
+Não altere o backend, migrations ou catálogo — apenas o frontend.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 3D — integração frontend.
+
+Analise a integração do GeradorPecas ao endpoint SSE (3C).
+
+Confirme:
+- `isComplex` manual REMOVIDO da geração (modelo é decisão de servidor);
+- `pieceType` e campos do contrato enviados ao novo endpoint;
+- eventos SSE tipados consumidos (operacao/progresso/texto/concluido/erro);
+- erro com `reconciliacao` tratado no frontend;
+- idempotencyKey estável por peça (sem dupla cobrança em reconexão);
+- nenhum dado financeiro/modelo enviado do cliente;
+- design tokens mantidos (verify:ui);
+- testes unitários de parsing/montagem; builds verdes.
+
+Retorne o veredito em JSON.
+```

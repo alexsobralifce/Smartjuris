@@ -48,6 +48,9 @@ export const pecas = pgTable('pecas', {
   fontes: integer('fontes').notNull(),
   conteudo: text('conteudo').notNull(),
   conteudoRico: jsonb('conteudo_rico'),
+  // Fase 3D — idempotência durável da persistência (unicidade por escritório,
+  // migration 0023): replay do POST com a mesma chave retorna a peça existente.
+  idempotencyKey: text('idempotency_key'),
   usuarioId: uuid('usuario_id').references(() => usuarios.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
   updatedBy: uuid('updated_by').references(() => usuarios.id),

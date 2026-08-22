@@ -610,11 +610,9 @@ describe('2E — migration metadados do classificador', () => {
       // coluna E sem o registro): remove coluna + registro de controle e
       // reaplica — o runner deve aplicar a 0022 de novo e recriar a coluna.
       // Remove o REGISTRO da 0022 da tabela de controle pelo hash (coluna
-      // `hash`, não `name`) para simular ambiente pré-0022.
-      const hash0022 = await noSchemaAsync(schemaAux, async (q) => {
-        const rows = await q(`SELECT hash FROM drizzle_migrations ORDER BY id`);
-        return String(rows[rows.length - 1]?.hash ?? '');
-      });
+      // `hash`, que é o nome do arquivo) para simular ambiente pré-0022 —
+      // independente de quais migrations existam depois dela.
+      const hash0022 = '0022_lease_token';
       await noSchemaAsync(schemaAux, async (q) => {
         await q('ALTER TABLE ai_operations DROP COLUMN IF EXISTS lease_token');
         await q(`DELETE FROM drizzle_migrations WHERE hash = $1`, [hash0022]);
@@ -630,6 +628,69 @@ describe('2E — migration metadados do classificador', () => {
         return rows.map((r: any) => r.column_name);
       });
       assert.ok(cols3.includes('lease_token'), 'coluna lease_token recriada na reaplicação');
+    } finally {
+      await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`)).catch(() => {});
+    }
+  });
+
+  test('0023: idempotência de peças aplica em banco LIMPO e em UPGRADE pré-0023', async () => {
+    const schemaAux = `mig_3d_${suffix}`;
+    await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`));
+    await db.execute(sql.raw(`CREATE SCHEMA "${schemaAux}";`));
+    try {
+      // (a) Banco limpo: 0000..0023 aplicada, coluna + índice parcial presentes.
+      const res = await runMigrations({ schema: schemaAux });
+      assert.ok(res.applied.includes('0023_pecas_idempotency'), '0023 aplicada no banco limpo');
+      const cols = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = 'pecas'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.column_name);
+      });
+      assert.ok(cols.includes('idempotency_key'), 'coluna idempotency_key presente');
+      const indices = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT indexname FROM pg_indexes
+           WHERE schemaname = $1 AND indexname = 'pecas_tenant_key_unique'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.indexname);
+      });
+      assert.ok(indices.includes('pecas_tenant_key_unique'), 'índice parcial único presente');
+
+      // (b) Idempotência: reaplicar não duplica.
+      const res2 = await runMigrations({ schema: schemaAux });
+      assert.ok(!res2.applied.includes('0023_pecas_idempotency'), '0023 não reaplicada');
+
+      // (c) Upgrade a partir de estado pré-0023: remove coluna + índice +
+      // registro de controle e reaplica — o runner recria tudo.
+      await noSchemaAsync(schemaAux, async (q) => {
+        await q('DROP INDEX IF EXISTS pecas_tenant_key_unique');
+        await q('ALTER TABLE pecas DROP COLUMN IF EXISTS idempotency_key');
+        await q(`DELETE FROM drizzle_migrations WHERE hash = $1`, ['0023_pecas_idempotency']);
+      });
+      const res3 = await runMigrations({ schema: schemaAux });
+      assert.ok(res3.applied.includes('0023_pecas_idempotency'), '0023 REAPLICADA no upgrade');
+      const cols3 = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = 'pecas'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.column_name);
+      });
+      assert.ok(cols3.includes('idempotency_key'), 'coluna recriada na reaplicação');
+      const indices3 = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT indexname FROM pg_indexes
+           WHERE schemaname = $1 AND indexname = 'pecas_tenant_key_unique'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.indexname);
+      });
+      assert.ok(indices3.includes('pecas_tenant_key_unique'), 'índice recriado na reaplicação');
     } finally {
       await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`)).catch(() => {});
     }

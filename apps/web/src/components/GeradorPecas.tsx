@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { chaveIdempotenciaPeca, montarBodyGeracao, parseEventosSSE } from '../utils/sseParser'
 import { api, getErrorMessage, Decision } from '../api/client'
 import { getApiBaseUrl } from '../api/config'
@@ -218,6 +218,12 @@ export default function GeradorPecas() {
 
   // Sistema de Toast
   const [toasts, setToasts] = useState<ToastMessage[]>([])
+  // Deduplicação GLOBAL por idempotencyKey: peças já persistidas nesta sessão
+  // NUNCA são recriadas (protege contra reexecução concorrente do efeito).
+  // Map<chave, Promise<{ id }>> — o JSON é consumido UMA vez dentro da Promise
+  // e cada chamador (novo ou coalescido) aplica o id e transiciona a UI após
+  // aguardar; falha remove a chave → retry pode persistir novamente.
+  const pecasPersistidasRef = useRef<Map<string, Promise<{ id: string }>>>(new Map())
   const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
     const id = String(Date.now())
     setToasts(prev => [...prev, { id, type, text }])
@@ -360,18 +366,21 @@ export default function GeradorPecas() {
         // do cliente. Payload REAL de geração (3C): dadosCaso final incorpora
         // os dados processuais; a CHAVE DE IDEMPOTÊNCIA cobre TODOS eles.
         const dadosCasoFinal = `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.`;
-        const idempotencyKey = await chaveIdempotenciaPeca({
-          tipo: tipo || 'petição',
-          area,
-          processoId: processoSelecionadoId || undefined,
-          dadosCaso: dadosCasoFinal,
-          outputSize,
-          nomeCliente,
-          parteAdversa,
-          varaTribunal,
-          valorCausa,
-        });
+        let idempotencyKey = '';
         try {
+          // A chave é montada DENTRO do try: qualquer falha (ex. crypto.subtle)
+          // cai no catch e devolve a interface a um estado recuperável.
+          idempotencyKey = await chaveIdempotenciaPeca({
+            tipo: tipo || 'petição',
+            area,
+            processoId: processoSelecionadoId || undefined,
+            dadosCaso: dadosCasoFinal,
+            outputSize,
+            nomeCliente,
+            parteAdversa,
+            varaTribunal,
+            valorCausa,
+          });
           const apiBase = getApiBaseUrl();
           const body = montarBodyGeracao({
             pieceType: tipo || 'Petição',
@@ -412,23 +421,49 @@ export default function GeradorPecas() {
           const persistirPeca = async (conteudo: string) => {
             if (pecaPersistida) return; // evita duplicação (evento terminal repetido)
             pecaPersistida = true;
-            const res = await api.pecas.create({
-              processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
-              tipo: tipo || 'Petição',
-              area,
-              cliente: nomeCliente || 'Cliente SmartJuris',
-              status: 'revisao',
-              prazo: new Date().toISOString().slice(0, 10),
-              modelo: 'DeepSeek (classificação de servidor + fallback Flash/Pro)',
-              fontes: 0,
-              conteudo,
-            });
-            if (!res.ok) {
-              throw new Error(await getErrorMessage(res, 'Erro ao salvar a peça gerada.'));
+            let promessa: Promise<{ id: string }>;
+            const emAndamento = pecasPersistidasRef.current.get(idempotencyKey);
+            if (emAndamento) {
+              // Concorrência: mesma chave já está persistindo (ou concluída) —
+              // coalesce na MESMA Promise; o JSON é consumido uma única vez.
+              promessa = emAndamento;
+            } else {
+              promessa = (async () => {
+                const res = await api.pecas.create({
+                  processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
+                  tipo: tipo || 'Petição',
+                  area,
+                  cliente: nomeCliente || 'Cliente SmartJuris',
+                  status: 'revisao',
+                  prazo: new Date().toISOString().slice(0, 10),
+                  modelo: 'DeepSeek (classificação de servidor + fallback Flash/Pro)',
+                  fontes: 0,
+                  conteudo,
+                  // Idempotência DURÁVEL no servidor (migration 0023): mesmo que
+                  // esta sessão perca o Map (remontagem/reload), o replay da
+                  // mesma chave retorna a peça existente, sem duplicata.
+                  idempotencyKey,
+                });
+                if (!res.ok) {
+                  throw new Error(await getErrorMessage(res, 'Erro ao salvar a peça gerada.'));
+                }
+                const created = await res.json().catch(() => ({}));
+                return { id: typeof created?.id === 'string' ? created.id : '' };
+              })();
+              pecasPersistidasRef.current.set(idempotencyKey, promessa);
             }
-            const created = await res.json().catch(() => ({}));
-            setPecaSalvaId(created?.id ?? '');
-            setTimeout(() => setStep('revisao'), 800);
+            try {
+              // TODOS os chamadores (novo e coalescidos) aplicam o id retornado
+              // e concluem a transição da interface para revisão.
+              const { id } = await promessa;
+              setPecaSalvaId(id);
+              setTimeout(() => setStep('revisao'), 800);
+            } catch (err) {
+              // Falha: libera a chave para que um retry (mesma sessão, mesmos
+              // dados → mesma chave) possa tentar persistir novamente.
+              pecasPersistidasRef.current.delete(idempotencyKey);
+              throw err;
+            }
           };
           while (true) {
             const { done, value } = await reader.read();

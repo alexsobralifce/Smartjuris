@@ -31,8 +31,13 @@ export const pecasSchema = z.object({
   fontes: z.number().int(),
   conteudo: z.string().min(1),
   conteudoRico: z.any().optional(),
+  // Fase 3D — idempotência durável: replay da MESMA chave (mesmo escritório)
+  // retorna a peça existente em vez de criar duplicata.
+  idempotencyKey: z.string().trim().min(1).max(200).optional(),
 });
-export const pecasPatchSchema = pecasSchema.partial();
+// A chave de idempotência é imutável: PATCH não pode alterá-la (evita "mover"
+// uma chave já persistida e quebrar replays futuros).
+export const pecasPatchSchema = pecasSchema.omit({ idempotencyKey: true }).partial();
 
 // --- Clientes ---
 const dataNascimentoNaoFutura = (d: { dataNascimento?: string | null }) =>

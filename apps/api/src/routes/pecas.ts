@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { pecas, documentosGerados, escritorios, usuarios, processos } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { canMutateTenant } from '../middlewares/ownership.js';
 import { tenantScope, tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
 import { recordAudit } from '../middlewares/audit.js';
@@ -45,6 +45,9 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  // Chave normalizada compartilhada entre try e catch — o caminho de
+  // recuperação da corrida (23505) precisa da MESMA forma da inserção.
+  let chaveIdempotencia: string | undefined;
   try {
     const escritorioId = tenantScopeEscritorioId(req);
     if (!escritorioId) {
@@ -55,6 +58,21 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
     const data = parsed.data;
+    chaveIdempotencia = data.idempotencyKey ? data.idempotencyKey.trim() : undefined;
+    // Fase 3D — idempotência durável: replay da MESMA idempotencyKey (mesmo
+    // escritório) devolve a peça já persistida, sem criar duplicata. Isso
+    // cobre remontagem do componente, reload da página e repetição após
+    // resposta ambígua de rede (dedup do cliente é apenas otimização intra-SPA).
+    if (chaveIdempotencia) {
+      const [existente] = await db
+        .select()
+        .from(pecas)
+        .where(and(eq(pecas.escritorioId, escritorioId), eq(pecas.idempotencyKey, chaveIdempotencia)))
+        .limit(1);
+      if (existente) {
+        return res.status(200).json(existente);
+      }
+    }
     const [nova] = await db.insert(pecas).values({
       processoId: (data.processoId && data.processoId.trim() !== '') ? data.processoId : null,
       tipo: data.tipo,
@@ -66,6 +84,7 @@ router.post('/', async (req, res) => {
       fontes: data.fontes,
       conteudo: data.conteudo,
       conteudoRico: data.conteudoRico ?? null,
+      idempotencyKey: chaveIdempotencia ?? null,
       usuarioId: (req as any).user?.id ?? null,
       escritorioId,
     }).returning();
@@ -91,6 +110,23 @@ router.post('/', async (req, res) => {
     });
     res.status(201).json(nova);
   } catch (error) {
+    // Fase 3D — corrida de idempotência: duas requisições CONCORRENTES com a
+    // MESMA chave podem passar da checagem antes do insert; a violação de
+    // unicidade (23505) confirma o vencedor — devolve a peça persistida.
+    const code = (error as { code?: string })?.code;
+    if (code === '23505' && chaveIdempotencia) {
+      const escId = tenantScopeEscritorioId(req);
+      if (escId) {
+        const [existente] = await db
+          .select()
+          .from(pecas)
+          .where(and(eq(pecas.escritorioId, escId), eq(pecas.idempotencyKey, chaveIdempotencia)))
+          .limit(1);
+        if (existente) {
+          return res.status(200).json(existente);
+        }
+      }
+    }
     res.status(500).json({ error: 'Erro ao criar peça' });
   }
 });

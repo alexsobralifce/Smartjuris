@@ -20,6 +20,7 @@ import bcrypt from 'bcryptjs';
 const { db, client } = await import('../db/client.js');
 const s = await import('../db/schema.js');
 const { runAiOperation } = await import('./aiOperation.js');
+const { ErroGeracaoIA } = await import('./analiseDocumental.js');
 import type { AiOperationInput } from './aiOperation.js';
 
 /** Tipo do gerador injetável (extraído da assinatura de AiOperationInput). */
@@ -64,9 +65,13 @@ function geradorOk(): GeradorOk {
 }
 
 /** Gera um resultado de falha (lança). */
+/** Gera falha CONFIRMADA (adaptador marcou `confirmadoSemProcessamento` —
+ *  o provedor respondeu sem geração): testa a liberação da reserva. Falhas sem
+ *  essa marcação estruturada (timeout/rede/5xx textual) são AMBÍGUAS e retêm a
+ *  reserva (política da Fase 3B, coberta em fallbackPro.test.ts). */
 function geradorFalha() {
   return async () => {
-    throw new Error('falha simulada na geração');
+    throw new ErroGeracaoIA('400 bad request: falha simulada na geração', { confirmadoSemProcessamento: true });
   };
 }
 

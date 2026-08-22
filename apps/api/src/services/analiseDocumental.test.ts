@@ -932,6 +932,22 @@ describe('3A — unidades de análise documental', { skip: !dbDisponivel }, () =
     assert.ok(custos[0] > custos[1], 'fatia maior reserva mais custo (texto real)');
   });
 
+  test('classificação de erros: ambígua vs confirmada (estruturada, fail-closed)', () => {
+    // Confirmada (adaptador marcou): NÃO ambígua → fallback autorizado.
+    assert.equal(ad.ehFalhaAmbígua(new ad.ErroGeracaoIA('429 too many requests', { confirmadoSemProcessamento: true })), false);
+    assert.equal(ad.ehFalhaComResposta(new ad.ErroGeracaoIA('429 too many requests', { confirmadoSemProcessamento: true })), true);
+    // Ambígua explícita (timeout/rede): retém reserva, sem fallback.
+    assert.equal(ad.ehFalhaAmbígua(new ad.ErroGeracaoIA('timeout', { ambigua: true })), true);
+    assert.equal(ad.ehFalhaComResposta(new ad.ErroGeracaoIA('timeout', { ambigua: true })), false);
+    // FAIL-CLOSED: mensagem 5xx SEM marcação → AMBÍGUA (5xx não comprova).
+    assert.equal(ad.ehFalhaAmbígua(new Error('500 internal server error')), true, '5xx sem marcação = ambíguo');
+    assert.equal(ad.ehFalhaComResposta(new Error('500 internal server error')), false);
+    // 429 sem marcação → ambíguo (mensagem não é confirmação).
+    assert.equal(ad.ehFalhaAmbígua(new Error('429 too many requests')), true);
+    // Erro não classificado → ambíguo (fail-closed).
+    assert.equal(ad.ehFalhaAmbígua(new Error('AbortError')), true);
+  });
+
   test('consolidação: pagesAlreadyAnalyzed clampa ao total real dos docs elegíveis', async () => {
     const doc = await criarDocumento(escA.id, `clamp-${suffix}.pdf`, 10, 1);
     const user = { id: adminA.id, role: 'admin', escritorioId: adminA.escritorioId };

@@ -208,6 +208,61 @@ export function ehErroRetryable(err: unknown): boolean {
   return /timeout|timed out|terminated|fetch failed|ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|socket hang up|429|5\d\d|vazia|empty|busy/i.test(msg);
 }
 
+/** Falha de geração com MARCAÇÃO ESTRUTURADA do provedor/adaptador.
+ *  `confirmadoSemProcessamento`: true quando o adaptador TEM CONFIRMAÇÃO de
+ *  que o provedor respondeu SEM processar nem faturar a geração (ex.: 400/422
+ *  validação, 429 rate-limit rejeitado antes da execução). Apenas com essa
+ *  confirmação é seguro liberar a reserva integralmente e/ou reexecutar
+ *  (fallback Flash→Pro) sem risco de cobrança duplicada.
+ *  `ambigua`: marcação explícita de falha sem resposta (timeout/rede/abort). */
+export class ErroGeracaoIA extends Error {
+  confirmadoSemProcessamento?: boolean;
+  ambigua?: boolean;
+  constructor(mensagem: string, opts: { confirmadoSemProcessamento?: boolean; ambigua?: boolean } = {}) {
+    super(mensagem);
+    this.name = 'ErroGeracaoIA';
+    this.confirmadoSemProcessamento = opts.confirmadoSemProcessamento;
+    this.ambigua = opts.ambigua;
+  }
+}
+
+/** Falha AMBÍGUA: SEM resposta do provedor (timeout, rede, conexão perdida,
+ *  socket hang up, DNS) OU sem evidência estruturada de resposta. Nesse caso o
+ *  provedor PODE ter aceito e faturado a requisição — reexecutar (ex.: fallback
+ *  Flash→Pro) criaria cobrança duplicada sem confirmação.
+ *  FAIL-CLOSED: erros sem marcação estruturada (inclusive mensagens com 5xx,
+ *  que NÃO comprovam ausência de processamento) são AMBÍGUOS — a reserva nunca
+ *  é liberada integralmente nem reexecutada sem confirmação confiável. */
+export function ehFalhaAmbígua(err: unknown): boolean {
+  if (err instanceof ErroGeracaoIA && err.ambigua === true) return true;
+  if (err instanceof ErroGeracaoIA && err.confirmadoSemProcessamento === true) return false;
+  if (err && typeof err === 'object' && 'ambigua' in err) {
+    return Boolean((err as { ambigua?: unknown }).ambigua);
+  }
+  if (err && typeof err === 'object' && 'confirmadoSemProcessamento' in err) {
+    return !Boolean((err as { confirmadoSemProcessamento?: unknown }).confirmadoSemProcessamento);
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/timeout|timed out|terminated|fetch failed|ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|socket hang up|ECONNRESET|aborted/i.test(msg)) {
+    return true;
+  }
+  // Sem marcação estruturada → ambíguo (fail-closed). Mensagens (incl. 5xx)
+  // NÃO comprovam ausência de processamento.
+  return true;
+}
+
+/** Confirmação ESTRUTURADA de que o provedor NÃO processou a chamada:
+ *  somente com `confirmadoSemProcessamento` o fallback é autorizado e a
+ *  reserva pode ser liberada integralmente. Mensagens (incl. 5xx) NÃO
+ *  constituem confirmação. */
+export function ehFalhaComResposta(err: unknown): boolean {
+  if (err instanceof ErroGeracaoIA) return err.confirmadoSemProcessamento === true;
+  if (err && typeof err === 'object' && 'confirmadoSemProcessamento' in err) {
+    return Boolean((err as { confirmadoSemProcessamento?: unknown }).confirmadoSemProcessamento);
+  }
+  return false;
+}
+
 /** Valida o resultado da análise. Retorna motivo de invalidez (string) ou null
  *  se estruturalmente OK. Respostas vazias/truncadas/inconsistentes NÃO podem
  *  ser persistidas nem liquidadas como sucesso; tokens acima dos tetos da

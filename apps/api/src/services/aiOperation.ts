@@ -621,6 +621,10 @@ async function executarFallbackPro(opts: {
       idempotencyFingerprint: fingerprintPro,
       operation: opts.op as AiOperationType,
       estimate: estimativaPro,
+      // Rastreabilidade financeira (3B): a operação PRO nasce APONTANDO para a
+      // FLASH que falhou — gravado ATÔMICO no insert da reserva. Sem isso o
+      // fallback NÃO é executado (não há liquidação órfã sem vínculo).
+      parentOperationId: opts.operationIdFlash ?? null,
       req: opts.req,
     });
   } catch {
@@ -708,7 +712,9 @@ async function executarFallbackPro(opts: {
     };
   }
 
-  // 5. Executa o PRO com a NOVA operação.
+  // 5. Executa o PRO com a NOVA operação. O vínculo parent→FLASH já foi
+  //    gravado ATÔNOMICAMENTE na criação da reserva (passo 3) — não há
+  //    liquidação órfã possível sem rastreabilidade.
   const operationIdPro = reservaPro.operationId ?? null;
   if (!operationIdPro) {
     // Reserva PRO criada mas operationId ausente (resposta incompleta da
@@ -736,6 +742,7 @@ async function executarFallbackPro(opts: {
         : 'Reserva PRO sem operationId; reserva liberada.',
     };
   }
+  // Vínculo de rastreabilidade gravado na CRIAÇÃO da reserva (passo 3, atômico).
   try {
     const gen = await opts.generate({ operationId: operationIdPro, payload: opts.classification, modelTier: 'PRO' });
     const settle = await settleAiUsage({

@@ -514,6 +514,10 @@ export interface ReserveAiUsageInput {
   idempotencyFingerprint?: string;
   operation: AiOperationType;
   estimate: AiEstimateResult;
+  /** Vínculo de rastreabilidade financeira (fallback Flash→Pro, 3B): a
+   *  operação nasce apontando para a operação original — gravado ATÔMICO no
+   *  mesmo insert da reserva (nunca best-effort posterior). */
+  parentOperationId?: string;
   req?: Request;
 }
 
@@ -650,6 +654,8 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
       costCentsReserved: costCents,
       maxInputTokens: input.estimate.maxInputTokens,
       maxOutputTokens: input.estimate.maxOutputTokens,
+      // Vínculo de fallback gravado ATÔMICO na criação (rastreabilidade 3B).
+      parentOperationId: input.parentOperationId ?? null,
     }).returning({ id: aiOperations.id });
 
     await tx.insert(creditLedger).values({

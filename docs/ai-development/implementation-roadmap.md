@@ -61,7 +61,7 @@ migrations validadas, quando aplicável
 | 3B | Fallback Flash/Pro | 2F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 3C | Integração SSE | 2F, 3B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 3D | Integração frontend | 3C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 4A | Testes end-to-end | 3D | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 4B | Piloto controlado | 4A | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 
 ## Fases detalhadas
@@ -432,7 +432,7 @@ estimativa
 
 ### 4A — Testes end-to-end
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 3D aprovada.
 
@@ -537,6 +537,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 3B | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 3C | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 3D | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 4A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

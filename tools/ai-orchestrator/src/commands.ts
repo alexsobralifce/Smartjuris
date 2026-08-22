@@ -148,14 +148,16 @@ export function planDryRun(deps: RunDeps, phaseId?: string): void {
   );
   console.log('Passos:');
   console.log('  1. validar roadmap e dependências');
-  console.log('  2. verificar working tree limpo (exceto docs/ai-development)');
-  console.log(`  3. criar branch phase/${phase.id}`);
-  console.log('  4. marcar IMPLEMENTING no roadmap');
-  console.log('  5. chamar DeepSeek (implementador)');
-  console.log('  6. coletar git status/diff e executar testes e builds');
-  console.log('  7. salvar artefatos em runs/<timestamp>-<fase>');
-  console.log('  8. chamar GPT-5.6 Terra (revisor) com contrato JSON estrito');
-  console.log('  9. aplicar gate e atualizar roadmap (AUDIT_APPROVED | CORRECTION_PENDING | AUDIT_FAILED)');
-  console.log(' 10. nunca avançar automaticamente; nunca merge/push automáticos');
+  console.log('  2. inspecionar working tree (porcelain v1) e classificar arquivos');
+  console.log('  3. proteger docs/ai-development e detectar segredos/suspeitos');
+  console.log('  4. criar checkpoint (auto-commit | interativo | allow-dirty) — nunca git add .');
+  console.log(`  5. criar branch phase/${phase.id}`);
+  console.log('  6. marcar IMPLEMENTING no roadmap');
+  console.log('  7. chamar DeepSeek (implementador)');
+  console.log('  8. coletar git status/diff e executar testes e builds');
+  console.log('  9. salvar artefatos em runs/<timestamp>-<fase>');
+  console.log(' 10. chamar GPT-5.6 Terra (revisor) com contrato JSON estrito');
+  console.log(' 11. aplicar gate e atualizar roadmap (AUDIT_APPROVED | CORRECTION_PENDING | AUDIT_FAILED)');
+  console.log(' 12. registrar run.json (SHA inicial/final, modo, arquivos) — nunca merge/push automáticos');
   console.log('');
 }

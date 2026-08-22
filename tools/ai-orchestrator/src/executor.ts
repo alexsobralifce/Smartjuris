@@ -94,6 +94,7 @@ export class CommandDeniedError extends Error {
 const BRANCH_NAME = /^phase\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GIT_DIFF_EXCLUDE = /^:\(exclude\)[A-Za-z0-9/._*\-]+$/;
 const PNPM_SCRIPTS = new Set(['test', 'build']);
+const GIT_STATUS_ARGS = new Set(['--short', '--porcelain', '--porcelain=v1', '--untracked-files=all']);
 
 function assertBranchName(name: string): void {
   if (!BRANCH_NAME.test(name) || name.includes('..') || name.endsWith('.')) {
@@ -107,6 +108,29 @@ function assertPathspec(arg: string): void {
   }
   if (arg.includes('..') || arg.includes('\0')) {
     throw new CommandDeniedError(`Pathspec inválido: ${arg}`);
+  }
+}
+
+/** Caminho para `git add`: relativo, sem `..`, sem absoluto, sem opção/glob mágico. */
+function assertAddPath(p: string): void {
+  if (
+    p === '' ||
+    p === '.' ||
+    p === '..' ||
+    p.startsWith('-') ||
+    p.startsWith(':') ||
+    p.includes('..') ||
+    p.includes('\0') ||
+    p.startsWith('/')
+  ) {
+    throw new CommandDeniedError(`Caminho inválido para git add: ${p}`);
+  }
+}
+
+/** Mensagem de commit: linha única, curta, sem começar com `-`. */
+function assertCommitMessage(msg: string): void {
+  if (!msg || msg.length > 200 || /[\r\n]/.test(msg) || msg.startsWith('-')) {
+    throw new CommandDeniedError('Mensagem de commit inválida (linha única, máx. 200 chars, sem hífen inicial).');
   }
 }
 
@@ -125,10 +149,7 @@ export function validateArgv(argv: string[]): void {
 
   if (head === 'git') {
     const sub = rest[0];
-    if (
-      sub === 'status' &&
-      (rest.length === 1 || (rest.length === 2 && (rest[1] === '--short' || rest[1] === '--porcelain')))
-    ) {
+    if (sub === 'status' && rest.length >= 1 && rest.slice(1).every((a) => GIT_STATUS_ARGS.has(a))) {
       return;
     }
     if (sub === 'diff' && rest.length === 1) return;
@@ -154,7 +175,24 @@ export function validateArgv(argv: string[]): void {
         return;
       }
     }
-    if (sub === 'rev-parse' && rest.length === 3 && rest[1] === '--abbrev-ref' && rest[2] === 'HEAD') return;
+    if (sub === 'rev-parse') {
+      if (rest.length === 2 && rest[1] === 'HEAD') return;
+      if (rest.length === 3 && rest[1] === '--abbrev-ref' && rest[2] === 'HEAD') return;
+    }
+    if (sub === 'add') {
+      if (rest.length >= 3 && rest[1] === '--') {
+        for (const p of rest.slice(2)) assertAddPath(p);
+        return;
+      }
+    }
+    if (sub === 'commit') {
+      if (rest.length === 3 && rest[1] === '-m') {
+        assertCommitMessage(rest[2]);
+        return;
+      }
+    }
+    if (sub === 'config' && rest.length === 2 && (rest[1] === 'user.name' || rest[1] === 'user.email')) return;
+    if (sub === 'symbolic-ref' && rest.length === 3 && rest[1] === '-q' && rest[2] === 'HEAD') return;
     throw new CommandDeniedError(`Comando git não permitido: ${argv.join(' ')}`);
   }
 

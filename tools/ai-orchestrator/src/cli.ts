@@ -2,31 +2,46 @@
 // ===========================================================================
 // CLI do orquestrador local do SmartJuris.
 //
-//   pnpm ai:next                     → executa a próxima fase elegível
-//   pnpm ai:run --phase 2A.1         → executa uma fase específica
-//   pnpm ai:audit --run <run-id>     → reexecuta só a auditoria de um run
-//   pnpm ai:status                   → tabela do roadmap
-//   pnpm ai:approve --phase 2A.1     → gate de aprovação manual (humano)
-//   pnpm ai:retry --phase 2A.1       → reexecuta fase em CORRECTION/AUDIT_FAILED
-//   pnpm ai:dry-run --phase 2A.1     → plano offline, sem mutações
+//   pnpm ai:next [--print-only] [modo]   → executa a próxima fase elegível
+//   pnpm ai:run --phase 2A.1 [modo]      → executa uma fase específica
+//   pnpm ai:audit --run <run-id>         → reexecuta só a auditoria de um run
+//   pnpm ai:status                       → tabela do roadmap
+//   pnpm ai:approve --phase 2A.1         → gate de aprovação manual (humano)
+//   pnpm ai:retry --phase 2A.1 [modo]    → reexecuta fase em CORRECTION/AUDIT_FAILED
+//   pnpm ai:dry-run --phase 2A.1         → plano offline, sem mutações
+//
+// Modos de working tree (run/next/retry):
+//   --auto-commit     checkpoint automático antes da fase
+//   --no-auto-commit  comportamento antigo: exige working tree limpo
+//   --allow-dirty     executa sem commit, registrando o SHA inicial
+//   --dry-run         valida sem modificar nada
+//   (sem flag)        pergunta antes do checkpoint (interativo; sem TTY, vira --no-auto-commit)
 // ===========================================================================
 
 import { moduleDir, resolveRepoRoot, resolveAiDevDir, type Env } from './paths.js';
 import { loadAutomationConfig } from './config.js';
 import { createLogger, withLock } from './io.js';
 import { createRealDeps } from './deps.js';
-import { runPhase } from './run.js';
+import { runPhase, type RunPhaseOptions } from './run.js';
 import { reAuditRun } from './auditRun.js';
 import { printStatus, findNextEligible, approvePhase, planDryRun } from './commands.js';
+import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
-  ai:next [--print-only]                 executa (ou apenas mostra) a próxima fase elegível
-  ai:run --phase <ID>                    executa uma fase
-  ai:audit --run <run-id> [--force]      reexecuta a auditoria de um run
-  ai:status                              tabela do roadmap
-  ai:approve --phase <ID> [--next]       aprovação manual (humano)
-  ai:retry --phase <ID>                  reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
-  ai:dry-run [--phase <ID>]              plano offline sem mutações`;
+  ai:next [--print-only] [modo]            executa (ou apenas mostra) a próxima fase elegível
+  ai:run --phase <ID> [modo]               executa uma fase
+  ai:audit --run <run-id> [--force]        reexecuta a auditoria de um run
+  ai:status                                tabela do roadmap
+  ai:approve --phase <ID> [--next]         aprovação manual (humano)
+  ai:retry --phase <ID> [modo]             reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
+  ai:dry-run [--phase <ID>]                plano offline sem mutações
+
+Modos de working tree (run/next/retry):
+  --auto-commit       cria checkpoint automático (git add filtrado + commit) antes da fase
+  --no-auto-commit    (padrão antigo) exige working tree limpo
+  --allow-dirty       executa sem commit, registrando o SHA inicial
+  --dry-run           valida sem modificar nada (git ou arquivos)
+  (sem flag)          pergunta antes de criar o checkpoint (interativo; sem TTY, vira --no-auto-commit)`;
 
 interface CliArgs {
   command: string;
@@ -62,6 +77,15 @@ function parseArgs(argv: string[]): CliArgs {
   return { command, opts, flags };
 }
 
+function resolveMode(flags: string[]): RunMode {
+  if (flags.includes('auto-commit')) return 'auto-commit';
+  if (flags.includes('no-auto-commit')) return 'no-auto-commit';
+  if (flags.includes('allow-dirty')) return 'allow-dirty';
+  if (flags.includes('dry-run')) return 'dry-run';
+  // Padrão: pergunta antes do checkpoint; sem TTY, preserva o comportamento antigo.
+  return process.stdin.isTTY ? 'interactive' : 'no-auto-commit';
+}
+
 async function main(): Promise<void> {
   const { command, opts, flags } = parseArgs(process.argv);
   const env: Env = process.env as Env;
@@ -71,6 +95,7 @@ async function main(): Promise<void> {
   const config = loadAutomationConfig(aiDevDir);
 
   const deps = () => createRealDeps({ env, config, repoRoot, aiDevDir, log });
+  const runOptions = (): RunPhaseOptions => ({ mode: resolveMode(flags) });
 
   switch (command) {
     case 'status': {
@@ -87,17 +112,17 @@ async function main(): Promise<void> {
         log.info(`Próxima fase elegível: ${next.id}`);
         break;
       }
-      await withLock(aiDevDir, () => runPhase(deps(), next.id));
+      await withLock(aiDevDir, () => runPhase(deps(), next.id, runOptions()));
       break;
     }
     case 'run': {
-      if (!opts.phase) throw new Error('Uso: ai:run --phase <ID>');
-      await withLock(aiDevDir, () => runPhase(deps(), opts.phase));
+      if (!opts.phase) throw new Error('Uso: ai:run --phase <ID> [modo]');
+      await withLock(aiDevDir, () => runPhase(deps(), opts.phase, runOptions()));
       break;
     }
     case 'retry': {
-      if (!opts.phase) throw new Error('Uso: ai:retry --phase <ID>');
-      await withLock(aiDevDir, () => runPhase(deps(), opts.phase));
+      if (!opts.phase) throw new Error('Uso: ai:retry --phase <ID> [modo]');
+      await withLock(aiDevDir, () => runPhase(deps(), opts.phase, runOptions()));
       break;
     }
     case 'audit': {

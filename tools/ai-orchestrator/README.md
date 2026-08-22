@@ -33,27 +33,43 @@ Chaves nunca são logadas (logger com redação).
 ## Comandos
 
 ```bash
-pnpm ai:next                     # executa a próxima fase PLANNED com dependências aprovadas
-pnpm ai:next --print-only        # apenas mostra a próxima fase elegível
-pnpm ai:run --phase 2A.1         # executa uma fase específica
-pnpm ai:audit --run <run-id>     # reexecuta SÓ a auditoria de um run (ex.: JSON inválido)
-pnpm ai:status                   # tabela do roadmap + próxima fase
-pnpm ai:approve --phase 2A.1     # gate de aprovação MANUAL (humano) — override consciente
-pnpm ai:approve --phase 2A.1 --next   # aprova e mostra a próxima elegível
-pnpm ai:retry --phase 2A.1       # reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
-pnpm ai:dry-run [--phase 2A.1]   # plano offline: valida config/roadmap/prompt sem mutar nada
+pnpm ai:next [--print-only] [modo]   # executa a próxima fase PLANNED com dependências aprovadas
+pnpm ai:run --phase 2A.1 [modo]      # executa uma fase específica
+pnpm ai:audit --run <run-id>         # reexecuta SÓ a auditoria de um run (ex.: JSON inválido)
+pnpm ai:status                       # tabela do roadmap + próxima fase
+pnpm ai:approve --phase 2A.1         # gate de aprovação MANUAL (humano) — override consciente
+pnpm ai:approve --phase 2A.1 --next  # aprova e mostra a próxima elegível
+pnpm ai:retry --phase 2A.1 [modo]    # reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
+pnpm ai:dry-run [--phase 2A.1]       # plano offline: valida config/roadmap/prompt sem mutar nada
 ```
+
+### Modos de working tree (`run`/`next`/`retry`)
+
+| Flag | Comportamento |
+|---|---|
+| `--auto-commit` | cria **checkpoint automático** (`git add` filtrado + `git commit -m "chore(ai-orchestrator): checkpoint before phase <id>"`) antes da fase; ao final, commita a atualização do roadmap |
+| `--no-auto-commit` | comportamento antigo: exige working tree limpo (bloqueia alterações fora de `docs/ai-development`) |
+| `--allow-dirty` | executa **sem commit**, registra o SHA inicial e avisa que a fase roda sobre estado não consolidado |
+| `--dry-run` | valida tudo **sem modificar nada** (nem git, nem arquivos, nem LLM) |
+| *(sem flag)* | mostra o resumo e **pergunta** antes do checkpoint (interativo; sem TTY, vira `--no-auto-commit`) |
+
+O checkpoint **nunca** usa `git add .`: apenas caminhos classificados como código seguro
+(sem `node_modules/`, `dist/`, `.pnpm-store/`, `.reasonix/`, segredos como `.env*`,
+suspeitos como `.ignore`/`pps/`/binários, e sem arquivos fora da raiz do repositório).
+Alterações locais em `docs/ai-development` **bloqueiam** a fase (a fase reescreve o roadmap).
 
 ## Fluxo de uma execução (`ai:run`)
 
 1. Lê o roadmap e valida que a fase está `PLANNED` (ou `CORRECTION_PENDING`/`AUDIT_FAILED` em retry).
 2. Valida que TODAS as dependências estão `AUDIT_APPROVED`.
-3. Verifica working tree limpo **exceto** `docs/ai-development/` (o orquestrador
-   altera o próprio roadmap — qualquer outro arquivo sujo bloqueia).
-4. Cria a branch `phase/<id>` (reusa em retry).
-5. Marca `IMPLEMENTING`, monta o envelope de implementação a partir do prompt
+3. Inspeciona o working tree (`git status --porcelain=v1 --untracked-files=all`) e classifica
+   os arquivos (seguros/artefatos/protegidos/suspeitos/segredos).
+4. Protege `docs/ai-development` (bloqueia alterações locais), detecta segredos e suspeitos.
+5. Cria o **checkpoint** conforme o modo (nunca `git add .`; valida identidade e HEAD não-detached).
+6. Cria a branch `phase/<id>` (reusa em retry).
+7. Marca `IMPLEMENTING`, monta o envelope de implementação a partir do prompt
    da fase em `smartjuris-phase-prompts.md` e chama o DeepSeek.
-6. Coleta evidências: `git status`, `git diff`, `git diff --stat`, testes e
+8. Coleta evidências: `git status`, `git diff`, `git diff --stat`, testes e
    builds da API/web (somente comandos da allowlist).
 7. Salva tudo em `docs/ai-development/runs/<timestamp>-<fase>/`.
 8. Marca `AUDIT_PENDING` e monta o contexto de revisão; chama o GPT-5.6 Terra.

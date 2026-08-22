@@ -60,9 +60,34 @@ class FakeGit implements GitOps {
   statusOut = '';
   diffOut = 'diff da fase\n';
   diffStatOut = '1 file changed\n';
+  porcelainOut = '';
+  headShaOut = 'f'.repeat(40);
+  identity = true;
+  detached = false;
 
   async dirtyFilesExcept(): Promise<string[]> {
     return this.dirty;
+  }
+  async porcelain(): Promise<string> {
+    this.calls.push(['git', 'status', '--porcelain=v1', '--untracked-files=all']);
+    return this.porcelainOut;
+  }
+  async headSha(): Promise<string | null> {
+    return this.headShaOut;
+  }
+  async addPaths(paths: string[]): Promise<ExecResult> {
+    this.calls.push(['git', 'add', '--', ...paths]);
+    return { command: 'git add', ok: true, code: 0, stdout: '', stderr: '', durationMs: 1 };
+  }
+  async commit(message: string): Promise<ExecResult> {
+    this.calls.push(['git', 'commit', '-m', message]);
+    return { command: 'git commit', ok: true, code: 0, stdout: '', stderr: '', durationMs: 1 };
+  }
+  async hasGitIdentity(): Promise<boolean> {
+    return this.identity;
+  }
+  async isDetachedHead(): Promise<boolean> {
+    return this.detached;
   }
   async createBranch(branch: string): Promise<ExecResult> {
     this.calls.push(['git', 'checkout', '-b', branch]);
@@ -289,7 +314,10 @@ describe('dry-run completo do pipeline (runPhase)', () => {
     assert.equal(runJson.audit?.verdict, 'APPROVE');
 
     // Chamadas registradas.
-    assert.deepEqual(git.calls[0], ['git', 'checkout', '-b', 'phase/2A.1']);
+    assert.ok(
+      git.calls.some((c) => c[0] === 'git' && c[1] === 'checkout' && c[2] === '-b' && c[3] === 'phase/2A.1'),
+      `branch phase criada: ${JSON.stringify(git.calls)}`,
+    );
     assert.equal(llm.implementerCalls, 1);
     assert.equal(llm.reviewerCalls, 1);
     const promptTxt = readFileSync(join(aiDevDir, 'runs', summary.runId, '00-prompt-implementer.txt'), 'utf8');
@@ -363,7 +391,7 @@ describe('dry-run completo do pipeline (runPhase)', () => {
   test('working tree sujo (fora do ai-development) aborta sem mutar o roadmap', async () => {
     writeFileSync(roadmapPath, ROADMAP_FIXTURE, 'utf8');
     const git = new FakeGit();
-    git.dirty = ['apps/api/src/server.ts'];
+    git.porcelainOut = ' M apps/api/src/server.ts';
     const llm = new FakeLlm();
     llm.reviewerResponses = [validApproveJson()];
     await assert.rejects(
@@ -376,6 +404,7 @@ describe('dry-run completo do pipeline (runPhase)', () => {
 
 describe('dry-run offline (planDryRun)', () => {
   test('gera plano sem mutar arquivos nem exigir chaves', () => {
+    writeFileSync(roadmapPath, ROADMAP_FIXTURE, 'utf8');
     const beforeMd = readRoadmap();
     const exec = new FakeExecutor();
     const llm = new FakeLlm();
@@ -387,6 +416,7 @@ describe('dry-run offline (planDryRun)', () => {
   });
 
   test('rejeita fase inexistente e dependência não aprovada', () => {
+    writeFileSync(roadmapPath, ROADMAP_FIXTURE, 'utf8');
     const deps = makeDeps(new FakeExecutor(), new FakeGit(), new FakeLlm());
     assert.throws(() => planDryRun(deps, '9X'), /não existe/);
     assert.throws(() => planDryRun(deps, '2A.2'), /Dependências não aprovadas/);

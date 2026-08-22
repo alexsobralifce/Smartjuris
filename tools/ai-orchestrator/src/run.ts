@@ -14,7 +14,7 @@
 
 import { basename, relative } from 'node:path';
 import { safeJoin, type Env } from './paths.js';
-import { type AutomationConfig, type RunSummary, type PhaseState, type ImplementerReport } from './contracts.js';
+import { type AutomationConfig, type RunSummary, type PhaseState, type ImplementerReport, type RunMode } from './contracts.js';
 import { type Executor, type ExecResult } from './executor.js';
 import { type GitOps } from './git.js';
 import { type LlmClient, AuditParseError, auditErrorSummary, validateAuditWithRetry } from './llm.js';
@@ -36,6 +36,11 @@ import {
 } from './roadmap.js';
 import { extractPhasePrompts, buildImplementerEnvelope, buildReviewContext } from './prompts.js';
 import { auditNextState, canAdvance, evidenceOk, type EvidenceGate } from './audit.js';
+import {
+  prepareWorkingTree,
+  commitRoadmapUpdate,
+  type PrepareResult,
+} from './worktree.js';
 
 export interface RunDeps {
   exec: Executor;
@@ -132,7 +137,14 @@ function buildImplementerReport(opts: {
   };
 }
 
-export async function runPhase(deps: RunDeps, phaseId: string): Promise<RunSummary> {
+export interface RunPhaseOptions {
+  /** Modo de checkpoint do working tree (padrão: no-auto-commit — comportamento antigo). */
+  mode?: RunMode;
+  confirm?: (question: string) => Promise<boolean>;
+}
+
+export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOptions = {}): Promise<RunSummary> {
+  const mode: RunMode = opts.mode ?? 'no-auto-commit';
   const now = deps.now ?? (() => new Date());
   const startedAt = now().toISOString();
   const runId = `${compactTimestamp(new Date(startedAt))}-${phaseId}`;
@@ -140,6 +152,7 @@ export async function runPhase(deps: RunDeps, phaseId: string): Promise<RunSumma
   const runDir = safeJoin(runsDir, runId);
   const roadmapFile = safeJoin(deps.aiDevDir, basename(deps.config.roadmap));
   const promptsFile = safeJoin(deps.aiDevDir, basename(deps.config.phasePrompts));
+  const aiDevRel = aiDevRelative(deps.repoRoot, deps.aiDevDir);
 
   const runSummary: RunSummary = {
     runId,
@@ -151,13 +164,18 @@ export async function runPhase(deps: RunDeps, phaseId: string): Promise<RunSumma
     implementerModel: deps.config.implementer.model,
     reviewerModel: deps.config.reviewer.model,
     artifactFiles: [],
+    mode,
+    initialSha: null,
+    finalSha: null,
+    preRunFiles: [],
   };
   const artifact = (name: string, content: string): void => {
     writeArtifact(runDir, name, content);
     runSummary.artifactFiles.push(name);
   };
 
-  mkdirRecursive(runDir);
+  // dry-run não cria nada (nem o diretório do run).
+  if (mode !== 'dry-run') mkdirRecursive(runDir);
   let roadmapMarked = false;
   let previousState: PhaseState | null = null;
 
@@ -189,13 +207,25 @@ export async function runPhase(deps: RunDeps, phaseId: string): Promise<RunSumma
       throw new Error(`Dependências não aprovadas para ${phaseId}: ${blocking.join(', ')}.`);
     }
 
-    // 2) Working tree limpo (o próprio diretório ai-development é excluído)
-    const aiDevRel = aiDevRelative(deps.repoRoot, deps.aiDevDir);
-    const dirty = await deps.git.dirtyFilesExcept([aiDevRel]);
-    if (dirty.length > 0) {
-      throw new Error(
-        `Working tree sujo fora de ${aiDevRel}: ${dirty.slice(0, 20).join(', ')}. Faça commit ou descarte antes de executar.`,
-      );
+    // 2) Working tree: proteções (docs/ai-development, segredos, suspeitos) +
+    //    checkpoint configurável (auto-commit | interactive | allow-dirty | no-auto-commit | dry-run)
+    const prep: PrepareResult = await prepareWorkingTree({
+      git: deps.git,
+      log: deps.log,
+      aiDevRel,
+      phaseId,
+      mode,
+      confirm: opts.confirm,
+    });
+    runSummary.initialSha = prep.initialSha;
+    runSummary.finalSha = prep.finalSha;
+    runSummary.preRunFiles = prep.preRunFiles;
+
+    if (mode === 'dry-run') {
+      deps.log.info(`[dry-run] Fase ${phaseId} validada (roadmap, dependências, working tree). Nada será executado nem modificado.`);
+      runSummary.status = 'DRY_RUN';
+      runSummary.finishedAt = now().toISOString();
+      return runSummary;
     }
 
     // 3) Branch da fase
@@ -331,6 +361,12 @@ export async function runPhase(deps: RunDeps, phaseId: string): Promise<RunSumma
     } else {
       deps.log.info(`Fase ${phaseId}: ${state}. Próxima fase só via ai:next (após merge manual da branch).`);
     }
+    if (mode === 'auto-commit') {
+      const sha = await commitRoadmapUpdate({ git: deps.git, log: deps.log, aiDevRel, phaseId });
+      if (sha) runSummary.finalSha = sha;
+    } else {
+      runSummary.finalSha = (await deps.git.headSha()) ?? runSummary.finalSha;
+    }
     artifact('run.json', JSON.stringify(runSummary, null, 2));
     return runSummary;
   } catch (err) {
@@ -338,14 +374,21 @@ export async function runPhase(deps: RunDeps, phaseId: string): Promise<RunSumma
     runSummary.status = 'FAILED';
     runSummary.finishedAt = now().toISOString();
     runSummary.error = auditErrorSummary(err);
-    if (isAuditError) {
-      // Roadmap permanece AUDIT_PENDING: permite ai:audit --run <id> manual.
-      deps.log.error(`Auditoria inválida para ${phaseId}: ${runSummary.error}. Reenvie com ai:audit --run ${runId}.`);
-    } else {
-      revertRoadmap();
-      deps.log.error(`Falha na execução de ${phaseId}: ${runSummary.error}`);
+    if (mode !== 'dry-run') {
+      if (isAuditError) {
+        // Roadmap permanece AUDIT_PENDING: permite ai:audit --run <id> manual.
+        deps.log.error(`Auditoria inválida para ${phaseId}: ${runSummary.error}. Reenvie com ai:audit --run ${runId}.`);
+        if (mode === 'auto-commit') {
+          const sha = await commitRoadmapUpdate({ git: deps.git, log: deps.log, aiDevRel, phaseId });
+          if (sha) runSummary.finalSha = sha;
+        }
+      } else {
+        revertRoadmap();
+        deps.log.error(`Falha na execução de ${phaseId}: ${runSummary.error}`);
+      }
+      runSummary.finalSha = (await deps.git.headSha()) ?? runSummary.finalSha;
+      artifact('run.json', JSON.stringify(runSummary, null, 2));
     }
-    artifact('run.json', JSON.stringify(runSummary, null, 2));
     throw err;
   }
 }

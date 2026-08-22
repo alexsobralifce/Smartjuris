@@ -22,11 +22,18 @@ describe('allowlist de comandos', () => {
     assert.deepEqual(tokenizeCommand('pnpm --filter @lexia/web build'), ['pnpm', '--filter', '@lexia/web', 'build']);
     assert.deepEqual(tokenizeCommand('git status --short'), ['git', 'status', '--short']);
     validateArgv(['git', 'status', '--porcelain']);
+    validateArgv(['git', 'status', '--porcelain=v1', '--untracked-files=all']);
     validateArgv(['git', 'diff', '--stat']);
     validateArgv(['git', 'diff', '--', '.', ':(exclude)docs/ai-development/runs/**']);
     validateArgv(['git', 'checkout', '-b', 'phase/2A.1']);
     validateArgv(['git', 'checkout', 'phase/2A.1']);
     validateArgv(['git', 'rev-parse', '--abbrev-ref', 'HEAD']);
+    validateArgv(['git', 'rev-parse', 'HEAD']);
+    validateArgv(['git', 'add', '--', 'apps/api/src/server.ts', 'apps/api/src/services/documento.ts']);
+    validateArgv(['git', 'commit', '-m', 'chore(ai-orchestrator): checkpoint before phase 2A.1']);
+    validateArgv(['git', 'config', 'user.name']);
+    validateArgv(['git', 'config', 'user.email']);
+    validateArgv(['git', 'symbolic-ref', '-q', 'HEAD']);
   });
 
   test('bloqueia comandos destrutivos', () => {
@@ -38,6 +45,11 @@ describe('allowlist de comandos', () => {
       'git clean -fd',
       'git checkout master',
       'git branch -D phase/2A.1',
+      'git add .',
+      'git add -A',
+      'git commit -am "x"',
+      'git commit --amend -m "x"',
+      'git rm -r apps',
       'rm -rf /',
       'rm -rf node_modules',
       'pnpm install --force',
@@ -45,6 +57,17 @@ describe('allowlist de comandos', () => {
     ]) {
       assert.throws(() => tokenizeCommand(cmd), CommandDeniedError, `deveria bloquear: ${cmd}`);
     }
+  });
+
+  test('bloqueia caminhos e mensagens inválidos no add/commit', () => {
+    assert.throws(() => validateArgv(['git', 'add', '--', '../fora.js']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'add', '--', '/etc/passwd']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'add', '--', '-x']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'add', '--', ':magic']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'add', '--', '.']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'commit', '-m', '-oops']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'commit', '-m', 'linha1\nlinha2']), CommandDeniedError);
+    assert.throws(() => validateArgv(['git', 'commit', '-m', 'x'.repeat(201)]), CommandDeniedError);
   });
 
   test('bloqueia metacaracteres de shell', () => {

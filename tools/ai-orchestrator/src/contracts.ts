@@ -146,7 +146,11 @@ export type ImplementerReport = z.infer<typeof ImplementerReport>;
 
 // --- Resumo de execução (run.json) ---
 
-export const RunStatus = z.enum(['RUNNING', 'COMPLETED', 'AUDIT_APPROVED', 'CORRECTION_PENDING', 'AUDIT_FAILED', 'FAILED']);
+export const RUN_MODES = ['interactive', 'auto-commit', 'no-auto-commit', 'allow-dirty', 'dry-run'] as const;
+export const RunMode = z.enum(RUN_MODES);
+export type RunMode = z.infer<typeof RunMode>;
+
+export const RunStatus = z.enum(['RUNNING', 'COMPLETED', 'AUDIT_APPROVED', 'CORRECTION_PENDING', 'AUDIT_FAILED', 'FAILED', 'DRY_RUN']);
 export type RunStatus = z.infer<typeof RunStatus>;
 
 export const RunSummary = z.object({
@@ -161,5 +165,10 @@ export const RunSummary = z.object({
   artifactFiles: z.array(z.string()),
   audit: AuditResult.optional(),
   error: z.string().optional(),
+  // Fase de checkpoint / rastreabilidade do estado inicial.
+  mode: RunMode.optional(),
+  initialSha: z.string().nullable().optional(),
+  finalSha: z.string().nullable().optional(),
+  preRunFiles: z.array(z.string()).optional(),
 }).strict();
 export type RunSummary = z.infer<typeof RunSummary>;

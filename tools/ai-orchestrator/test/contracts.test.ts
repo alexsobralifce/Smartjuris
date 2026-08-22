@@ -157,6 +157,27 @@ describe('ImplementerReport / RunSummary / AutomationConfig', () => {
     );
   });
 
+  test('run summary aceita rastreabilidade de checkpoint (mode/initialSha/finalSha/preRunFiles)', () => {
+    const parsed = RunSummary.parse({
+      runId: 'x',
+      phase: '2A.1',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      finishedAt: '2026-01-01T00:00:01.000Z',
+      status: 'AUDIT_APPROVED',
+      branch: 'phase/2A.1',
+      implementerModel: 'm',
+      reviewerModel: 'r',
+      artifactFiles: ['run.json'],
+      mode: 'auto-commit',
+      initialSha: 'a'.repeat(40),
+      finalSha: 'b'.repeat(40),
+      preRunFiles: ['apps/api/src/server.ts'],
+    });
+    assert.equal(parsed.mode, 'auto-commit');
+    assert.equal(parsed.initialSha, 'a'.repeat(40));
+    assert.equal(parsed.preRunFiles?.length, 1);
+  });
+
   test('AutomationConfig aceita o arquivo real do repositório', () => {
     const here = new URL('.', import.meta.url).pathname;
     const cfgPath = join(here, '..', '..', '..', 'docs', 'ai-development', 'automation-config.json');

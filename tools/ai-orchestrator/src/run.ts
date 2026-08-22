@@ -33,6 +33,7 @@ import {
   assertTransition,
   renderRoadmap,
   buildHistoryRow,
+  extractAuditHistory,
   isValidPhaseId,
 } from './roadmap.js';
 import { extractPhasePrompts, buildImplementerEnvelope, buildReviewContext } from './prompts.js';
@@ -69,6 +70,39 @@ const COMPLETION_CRITERIA = [
   '- Isolamento multi-tenant preservado;',
   '- Auditoria das operações sensíveis.',
 ].join('\n');
+
+/**
+ * SHA da rodada anterior da mesma fase (para diff delta). Lê o run.json mais
+ * recente de `runs/` com o mesmo phaseId (excluindo o run atual) e retorna o
+ * initialSha registrado. Se não houver rodada anterior, retorna null (diff HEAD).
+ */
+export async function previousRunBaseSha(aiDevDir: string, phaseId: string, currentRunId: string): Promise<string | null> {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const runsDir = safeJoin(aiDevDir, 'runs');
+  let entries: string[] = [];
+  try {
+    entries = await readdir(runsDir);
+  } catch {
+    return null; // sem diretório de runs ainda
+  }
+  const candidatos: { ts: number; sha: string }[] = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(`-${phaseId}`) || entry === currentRunId) continue;
+    try {
+      const raw = await readFile(safeJoin(runsDir, entry, 'run.json'), 'utf8');
+      const parsed = JSON.parse(raw) as { initialSha?: string | null };
+      if (parsed.initialSha) {
+        const m = entry.match(/^(\d{8}T\d{6}Z)/);
+        candidatos.push({ ts: m ? Date.parse(m[1]) : 0, sha: parsed.initialSha });
+      }
+    } catch {
+      // run.json ausente/corrompido — ignora
+    }
+  }
+  if (candidatos.length === 0) return null;
+  candidatos.sort((a, b) => b.ts - a.ts);
+  return candidatos[0].sha;
+}
 
 export function compactTimestamp(date: Date): string {
   return date
@@ -209,7 +243,28 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       throw new Error(`Dependências não aprovadas para ${phaseId}: ${blocking.join(', ')}.`);
     }
 
-    // 2) Working tree: proteções (docs/ai-development, segredos, suspeitos) +
+    // 2) Teto de correções: conta rodadas anteriores da fase que terminaram em
+    //    CORRECTION_PENDING/AUDIT_FAILED. Ao atingir maxCorrectionAttempts,
+    //    PARA o ciclo e exige decisão humana (ai:approve ou reescopo) — evita
+    //    retrabalho infinito e gasto de tokens em re-auditorias sem memória.
+    if (previousState !== 'PLANNED') {
+      const history = extractAuditHistory(md, phaseId);
+      const falhas = history.filter((h) => {
+        // Linha: | data | fase | implementador | revisor | VEREDITO | avançou | nota |
+        const cells = h.split('|').map((c) => c.trim());
+        return /CORRECTION|REJECT|APPROVE_WITH_CONDITIONS/i.test(cells[5] ?? '');
+      }).length;
+      if (falhas >= deps.config.limits.maxCorrectionAttempts) {
+        throw new Error(
+          `Fase ${phaseId} atingiu o limite de ${deps.config.limits.maxCorrectionAttempts} tentativas de correção (` +
+            `${falhas} rodada(s) anterior(es) sem aprovação). Decisão humana requerida: ` +
+            'use `pnpm ai:approve --phase ' + phaseId + '` (aprovação manual justificada) ' +
+            'ou revise o escopo antes de tentar novamente.',
+        );
+      }
+    }
+
+    // 3) Working tree: proteções (docs/ai-development, segredos, suspeitos) +
     //    checkpoint configurável (auto-commit | interactive | allow-dirty | no-auto-commit | dry-run)
     const prep: PrepareResult = await prepareWorkingTree({
       git: deps.git,
@@ -230,7 +285,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       return runSummary;
     }
 
-    // 3) Branch da fase
+    // 4) Branch da fase
     const branch = `phase/${phaseId}`;
     const createRes = await deps.git.createBranch(branch);
     if (!createRes.ok) {
@@ -243,12 +298,12 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     }
     runSummary.branch = branch;
 
-    // 4) Roadmap → IMPLEMENTING
+    // 5) Roadmap → IMPLEMENTING
     assertTransition(previousState, 'IMPLEMENTING');
     writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'IMPLEMENTING' }));
     roadmapMarked = true;
 
-    // 5) Prompt da fase + implementação.
+    // 6) Prompt da fase + implementação.
     //    Se o working tree já contém o diff da fase (allow-dirty com arquivos
     //    seguros), a implementação é externa (agente/humano): não há o que o
     //    LLM escrever. Pular a chamada ao DeepSeek nesse caso elimina a fonte
@@ -283,7 +338,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       artifact('01-response-implementer.txt', response);
     }
 
-    // 6) Evidências: testes e builds (apenas comandos permitidos)
+    // 7) Evidências: testes e builds (apenas comandos permitidos)
     const tests = await deps.exec.runConfigCommand(deps.config.commands.apiTests, {
       cwd: deps.repoRoot,
       timeoutMs: 600_000,
@@ -301,13 +356,20 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     artifact('05-tests.txt', testsText);
     artifact('06-build.txt', buildText);
 
-    // 7) Artefatos git (diff da fase, excluindo o próprio diretório ai-development)
-    const gitArtifacts = await deps.git.collectDiffArtifacts([aiDevRel]);
+    // 8) Artefatos git (diff da fase, excluindo o próprio diretório ai-development).
+    //    Se é uma RODADA DE CORREÇÃO, o diff apresentado é o DELTA desde a
+    //    rodada anterior (menos tokens, foco no que mudou); na primeira rodada
+    //    usa HEAD (diff acumulado).
+    const diffBase = previousState !== 'PLANNED'
+      ? await previousRunBaseSha(deps.aiDevDir, phaseId, runId)
+      : null;
+    const gitArtifacts = await deps.git.collectDiffArtifacts([aiDevRel], diffBase ?? undefined);
+    artifact('14-diff-base.txt', diffBase ?? '(HEAD — primeira rodada)');
     artifact('02-git-status.txt', gitArtifacts.status);
     artifact('03-git-diff-stat.txt', gitArtifacts.diffStat);
     artifact('04-git-diff.txt', gitArtifacts.diff);
 
-    // 8) Relatório do implementador (gerado a partir das evidências)
+    // 9) Relatório do implementador (gerado a partir das evidências)
     const report = buildImplementerReport({
       phaseId,
       response,
@@ -318,10 +380,21 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     });
     artifact('07-implementer-report.json', JSON.stringify(report, null, 2));
 
-    // 9) Roadmap → IMPLEMENTED → AUDIT_PENDING
+    // 10) Roadmap → IMPLEMENTED → AUDIT_PENDING
     writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_PENDING' }));
 
-    // 10) Contexto de revisão + GPT-5.6 Terra (com validação estrita + 1 correção)
+    // 11) Contexto de revisão + GPT-5.6 Terra (com validação estrita + 1 correção).
+    //     MEMÓRIA: o revisor recebe o histórico de auditorias anteriores da fase
+    //     (condições já pedidas) e o que mudou nesta rodada — evita o "alvo
+    //     móvel" que causava 7-10 re-auditorias por fase.
+    const auditHistory = extractAuditHistory(md, phaseId).slice(-6).join('\n');
+    const preRunFiles = prep.preRunFiles;
+    const correctionsApplied =
+      previousState === 'CORRECTION_PENDING' || previousState === 'AUDIT_FAILED'
+        ? 'Rodada de correção em resposta às condições anteriores. Arquivos tocados nesta rodada:\n' +
+          (preRunFiles.length > 0 ? preRunFiles.map((f) => `  - ${f}`).join('\n') : '  (sem arquivos seguros — ver diff)') +
+          '\nDiff completo da fase (HEAD) é apresentado acima; revise as condições pendentes, não reabra tópicos resolvidos.'
+        : 'Primeira auditoria desta fase (sem rodadas anteriores).';
     const context = buildReviewContext({
       phaseId,
       phaseName: prompts.name,
@@ -335,8 +408,12 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       decisions: '',
       limitations: '',
       risks: '',
+      auditHistory,
+      correctionsApplied,
     });
     artifact('08-review-context.txt', context);
+    artifact('12-audit-history.txt', auditHistory || '(sem histórico anterior)');
+    artifact('13-corrections-applied.txt', correctionsApplied);
     deps.log.info(`Chamando revisor (${runSummary.reviewerModel})...`);
     const { audit, rawResponses, corrected } = await validateAuditWithRetry(deps.llm, context);
     artifact('09-review-response.txt', rawResponses.join('\n\n--- RESPOSTA CORRIGIDA ---\n\n'));
@@ -344,7 +421,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     runSummary.audit = audit;
     if (corrected) deps.log.warn('Auditoria corrigida após feedback de validação (1 tentativa).');
 
-    // 11) Gate de aprovação
+    // 12) Gate de aprovação
     const gate: EvidenceGate = {
       testsPass: tests.ok,
       buildsPass: buildApi.ok && buildWeb.ok,

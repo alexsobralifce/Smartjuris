@@ -199,6 +199,35 @@ export function renderRoadmap(
   return out.join('\n');
 }
 
+/**
+ * Extrai as linhas do histórico de auditoria de uma fase específica
+ * (formato `| data | fase | implementador | revisor | veredito | avançou | nota |`).
+ * Usado para dar MEMÓRIA ao revisor: ele vê o que já foi pedido nas rodadas
+ * anteriores em vez de reavaliar do zero (alvo móvel).
+ */
+export function extractAuditHistory(md: string, phaseId: string): string[] {
+  const lines = md.split(/\r?\n/);
+  const out: string[] = [];
+  let inHistory = false;
+  for (const line of lines) {
+    if (/^## Histórico de auditoria/.test(line)) {
+      inHistory = true;
+      continue;
+    }
+    if (inHistory && /^##\s+/.test(line)) {
+      break; // fim do histórico
+    }
+    if (inHistory && isHistoryDataRow(line)) {
+      const cells = splitRowCells(line);
+      // cells: [data, fase, implementador, revisor, veredito, avançou, nota]
+      if (cells[1]?.trim() === phaseId) {
+        out.push(line.trim());
+      }
+    }
+  }
+  return out;
+}
+
 export function buildHistoryRow(opts: {
   date: string;
   phase: string;

@@ -62,6 +62,8 @@ export async function reAuditRun(deps: RunDeps, runId: string, opts: ReAuditOpti
       decisions: '',
       limitations: '',
       risks: '',
+      auditHistory: '',
+      correctionsApplied: '',
     });
   }
 

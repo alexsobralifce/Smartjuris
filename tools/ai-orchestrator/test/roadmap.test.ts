@@ -12,6 +12,7 @@ import {
   parsePhaseRow,
   renderRoadmap,
   buildHistoryRow,
+  extractAuditHistory,
   findNextPlannable,
   findPhase,
   getBlockingDependencies,
@@ -222,5 +223,23 @@ describe('roadmap real do repositório (leitura)', { skip: !existsSync(realRoadm
     // render com update preserva o arquivo (sem erro de histórico).
     const out = renderRoadmap(md, { '2A.1': 'IMPLEMENTING' });
     assert.ok(out.includes('## Histórico de auditoria'));
+  });
+
+  test('extractAuditHistory retorna apenas as linhas da fase (memória do revisor)', () => {
+    const md = [
+      '## Histórico de auditoria',
+      '| data | fase | implementador | revisor | veredito | avançou | nota |',
+      '| 2026-08-22 | 2B | DeepSeek | GPT | REJECT | Não | reprovado |',
+      '| 2026-08-22 | 2B | DeepSeek | GPT | APPROVE | Sim | ok |',
+      '| 2026-08-22 | 2C | DeepSeek | GPT | APPROVE | Sim | ok |',
+    ].join('\n');
+    const hist2B = extractAuditHistory(md, '2B');
+    assert.equal(hist2B.length, 2);
+    assert.ok(hist2B[0].includes('REJECT'));
+    assert.ok(hist2B[1].includes('APPROVE'));
+    const hist2C = extractAuditHistory(md, '2C');
+    assert.equal(hist2C.length, 1);
+    const hist2A = extractAuditHistory(md, '2A');
+    assert.equal(hist2A.length, 0, 'fase sem histórico → vazio');
   });
 });

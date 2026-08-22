@@ -11,7 +11,7 @@ export interface GitOps {
   createBranch(branch: string): Promise<ExecResult>;
   checkoutBranch(branch: string): Promise<ExecResult>;
   currentBranch(): Promise<string>;
-  collectDiffArtifacts(excludes: string[]): Promise<{
+  collectDiffArtifacts(excludes: string[], base?: string): Promise<{
     status: string;
     diffStat: string;
     diff: string;
@@ -65,17 +65,22 @@ export function createGitOps(exec: Executor, repoRoot: string): GitOps {
       return res.ok ? res.stdout.trim() : 'desconhecido';
     },
 
-    async collectDiffArtifacts(excludes: string[]): Promise<{
+    async collectDiffArtifacts(
+      excludes: string[],
+      base?: string,
+    ): Promise<{
       status: string;
       diffStat: string;
       diff: string;
     }> {
       const statusRes = await exec.run(['git', 'status', '--porcelain'], opts);
-      const diffStatRes = await exec.run(['git', 'diff', 'HEAD', '--stat'], opts);
-      // `git diff HEAD` inclui staged e unstaged (arquivos novos staged ficam
-      // visíveis ao revisor; untracked não aparecem — ver allow-dirty).
+      // `base` = SHA da rodada anterior (delta); sem base, usa HEAD (diff
+      // acumulado). `git diff <base>` inclui staged + unstaged (arquivos novos
+      // staged ficam visíveis ao revisor; untracked não aparecem).
+      const ref = base ?? 'HEAD';
+      const diffStatRes = await exec.run(['git', 'diff', ref, '--stat'], opts);
       const diffRes = await exec.run(
-        ['git', 'diff', 'HEAD', '--', '.', ...excludes.map((e) => `:(exclude)${e}`)],
+        ['git', 'diff', ref, '--', '.', ...excludes.map((e) => `:(exclude)${e}`)],
         opts,
       );
       return {

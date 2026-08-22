@@ -113,11 +113,15 @@ export interface ReviewContextInput {
   decisions: string;
   limitations: string;
   risks: string;
+  /** Linhas do histórico de auditoria anterior da fase (memória: evita alvo móvel). */
+  auditHistory: string;
+  /** Mudanças feitas nesta rodada em resposta às condições anteriores. */
+  correctionsApplied: string;
 }
 
 /** Formato de passagem para o Terra (smartjuris-phase-prompts.md). */
 export function buildReviewContext(input: ReviewContextInput): string {
-  return [
+  const parts: string[] = [
     `Fase: ${input.phaseId}${input.phaseName ? ` — ${input.phaseName}` : ''}`,
     '',
     'Objetivo:',
@@ -150,6 +154,24 @@ export function buildReviewContext(input: ReviewContextInput): string {
     'Riscos:',
     input.risks || '—',
     '',
-    'Analise a implementação e retorne somente o contrato JSON de revisão.',
-  ].join('\n');
+  ];
+
+  // Memória das rodadas anteriores — o revisor NÃO deve reabrir o que já foi
+  // aprovado nem repetir condições já atendidas (evita o "alvo móvel").
+  if (input.auditHistory.trim()) {
+    parts.push('', 'Histórico de auditoria anterior desta fase (mais recente primeiro):', input.auditHistory.trim());
+  }
+  if (input.correctionsApplied.trim()) {
+    parts.push('', 'Correções aplicadas NESTA rodada em resposta às condições anteriores:', input.correctionsApplied.trim());
+  }
+  parts.push(
+    '',
+    'REGRAS DE REVISÃO:',
+    '- Avalie APENAS as condições pendentes desta rodada; não reabra tópicos já resolvidos nas rodadas anteriores.',
+    '- Se uma condição anterior já foi atendida, registre PASS e avance; não exija itens novos fora do escopo da fase.',
+    '- Liste apenas achados NOVOS e não duplicados em rodadas anteriores.',
+    '- Retorne somente o contrato JSON de revisão.',
+  );
+
+  return parts.join('\n');
 }

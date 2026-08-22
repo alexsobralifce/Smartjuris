@@ -94,6 +94,9 @@ export class CommandDeniedError extends Error {
 const BRANCH_NAME = /^phase\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GIT_DIFF_EXCLUDE = /^:\(exclude\)[A-Za-z0-9/._*\-]+$/;
 const PNPM_SCRIPTS = new Set(['test', 'build']);
+// SHA de git (completo 40-64 hex ou abreviado >=7) usado como base de diff (delta entre rodadas).
+const GIT_SHA = /^[0-9a-f]{7,64}$/;
+
 const GIT_STATUS_ARGS = new Set(['--short', '--porcelain', '--porcelain=v1', '--untracked-files=all']);
 
 function assertBranchName(name: string): void {
@@ -155,6 +158,7 @@ export function validateArgv(argv: string[]): void {
     if (sub === 'diff' && rest.length === 1) return;
     if (sub === 'diff' && rest.length === 2 && rest[1] === '--stat') return;
     if (sub === 'diff' && rest.length === 3 && rest[1] === 'HEAD' && rest[2] === '--stat') return;
+    if (sub === 'diff' && rest.length === 3 && GIT_SHA.test(rest[1]) && rest[2] === '--stat') return;
     if (sub === 'diff' && rest.length === 3 && rest[1] === '--' && rest[2] === '.') return;
     if (
       sub === 'diff' &&
@@ -169,6 +173,17 @@ export function validateArgv(argv: string[]): void {
     if (
       sub === 'diff' &&
       rest[1] === 'HEAD' &&
+      rest[2] === '--' &&
+      rest[3] === '.' &&
+      rest.slice(4).length >= 1 &&
+      rest.slice(4).every((p) => GIT_DIFF_EXCLUDE.test(p))
+    ) {
+      for (const p of rest.slice(4)) assertPathspec(p);
+      return;
+    }
+    if (
+      sub === 'diff' &&
+      GIT_SHA.test(rest[1]) &&
       rest[2] === '--' &&
       rest[3] === '.' &&
       rest.slice(4).length >= 1 &&

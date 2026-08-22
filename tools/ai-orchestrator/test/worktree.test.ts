@@ -555,6 +555,76 @@ describe('runPhase end-to-end com git real (--auto-commit)', () => {
   });
 });
 
+describe('teto de correções (memória contra retrabalho)', () => {
+  test('fase em CORRECTION_PENDING com histórico >= maxCorrectionAttempts é BLOQUEADA', async () => {
+    const repo = makeRepo();
+    // Código válido pendente (simula correção em andamento).
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 500; // correcao\n', 'utf8');
+
+    // Roadmap: fase 2A.1 em CORRECTION_PENDING + 2 rodadas anteriores falhas no histórico.
+    const roadmapComHistorico = ROADMAP
+      .replace('| 2A.1 | Testes HTTP de tenancy | 2A | \`PLANNED\` | DeepSeek | GPT-5.6 Terra |', '| 2A.1 | Testes HTTP de tenancy | 2A | \`CORRECTION_PENDING\` | DeepSeek | GPT-5.6 Terra |')
+      .replace('**Estado:** \`PLANNED\`\n\n**Dependência:** 2A aprovada.', '**Estado:** \`CORRECTION_PENDING\`\n\n**Dependência:** 2A aprovada.')
+      + [
+        '| 2026-08-20 | 2A.1 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |',
+        '| 2026-08-21 | 2A.1 | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |',
+      ].join('\n') + '\n';
+    writeFileSync(join(repo.aiDevDir, 'implementation-roadmap.md'), roadmapComHistorico, 'utf8');
+    // Roadmap modificado é protegido: commita antes de rodar a fase.
+    git(repo.root, ['add', '-A']);
+    git(repo.root, ['commit', '-q', '-m', 'roadmap historico']);
+
+    const hybrid = new HybridExecutor(new SafeExecutor());
+    const deps = {
+      exec: hybrid,
+      git: createGitOps(hybrid, repo.root),
+      llm: makeFakeLlm(repo.root),
+      repoRoot: repo.root,
+      aiDevDir: repo.aiDevDir,
+      config: CONFIG,
+      env: {},
+      now: () => new Date('2026-01-04T00:00:00.000Z'),
+      log: silentLog,
+    };
+
+    await assert.rejects(
+      runPhase(deps, '2A.1', { mode: 'auto-commit' }),
+      /atingiu o limite de 2 tentativas de correção/i,
+      'teto de correções bloqueia a fase antes de gastar chamadas de revisor',
+    );
+  });
+
+  test('fase em CORRECTION_PENDING com histórico ABAIXO do limite executa normalmente', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 501; // correcao2\n', 'utf8');
+
+    // Só 1 rodada anterior falha → abaixo do limite (2).
+    const roadmapCom1Falha = ROADMAP
+      .replace('| 2A.1 | Testes HTTP de tenancy | 2A | \`PLANNED\` | DeepSeek | GPT-5.6 Terra |', '| 2A.1 | Testes HTTP de tenancy | 2A | \`CORRECTION_PENDING\` | DeepSeek | GPT-5.6 Terra |')
+      .replace('**Estado:** \`PLANNED\`\n\n**Dependência:** 2A aprovada.', '**Estado:** \`CORRECTION_PENDING\`\n\n**Dependência:** 2A aprovada.')
+      + '| 2026-08-20 | 2A.1 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |\n';
+    writeFileSync(join(repo.aiDevDir, 'implementation-roadmap.md'), roadmapCom1Falha, 'utf8');
+    git(repo.root, ['add', '-A']);
+    git(repo.root, ['commit', '-q', '-m', 'roadmap 1 falha']);
+
+    const hybrid = new HybridExecutor(new SafeExecutor());
+    const deps = {
+      exec: hybrid,
+      git: createGitOps(hybrid, repo.root),
+      llm: makeFakeLlm(repo.root),
+      repoRoot: repo.root,
+      aiDevDir: repo.aiDevDir,
+      config: CONFIG,
+      env: {},
+      now: () => new Date('2026-01-05T00:00:00.000Z'),
+      log: silentLog,
+    };
+
+    const summary = await runPhase(deps, '2A.1', { mode: 'auto-commit' });
+    assert.equal(summary.status, 'AUDIT_APPROVED', 'abaixo do limite executa normalmente');
+  });
+});
+
 describe('modo autônomo (--autonomous)', () => {
   test('autonomous com código modificado cria checkpoint e commit sem confirmação', async () => {
     const repo = makeRepo();

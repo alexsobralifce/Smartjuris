@@ -6,6 +6,7 @@
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { sql, eq, inArray } from 'drizzle-orm';
 
 await import('../config.js');
@@ -480,5 +481,113 @@ describe('4B — observabilidade (alerta de custo por escritório)', { skip: !db
       .where(eq(s.auditLog.acao, 'AI_ALERTA_CUSTO_PILOTO'))
       .then((rows) => rows.filter((r) => (r.detalhes as any)?.escritorioId === esc.id && (r.detalhes as any)?.ciclo === ciclo));
     assert.equal(alerts.length, 1, 'UM único alerta para todas as liquidações concorrentes');
+  });
+
+  test('notificação PÓS-COMMIT: enviada uma única vez; retry NÃO reenvia; falha do e-mail não propaga nem falha o settle', async () => {
+    // (a) Outbox: com ROOT_NOTIFICATION_EMAIL configurado, a notificação injetada
+    // é chamada UMA vez após o commit; a segunda chamada (retry) não reenvia.
+    const [esc] = await db.insert(s.escritorios).values([
+      { nome: `Pilot Notif ${suffix}`, plano: 'office', ativo: true, limiteTokensMes: null },
+    ]).returning({ id: s.escritorios.id });
+    escIds.push(esc.id);
+    const [op] = await db.insert(s.aiOperations).values({
+      idempotencyKey: `piloto-notif-${suffix}`,
+      escritorioId: esc.id,
+      operationType: 'STANDARD_PETITION',
+      status: 'succeeded',
+      model: 'flash',
+      costCentsActual: 60_000,
+      tokensIn: 1,
+      tokensOut: 1,
+      finishedAt: new Date(),
+    }).returning({ id: s.aiOperations.id });
+    opIds.push(op.id);
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_ALERTA_CUSTO_CENTS = '50000';
+    process.env.ROOT_NOTIFICATION_EMAIL = 'root@piloto.test';
+    const envNotifOriginal = process.env.ROOT_NOTIFICATION_EMAIL;
+    try {
+      let chamadas = 0;
+      const notificar = async () => { chamadas += 1 };
+      await checarAlertaCustoPiloto(esc.id, null, notificar);
+      await checarAlertaCustoPiloto(esc.id, null, notificar); // retry (alerta já emitido)
+      assert.equal(chamadas, 1, 'notificação pós-commit enviada UMA única vez (retry não reenvia)');
+
+      // (b) E-mail que LANÇA erro → best-effort: checarAlertaCustoPiloto NÃO propaga.
+      const [esc2] = await db.insert(s.escritorios).values([
+        { nome: `Pilot NotifFail ${suffix}`, plano: 'office', ativo: true, limiteTokensMes: null },
+      ]).returning({ id: s.escritorios.id });
+      escIds.push(esc2.id);
+      const [op2] = await db.insert(s.aiOperations).values({
+        idempotencyKey: `piloto-notif2-${suffix}`,
+        escritorioId: esc2.id,
+        operationType: 'STANDARD_PETITION',
+        status: 'succeeded',
+        model: 'flash',
+        costCentsActual: 60_000,
+        tokensIn: 1,
+        tokensOut: 1,
+        finishedAt: new Date(),
+      }).returning({ id: s.aiOperations.id });
+      opIds.push(op2.id);
+      const notificarFalha = async () => { throw new Error('provedor de e-mail fora do ar') };
+      await checarAlertaCustoPiloto(esc2.id, null, notificarFalha); // NÃO deve lançar
+      // O alerta em si foi persistido mesmo com e-mail falhando.
+      const ciclo = new Date().toISOString().slice(0, 7);
+      const alertas = await db.select().from(s.auditLog)
+        .where(eq(s.auditLog.acao, 'AI_ALERTA_CUSTO_PILOTO'))
+        .then((rows) => rows.filter((r) => (r.detalhes as any)?.escritorioId === esc2.id && (r.detalhes as any)?.ciclo === ciclo));
+      assert.equal(alertas.length, 1, 'alerta persistido mesmo com notificação falhando (não reverte o evento)');
+    } finally {
+      delete process.env.PILOTO_ATIVO;
+      delete process.env.PILOTO_ALERTA_CUSTO_CENTS;
+      if (envNotifOriginal === undefined) delete process.env.ROOT_NOTIFICATION_EMAIL;
+      else process.env.ROOT_NOTIFICATION_EMAIL = envNotifOriginal;
+    }
+  });
+
+  test('slot de usuário: falha APÓS o insert → rollback integral (sem usuário, vaga LIBERADA para retry)', async () => {
+    const { comSlotPiloto } = await import('./pilotMode.js');
+    const [esc] = await db.insert(s.escritorios).values([
+      { nome: `Pilot SlotRb ${suffix}`, plano: 'office', ativo: true, limiteTokensMes: null, limiteUsuarios: 100 },
+    ]).returning({ id: s.escritorios.id });
+    escIds.push(esc.id);
+    const chave = `piloto:usuarios:${esc.id}`;
+    const hash = await bcrypt.hash('SlotSenha#2026', 10);
+
+    // 1ª tentativa: insere o usuário e FALHA numa etapa posterior (simula a
+    // inserção de permissões quebrando) — a transação do slot deve reverter.
+    await assert.rejects(
+      () => comSlotPiloto(chave, async (tx) => {
+        await tx.insert(s.usuarios).values({
+          nome: 'Slot Rb',
+          email: `slot.rb.${suffix}@teste.local`,
+          senha: hash,
+          role: 'user',
+          escritorioId: esc.id,
+          precisaTrocarSenha: true,
+        });
+        throw new Error('falha posterior à criação do usuário');
+      }),
+      'falha na etapa posterior deve propagar',
+    );
+    const [usuarios] = (await db.execute(sql`SELECT count(*)::int AS n FROM usuarios WHERE email LIKE ${`slot.rb.${suffix}%`}`)) as any[];
+    assert.equal(usuarios.n, 0, 'rollback: usuário NÃO persistido (vaga não consumida)');
+
+    // Retry: a MESMA vaga está livre e a criação completa com sucesso.
+    await comSlotPiloto(chave, async (tx) => {
+      await tx.insert(s.usuarios).values({
+        nome: 'Slot Rb Ok',
+        email: `slot.rb.${suffix}@teste.local`,
+        senha: hash,
+        role: 'user',
+        escritorioId: esc.id,
+        precisaTrocarSenha: true,
+      });
+      return null;
+    });
+    const [usuariosOk] = (await db.execute(sql`SELECT count(*)::int AS n FROM usuarios WHERE email LIKE ${`slot.rb.${suffix}%`}`)) as any[];
+    assert.equal(usuariosOk.n, 1, 'retry usa a vaga liberada com sucesso');
+    await db.delete(s.usuarios).where(sql`email LIKE ${`slot.rb.${suffix}%`}`).catch(() => {});
   });
 });

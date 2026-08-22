@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { documentos, documentosGerados } from '../db/schema.js';
+import { documentos, chunks, documentosGerados } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
@@ -162,7 +163,8 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
       const { comSlotPiloto: slotDocs, ErroPilotoLimite } = await import('../services/pilotMode.js');
       const { excedeLimiteDocumentosPiloto: excedeDocsPiloto } = await import('../services/pilotMode.js');
       const documentoId = await slotDocs(`piloto:documentos:${escritorioId}`, async (tx) => {
-        if (await excedeDocsPiloto(escritorioId)) {
+        // Contagem tx-aware: MESMA conexão que detém o advisory lock.
+        if (await excedeDocsPiloto(escritorioId, tx)) {
           throw new ErroPilotoLimite('PILOTO_LIMITE_DOCUMENTOS');
         }
         const [doc] = await tx.insert(documentos).values({
@@ -172,6 +174,8 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
           chunks: 0,
           escritorioId,
           processoId: processoId ?? null,
+          area: area ?? null,
+          usuarioId: (req as any).user?.id ?? null,
           totalPages,
           indexedStatus: 'processing',
           failedChunks: 0,
@@ -180,7 +184,19 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
         return doc.id;
       });
       // Indexação FORA do lock (embeddings são lentos; não seguram o advisory lock).
-      resultado = await indexarChunksDoDocumento(documentoId, baseUpload);
+      // COMPENSAÇÃO (piloto): falha de indexação (total ou parcial) NUNCA deixa
+      // documento/chunks órfãos nem consome o teto permanentemente — remove
+      // chunks + documento reservado e o erro vira 502 (embeddings).
+      try {
+        resultado = await indexarChunksDoDocumento(documentoId, baseUpload);
+        if (resultado.status === 'failed') {
+          await removerDocumentoPiloto(documentoId);
+          throw new Error('Falha ao indexar o documento: serviço de embeddings indisponível.');
+        }
+      } catch (err) {
+        await removerDocumentoPiloto(documentoId).catch(() => {});
+        throw err;
+      }
     } else {
       resultado = await processarUploadDocumento(baseUpload);
     }
@@ -222,5 +238,14 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
     res.status(500).json({ error: 'Erro ao fazer upload' });
   }
 });
+
+
+/** Compensação do piloto: remove chunks + documento reservado (falha de
+ *  indexação) — libera o slot e não deixa órfãos. Ordem: chunks → documento
+ *  (FK); segura contra retries (DELETE idempotente). */
+async function removerDocumentoPiloto(documentoId: string): Promise<void> {
+  await db.delete(chunks).where(eq(chunks.documentoId, documentoId));
+  await db.delete(documentos).where(eq(documentos.id, documentoId));
+}
 
 export default router;

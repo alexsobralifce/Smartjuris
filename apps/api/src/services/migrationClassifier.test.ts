@@ -695,6 +695,31 @@ describe('2E — migration metadados do classificador', () => {
       await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`)).catch(() => {});
     }
   });
+
+  test('0024: metadados area/usuario_id de documentos aplicam em banco LIMPO e são idempotentes', async () => {
+    const schemaAux = `mig_4b_${suffix}`;
+    await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`));
+    await db.execute(sql.raw(`CREATE SCHEMA "${schemaAux}";`));
+    try {
+      const res = await runMigrations({ schema: schemaAux });
+      assert.ok(res.applied.includes('0024_documentos_area_usuario'), '0024 aplicada no banco limpo');
+      const cols = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = 'documentos'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.column_name);
+      });
+      assert.ok(cols.includes('area'), 'coluna area presente');
+      assert.ok(cols.includes('usuario_id'), 'coluna usuario_id presente');
+      // Idempotência: reaplicar não duplica.
+      const res2 = await runMigrations({ schema: schemaAux });
+      assert.ok(!res2.applied.includes('0024_documentos_area_usuario'), '0024 não reaplicada');
+    } finally {
+      await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`)).catch(() => {});
+    }
+  });
 });
 
 /** Variante do noSchema com schema arbitrário (para testes com schema auxiliar). */

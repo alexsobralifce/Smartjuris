@@ -46,11 +46,12 @@ const { forcePasswordChange } = await import('../middlewares/forcePasswordChange
 const { requireRoot, requireAdmin } = await import('../middlewares/roleGuard.js');
 const { globalApiLimiter, resetRateLimiters } = await import('../middlewares/rateLimit.js');
 
-let dbDisponivel = true;
+// Infraestrutura OBRIGATÓRIA (Fase 4A/4B): a suíte do piloto NUNCA pula
+// silenciosamente — sem Postgres o run FALHA explicitamente (fail-closed).
 try {
   await db.execute(sql`SELECT 1`);
 } catch {
-  dbDisponivel = false;
+  throw new Error('4B — banco indisponível: a suíte do piloto exige Postgres acessível (fail-closed, sem skip).');
 }
 
 const app = express();
@@ -145,7 +146,7 @@ async function uploadPdf(token: string, filename: string, pdf: Buffer, fields: R
 }
 
 before(async () => {
-  if (!dbDisponivel) return;
+  // infraestrutura garantida no topo (fail-closed)
   const hash = await bcrypt.hash('PilotoSenha#2026', 10);
   // 1 escritório ativo + admin — com PILOTO_MAX_ESCRITORIOS=1, o próximo
   // registro deve ser bloqueado.
@@ -162,7 +163,7 @@ before(async () => {
 after(async () => {
   ollamaServer.close();
   restaurarEnv();
-  if (dbDisponivel) {
+  {
     await db.delete(s.auditLog).where(inArray(s.auditLog.actorId, userIds)).catch(() => {});
     await db.delete(s.logins).where(inArray(s.logins.usuarioId, userIds)).catch(() => {});
     await db.delete(s.documentos).where(inArray(s.documentos.escritorioId, escIds)).catch(() => {});
@@ -176,7 +177,7 @@ after(async () => {
   await client.end({ timeout: 5 });
 });
 
-describe('4B — bloqueios do piloto (HTTP)', { skip: !dbDisponivel }, () => {
+describe('4B — bloqueios do piloto (HTTP)', () => {
   test('registro de NOVO escritório bloqueado quando o teto de ativos é atingido (403 PILOTO_LIMITE_ESCRITORIOS)', async () => {
     resetRateLimiters();
     process.env.PILOTO_ATIVO = 'true';
@@ -682,6 +683,198 @@ describe('4B — bloqueios do piloto (HTTP)', { skip: !dbDisponivel }, () => {
       delete process.env.PILOTO_ATIVO;
       delete process.env.PILOTO_MAX_ESCRITORIOS;
       delete process.env.PILOTO_MAX_USUARIOS;
+      if (otpAnterior === undefined) delete process.env.REQUIRE_EMAIL_OTP;
+      else process.env.REQUIRE_EMAIL_OTP = otpAnterior;
+    }
+  });
+
+  test('UPLOAD piloto vs NORMAL: metadados EQUIVALENTES (mesmo usuário, área, processo, escritório)', async () => {
+    // Escritório dedicado para comparar os dois caminhos.
+    const [escEq] = await db.insert(s.escritorios).values([
+      { nome: `Pilot Eq ${suffix}`, plano: 'office', ativo: true, limiteTokensMes: null, limiteUsuarios: 100 },
+    ]).returning({ id: s.escritorios.id });
+    escIds.push(escEq.id);
+    const [userEq] = await db.insert(s.usuarios).values([
+      { nome: 'Eq Admin', email: `eq.${suffix}@teste.local`, senha: await bcrypt.hash('EqSenha#2026', 10), role: 'admin', escritorioId: escEq.id, ativo: true, precisaTrocarSenha: false, emailVerificado: true },
+    ]).returning({ id: s.usuarios.id });
+    userIds.push(userEq.id);
+    const tokenEq = await login(`eq.${suffix}@teste.local`, 'EqSenha#2026');
+    const pdf = gerarPdf(['Contrato de prestacao de servicos juridicos do teste de equivalencia entre os dois caminhos de upload com conteudo suficiente para indexacao.']);
+
+    // Caminho NORMAL (piloto desligado).
+    delete process.env.PILOTO_ATIVO;
+    const normal = await uploadPdf(tokenEq, `eq-${suffix}.pdf`, pdf, { colecao: 'eq', area: 'Cível' });
+    assert.equal(normal.status, 201, 'upload normal ok');
+    // Caminho PILOTO (mesmo arquivo, área, escritório e usuário).
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_MAX_ESCRITORIOS = '5000';
+    process.env.PILOTO_MAX_DOCUMENTOS = '50';
+    try {
+      const piloto = await uploadPdf(tokenEq, `eq-${suffix}.pdf`, pdf, { colecao: 'eq', area: 'Cível' });
+      assert.equal(piloto.status, 201, 'upload piloto ok');
+
+      const docs = await db.select().from(s.documentos).where(eq(s.documentos.escritorioId, escEq.id));
+      assert.equal(docs.length, 2, 'dois documentos (um por caminho)');
+      const [dNormal, dPiloto] = docs;
+      // Equivalência de metadados persistidos (mesmas colunas no mesmo escritório),
+      // INCLUINDO `area` e `usuarioId` (migration 0024 — ambos os caminhos).
+      for (const campo of ['nome', 'colecao', 'tamanho', 'escritorioId', 'processoId', 'totalPages', 'indexedStatus', 'failedChunks', 'area', 'usuarioId'] as const) {
+        assert.deepEqual(
+          dPiloto[campo] ?? null,
+          dNormal[campo] ?? null,
+          `campo ${campo} equivalente entre caminho piloto e normal`,
+        );
+      }
+      assert.equal(dPiloto.area, 'Cível', 'area persistida no documento (piloto)');
+      assert.equal(dNormal.area, 'Cível', 'area persistida no documento (normal)');
+      assert.equal(dPiloto.usuarioId, userEq.id, 'usuarioId persistido no documento (piloto)');
+      assert.equal(dNormal.usuarioId, userEq.id, 'usuarioId persistido no documento (normal)');
+      assert.equal(Number(dPiloto.chunks), Number(dNormal.chunks), 'mesma quantidade de chunks indexados');
+      // `area` é preservada nos METADADOS DO CHUNK (mesmo caminho).
+      const chunksP = await db.select({ metadata: s.chunks.metadata }).from(s.chunks).where(eq(s.chunks.documentoId, dPiloto.id)).limit(1);
+      const chunksN = await db.select({ metadata: s.chunks.metadata }).from(s.chunks).where(eq(s.chunks.documentoId, dNormal.id)).limit(1);
+      assert.equal((chunksP[0]?.metadata as any)?.area, 'Cível', 'área no chunk do caminho piloto');
+      assert.equal((chunksN[0]?.metadata as any)?.area, 'Cível', 'área no chunk do caminho normal');
+    } finally {
+      delete process.env.PILOTO_ATIVO;
+      delete process.env.PILOTO_MAX_ESCRITORIOS;
+      delete process.env.PILOTO_MAX_DOCUMENTOS;
+    }
+  });
+
+  test('UPLOAD piloto com FALHA na indexação: compensação total (sem doc/chunks órfãos) e retry liberado até o teto', async () => {
+    const token = await login(`pilot.${suffix}@teste.local`, 'PilotoSenha#2026');
+    const ollamaOriginal = process.env.OLLAMA_URL;
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_MAX_ESCRITORIOS = '5000';
+    process.env.PILOTO_MAX_DOCUMENTOS = '3'; // teto 3 (escritório sem docs)
+    try {
+      // (a) Embeddings indisponíveis → 502 + compensação total.
+      const docsAntes = await db.select({ id: s.documentos.id }).from(s.documentos).where(eq(s.documentos.escritorioId, escIds[0]));
+      const chsAntes = await db.select({ id: s.chunks.id }).from(s.chunks).where(eq(s.chunks.escritorioId, escIds[0]));
+      process.env.OLLAMA_URL = 'http://127.0.0.1:1';
+      const up = await uploadPdf(token, `fail-${suffix}.pdf`, gerarPdf(['Contrato de prestacao de servicos juridicos para teste de falha de indexacao com conteudo longo o suficiente.']), { colecao: 'piloto' });
+      assert.equal(up.status, 502, 'indexação falhou → 502 (embeddings indisponíveis)');
+      const docsDepois = await db.select({ id: s.documentos.id }).from(s.documentos).where(eq(s.documentos.escritorioId, escIds[0]));
+      assert.equal(docsDepois.length, docsAntes.length, 'nenhum documento órfão NOVO após falha de indexação (slot liberado)');
+      const chsDepois = await db.select({ id: s.chunks.id }).from(s.chunks).where(eq(s.chunks.escritorioId, escIds[0]));
+      assert.equal(chsDepois.length, chsAntes.length, 'nenhum chunk órfão NOVO após falha de indexação');
+
+      // (b) Retry com embeddings OK: o MESMO escritório ainda pode uploadar
+      //     (o slot da falha não foi consumido permanentemente).
+      process.env.OLLAMA_URL = ollamaOriginal ?? `http://127.0.0.1:${(ollamaServer.address() as import('node:net').AddressInfo).port}`;
+      const retry = await uploadPdf(token, `retry-${suffix}.pdf`, gerarPdf(['Contrato de prestacao de servicos juridicos para retry apos falha com conteudo longo suficiente para indexacao.']), { colecao: 'piloto' });
+      assert.equal(retry.status, 201, 'retry de upload funciona após a compensação (slot liberado)');
+    } finally {
+      delete process.env.PILOTO_ATIVO;
+      delete process.env.PILOTO_MAX_ESCRITORIOS;
+      delete process.env.PILOTO_MAX_DOCUMENTOS;
+      if (ollamaOriginal === undefined) delete process.env.OLLAMA_URL;
+      else process.env.OLLAMA_URL = ollamaOriginal;
+    }
+  });
+
+  test('SATURAÇÃO de pool: 15 criações CONCORRENTES de usuários concluem sem deadlock (contagem tx-aware)', async () => {
+    const token = await login(`pilot.${suffix}@teste.local`, 'PilotoSenha#2026');
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_MAX_ESCRITORIOS = '5000';
+    process.env.PILOTO_MAX_USUARIOS = '20'; // teto alto — exercita o lock sem estourar
+    try {
+      const comTimeout = async (p: Promise<unknown>, ms: number) =>
+        Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout: deadlock ou espera indefinida')), ms))]);
+      const resultados = (await comTimeout(
+        Promise.all(
+          Array.from({ length: 15 }, (_, i) =>
+            fetch(`${baseUrl}/api/admin/escritorio/usuarios`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Cookie: `smartjuris_token=${token}` },
+              body: JSON.stringify({ nome: `Sat User ${suffix}-${i}`, email: `sat.u.${suffix}-${i}@teste.local` }),
+            }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => ({})) })),
+          ),
+        ),
+        20_000,
+      )) as Array<{ status: number; json: any }>;
+      const criados = resultados.filter((r) => r.status === 201).length;
+      assert.equal(criados, 15, 'todas as criações concluíram (sem deadlock sob saturação)');
+      await db.delete(s.usuarios).where(sql`email LIKE ${`sat.u.${suffix}%`}`).catch(() => {});
+    } finally {
+      delete process.env.PILOTO_ATIVO;
+      delete process.env.PILOTO_MAX_ESCRITORIOS;
+      delete process.env.PILOTO_MAX_USUARIOS;
+    }
+  });
+
+  test('SATURAÇÃO de pool: 12 uploads CONCORRENTES concluem sem deadlock (contagem tx-aware)', async () => {
+    const token = await login(`pilot.${suffix}@teste.local`, 'PilotoSenha#2026');
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_MAX_ESCRITORIOS = '5000';
+    process.env.PILOTO_MAX_DOCUMENTOS = '50';
+    try {
+      const comTimeout = async (p: Promise<unknown>, ms: number) =>
+        Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout: deadlock ou espera indefinida')), ms))]);
+      const resultados = (await comTimeout(
+        Promise.all(
+          Array.from({ length: 12 }, (_, i) =>
+            uploadPdf(token, `sat-${i}-${suffix}.pdf`, gerarPdf([`Contrato de prestacao de servicos juridicos numero ${i} para saturacao de pool com conteudo extenso de indexacao.`]), { colecao: 'piloto' }),
+          ),
+        ),
+        20_000,
+      )) as Array<{ status: number; json: any }>;
+      assert.equal(resultados.length, 12, 'todos os uploads concluíram (sem deadlock sob saturação)');
+      assert.ok(resultados.some((r) => r.status === 201), 'pelo menos um upload aceito');
+    } finally {
+      delete process.env.PILOTO_ATIVO;
+      delete process.env.PILOTO_MAX_ESCRITORIOS;
+      delete process.env.PILOTO_MAX_DOCUMENTOS;
+    }
+  });
+
+  test('REATIVAÇÃO no TETO exato: passa pelo check TRANSACIONAL (403 correto), não por pré-check; com vaga → 200', async () => {
+    resetRateLimiters();
+    const otpAnterior = process.env.REQUIRE_EMAIL_OTP;
+    process.env.REQUIRE_EMAIL_OTP = 'true';
+    const em = `reat.teto.${suffix}@teste.local`;
+    // Cria cadastro pendente (usuário/escritório INATIVOS com OTP).
+    const r1 = await fetch(`${baseUrl}/api/auth/registro`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: `Reat Teto ${suffix}`, email: em, senha: 'SenhaReat#2026', oab: '777888', oabUf: 'RS', escritorioNome: `Esc Reat Teto ${suffix}` }),
+    });
+    assert.equal(r1.status, 201, 'cadastro pendente criado');
+    process.env.REQUIRE_EMAIL_OTP = 'false';
+    process.env.PILOTO_ATIVO = 'true';
+    process.env.PILOTO_MAX_ESCRITORIOS = String(await contarEscritoriosAtivos()); // teto EXATO
+    try {
+      // Reativação no teto: NÃO é bloqueada por pré-check (o registro nem sabe
+      // que é reativação) — passa pelo check TRANSACIONAL e recebe 403 correto.
+      const rTeto = await fetch(`${baseUrl}/api/auth/registro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: `Reat Teto ${suffix}`, email: em, senha: 'SenhaReat#2026', oab: '777888', oabUf: 'RS', escritorioNome: `Esc Reat Teto ${suffix}` }),
+      });
+      assert.equal(rTeto.status, 403, 'reativação no teto → 403 transacional');
+      assert.equal((await rTeto.json()).code, 'PILOTO_LIMITE_ESCRITORIOS', 'código do bloqueio');
+      // Estado preservado (usuário/escritório continuam inativos).
+      const [u] = (await db.execute(sql`SELECT ativo, email_verificado FROM usuarios WHERE email = ${em}`)) as any[];
+      assert.equal(u.ativo, false, 'usuário permanece inativo após reativação bloqueada');
+
+      // Libera vaga (desativa um escritório JÁ CONTADO no teto) → reativação 200.
+      await db.update(s.escritorios).set({ ativo: false }).where(eq(s.escritorios.id, escIds[0]));
+      const rOk = await fetch(`${baseUrl}/api/auth/registro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: `Reat Teto ${suffix}`, email: em, senha: 'SenhaReat#2026', oab: '777888', oabUf: 'RS', escritorioNome: `Esc Reat Teto ${suffix}` }),
+      });
+      assert.equal(rOk.status, 200, 'reativação com vaga → 200');
+      const [u2] = (await db.execute(sql`SELECT ativo FROM usuarios WHERE email = ${em}`)) as any[];
+      assert.equal(u2.ativo, true, 'usuário ativado após reativação com vaga');
+      await db.update(s.escritorios).set({ ativo: true }).where(eq(s.escritorios.id, escIds[0]));
+      await db.delete(s.codigosVerificacao).where(sql`email = ${em}`).catch(() => {});
+      await db.delete(s.usuarios).where(sql`email = ${em}`).catch(() => {});
+      await db.delete(s.escritorios).where(sql`nome LIKE ${`Esc Reat Teto ${suffix}%`}`).catch(() => {});
+    } finally {
+      delete process.env.PILOTO_ATIVO;
+      delete process.env.PILOTO_MAX_ESCRITORIOS;
       if (otpAnterior === undefined) delete process.env.REQUIRE_EMAIL_OTP;
       else process.env.REQUIRE_EMAIL_OTP = otpAnterior;
     }

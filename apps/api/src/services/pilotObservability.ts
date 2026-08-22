@@ -66,9 +66,14 @@ async function alertaJaEmitido(exec: any, escritorioId: string, ciclo: string): 
  * Checa e emite o alerta de custo do piloto (UMA vez por escritório/ciclo,
  * mesmo sob liquidações CONCORRENTES — advisory lock serializa a checagem e o
  * insert). Best-effort: qualquer falha é engolida (observabilidade NUNCA
- * bloqueia o fluxo de geração). `req` opcional para auditoria (actor).
+ * bloqueia o fluxo de geração). `req` opcional para auditoria (actor);
+ * `notificar` opcional injeta o disparo pós-commit (teste de outbox).
  */
-export async function checarAlertaCustoPiloto(escritorioId: string, req?: Request | null): Promise<void> {
+export async function checarAlertaCustoPiloto(
+  escritorioId: string,
+  req?: Request | null,
+  notificar?: (params: { to: string; escritorioId: string; ciclo: string; custoCents: string }) => Promise<void>,
+): Promise<void> {
   try {
     const cfg = configPiloto();
     if (!cfg.ativo || cfg.alertaCustoCents == null) return;
@@ -105,11 +110,15 @@ export async function checarAlertaCustoPiloto(escritorioId: string, req?: Reques
     });
 
     // Notificação PÓS-COMMIT (best-effort; falha NÃO afeta o fluxo e retry não
-    // duplica — o evento já está persistido e idempotente).
+    // duplica — o evento já está persistido e idempotente). `notificar`
+    // injetado permite testar o outbox sem e-mail real.
     if (novoAlerta && cfg.emailNotificacao) {
-      try {
+      const disparar = notificar ?? (async (params) => {
         const { sendPilotCostAlert } = await import('./email.js');
-        await sendPilotCostAlert({ to: cfg.emailNotificacao, escritorioId, ciclo, custoCents: novoAlerta.custoCents });
+        await sendPilotCostAlert(params);
+      });
+      try {
+        await disparar({ to: cfg.emailNotificacao, escritorioId, ciclo, custoCents: novoAlerta.custoCents });
       } catch {
         // observabilidade: notificação é best-effort
       }

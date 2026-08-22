@@ -49,6 +49,8 @@ export async function processarUploadDocumento(input: DocumentoUploadInput): Pro
     chunks: 0,
     escritorioId: input.escritorioId,
     processoId: input.processoId ?? null,
+    area: input.area ?? null,
+    usuarioId: input.usuarioId ?? null,
     totalPages: input.totalPages,
     indexedStatus: 'processing',
     failedChunks: 0,

@@ -152,19 +152,30 @@ export async function excedeLimiteEscritoriosPiloto(): Promise<boolean> {
   return (await contarEscritoriosAtivos()) >= cfg.maxEscritorios;
 }
 
-/** Teto ADICIONAL de usuários por escritório (piloto). Se PILOTO_MAX_USUARIOS
- *  não for definido, o limite existente do plano (escritorios.limiteUsuarios)
- *  continua valendo. */
-export async function excedeLimiteUsuariosPiloto(escritorioId: string): Promise<boolean> {
+/** Teto de usuários por escritório (tx-aware): usa a MESMA conexão da
+ *  transação que detém o advisory lock (evita deadlock por pool saturado). */
+export async function excedeLimiteUsuariosPiloto(escritorioId: string, tx?: any): Promise<boolean> {
   const cfg = configPiloto();
   if (!cfg.ativo || cfg.maxUsuariosPorEscritorio == null) return false;
-  return (await contarUsuariosAtivos(escritorioId)) >= cfg.maxUsuariosPorEscritorio;
+  const total = tx
+    ? Number(((await tx.execute(sql`
+        SELECT count(*)::int AS total FROM usuarios WHERE escritorio_id = ${escritorioId} AND ativo = true
+      `))[0]?.total ?? 0))
+    : await contarUsuariosAtivos(escritorioId);
+  return total >= cfg.maxUsuariosPorEscritorio;
 }
 
-export async function excedeLimiteDocumentosPiloto(escritorioId: string): Promise<boolean> {
+/** Teto de documentos por escritório (tx-aware): mesma conexão da transação
+ *  que detém o advisory lock. */
+export async function excedeLimiteDocumentosPiloto(escritorioId: string, tx?: any): Promise<boolean> {
   const cfg = configPiloto();
   if (!cfg.ativo || cfg.maxDocumentosPorEscritorio == null) return false;
-  return (await contarDocumentos(escritorioId)) >= cfg.maxDocumentosPorEscritorio;
+  const total = tx
+    ? Number(((await tx.execute(sql`
+        SELECT count(*)::int AS total FROM documentos WHERE escritorio_id = ${escritorioId}
+      `))[0]?.total ?? 0))
+    : await contarDocumentos(escritorioId);
+  return total >= cfg.maxDocumentosPorEscritorio;
 }
 
 export interface StatusPiloto {

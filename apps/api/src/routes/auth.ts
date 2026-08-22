@@ -267,21 +267,6 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
     }
     const { nome, email, senha, oab, oabUf, escritorioNome, cnpj, telefone } = parsed.data;
 
-    // Fase 4B — piloto controlado: teto de escritórios ativos no cadastro.
-    // SÓ se aplica ao fluxo SEM OTP (que cria escritório JÁ ATIVO — consome
-    // vaga imediatamente). Com OTP o escritório nasce INATIVO (não consome
-    // vaga); a vaga é reservada atomicamente na ATIVAÇÃO (/verificar-codigo).
-    const requereOtpRegistro = process.env.REQUIRE_EMAIL_OTP === 'true';
-    if (!requereOtpRegistro) {
-      const { excedeLimiteEscritoriosPiloto } = await import('../services/pilotMode.js');
-      if (await excedeLimiteEscritoriosPiloto()) {
-        return res.status(403).json({
-          error: 'O piloto controlado está em fase limitada; novos escritórios estão temporariamente bloqueados.',
-          code: 'PILOTO_LIMITE_ESCRITORIOS',
-        });
-      }
-    }
-
     // Checagem de usuário existente
     const [existing] = await db.select({
       id: usuarios.id,
@@ -302,7 +287,7 @@ router.post('/registro', registroRateLimiter, async (req, res) => {
         // Fase 4B — reativação (cadastro duplicado sem OTP): a ATIVAÇÃO do
         // escritório respeita o teto do piloto sob o MESMO advisory lock.
         const { comTetoEscritoriosAtivos, verificarTetoUsuariosTx, configPiloto } = await import('../services/pilotMode.js');
-        const [upd] = await comTetoEscritoriosAtivos(async (tx) => {
+        const upd = await comTetoEscritoriosAtivos(async (tx) => {
           const [uAntes] = await tx.select({ escritorioId: usuarios.escritorioId }).from(usuarios).where(eq(usuarios.email, email)).limit(1);
           const cfgLocal = configPiloto();
           if (cfgLocal.ativo && uAntes?.escritorioId && cfgLocal.maxUsuariosPorEscritorio != null) {

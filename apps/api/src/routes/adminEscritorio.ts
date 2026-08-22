@@ -257,17 +257,21 @@ router.post('/usuarios', async (req: AuthenticatedRequest, res) => {
     // Fase 4B — piloto: teto de usuários verificado+insert ATOMICAMENTE sob
     // advisory lock SOMENTE com piloto ativo E limite configurado; caso
     // contrário, caminho original sem transação/lock adicional (rollback).
+    // TODAS as mutações da criação (usuário + permissões) rodam na MESMA
+    // transação do slot: falha posterior → rollback integral (sem usuário
+    // órfão consumindo a vaga do piloto).
     const { configPiloto } = await import('../services/pilotMode.js');
     const cfgPiloto = configPiloto();
-    let created;
+    let created: typeof usuarios.$inferSelect | undefined;
     if (cfgPiloto.ativo && cfgPiloto.maxUsuariosPorEscritorio != null) {
       const { comSlotPiloto: slotUsers, ErroPilotoLimite } = await import('../services/pilotMode.js');
       const { excedeLimiteUsuariosPiloto: excedeUsersPiloto } = await import('../services/pilotMode.js');
       [created] = await slotUsers(`piloto:usuarios:${escritorioId}`, async (tx) => {
-        if (await excedeUsersPiloto(escritorioId)) {
+        // Contagem tx-aware: MESMA conexão que detém o advisory lock.
+        if (await excedeUsersPiloto(escritorioId, tx)) {
           throw new ErroPilotoLimite('PILOTO_LIMITE_USUARIOS');
         }
-        return tx.insert(usuarios).values({
+        const linhas = await tx.insert(usuarios).values({
           nome,
           email,
           senha: senhaHash,
@@ -276,6 +280,15 @@ router.post('/usuarios', async (req: AuthenticatedRequest, res) => {
           precisaTrocarSenha: true,
           createdBy: req.user?.id ?? null,
         }).returning();
+        if (modulos.length && linhas[0]) {
+          await tx.insert(permissoesUsuario).values(
+            modulos.map((m) => ({ usuarioId: linhas[0].id, modulo: m, ativo: true }))
+          ).onConflictDoUpdate({
+            target: [permissoesUsuario.usuarioId, permissoesUsuario.modulo],
+            set: { ativo: sql`EXCLUDED.ativo` },
+          });
+        }
+        return linhas;
       });
     } else {
       [created] = await db.insert(usuarios).values({
@@ -287,17 +300,17 @@ router.post('/usuarios', async (req: AuthenticatedRequest, res) => {
         precisaTrocarSenha: true,
         createdBy: req.user?.id ?? null,
       }).returning();
+      if (modulos.length) {
+        await db.insert(permissoesUsuario).values(
+          modulos.map((m) => ({ usuarioId: created!.id, modulo: m, ativo: true }))
+        ).onConflictDoUpdate({
+          target: [permissoesUsuario.usuarioId, permissoesUsuario.modulo],
+          set: { ativo: sql`EXCLUDED.ativo` },
+        });
+      }
     }
 
-    if (modulos.length) {
-      await db.insert(permissoesUsuario).values(
-        modulos.map((m) => ({ usuarioId: created.id, modulo: m, ativo: true }))
-      ).onConflictDoUpdate({
-        target: [permissoesUsuario.usuarioId, permissoesUsuario.modulo],
-        set: { ativo: sql`EXCLUDED.ativo` },
-      });
-    }
-
+    if (!created) throw new Error('usuário não criado');
     await recordAudit(req, 'CREATE_ESCRITORIO_USER', { alvoId: created.id, detalhes: { email } });
 
     res.status(201).json({

@@ -64,6 +64,10 @@ export const documentos = pgTable('documentos', {
   tamanho: text('tamanho').notNull(),
   indexado: timestamp('indexado', { withTimezone: true }).defaultNow(),
   chunks: integer('chunks').notNull(),
+  // Fase 4B — metadados de upload (migration 0024): área jurídica e autor do
+  // documento, persistidos IGUALMENTE nos caminhos normal e piloto.
+  area: text('area'),
+  usuarioId: uuid('usuario_id'),
   // Fase 2A — isolamento multi-tenant e metadados mínimos:
   // `escritorio_id` é obrigatório para NOVOS documentos (derivado do contexto
   // autenticado); registros legados ficam NULL e entram em quarentena

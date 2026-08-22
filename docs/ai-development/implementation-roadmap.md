@@ -521,6 +521,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 2D | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve (fase de documentação em dir protegido) |
 | 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

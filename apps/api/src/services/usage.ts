@@ -509,6 +509,9 @@ export interface ReserveAiUsageInput {
   escritorioId: string;
   usuarioId: string | null;
   idempotencyKey: string;
+  /** Fingerprint canônico da requisição (payload+classificação) — usado para
+   *  rejeitar reutilização da mesma chave com conteúdo diferente. */
+  idempotencyFingerprint?: string;
   operation: AiOperationType;
   estimate: AiEstimateResult;
   req?: Request;
@@ -521,6 +524,10 @@ export interface ReserveAiUsageResult {
   creditsReserved?: number;
   costCentsReserved?: number;
   alreadyReserved?: boolean;
+  /** Status da operação existente (retries/concorrência). */
+  status?: string;
+  /** Fingerprint persistido na operação existente (validação de conflito). */
+  idempotencyFingerprint?: string | null;
 }
 
 interface AiOperationRow {
@@ -546,6 +553,15 @@ interface AiOperationRow {
 async function buscarOperacao(operationId: string): Promise<AiOperationRow | null> {
   const rows = await db.execute(sql`
     SELECT * FROM ai_operations WHERE id = ${operationId} LIMIT 1
+  `) as any[];
+  return (rows[0] as AiOperationRow) ?? null;
+}
+
+/** Lê a operação com lock de linha (FOR UPDATE) — serializa settle/release
+ *  concorrentes da MESMA operação (idempotência de liquidação). */
+async function buscarOperacaoParaUpdate(tx: any, operationId: string): Promise<AiOperationRow | null> {
+  const rows = await tx.execute(sql`
+    SELECT * FROM ai_operations WHERE id = ${operationId} FOR UPDATE
   `) as any[];
   return (rows[0] as AiOperationRow) ?? null;
 }
@@ -579,10 +595,14 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
       `);
     }
 
-    // Idempotência: chave já usada → devolve a operação existente.
+    // Idempotência ESCopada por escritório (migration 0020): a MESMA chave em
+    // escritórios distintos é independente; a mesma chave no MESMO escritório
+    // devolve a operação existente (com status e fingerprint para retries).
     const existentes = await tx.execute(sql`
-      SELECT id, status, credits_reserved, cost_cents_reserved
-      FROM ai_operations WHERE idempotency_key = ${input.idempotencyKey} LIMIT 1
+      SELECT id, status, credits_reserved, cost_cents_reserved, idempotency_fingerprint
+      FROM ai_operations
+      WHERE escritorio_id = ${input.escritorioId} AND idempotency_key = ${input.idempotencyKey}
+      LIMIT 1
     `) as any[];
     if (existentes[0]) {
       return {
@@ -591,6 +611,8 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
         operationId: existentes[0].id,
         creditsReserved: Number(existentes[0].credits_reserved),
         costCentsReserved: Number(existentes[0].cost_cents_reserved),
+        status: String(existentes[0].status),
+        idempotencyFingerprint: existentes[0].idempotency_fingerprint ?? null,
       } as ReserveAiUsageResult;
     }
 
@@ -617,6 +639,7 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
 
     const [operacao] = await tx.insert(aiOperations).values({
       idempotencyKey: input.idempotencyKey,
+      idempotencyFingerprint: input.idempotencyFingerprint ?? null,
       escritorioId: input.escritorioId,
       usuarioId: input.usuarioId,
       operationType: input.operation,
@@ -679,7 +702,10 @@ export interface SettleAiUsageResult {
  */
 export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAiUsageResult> {
   const resultado = await db.transaction(async (tx) => {
-    const op = await buscarOperacao(input.operationId);
+    // Lock de linha na OPERAÇÃO: duas transações concorrentes da mesma chave
+    // serializam aqui — a 2ª vê status já 'succeeded' e retorna alreadySettled
+    // sem duplicar credit_ledger nem token_usage.
+    const op = await buscarOperacaoParaUpdate(tx, input.operationId);
     if (!op) return { ok: false, reason: 'operacao-nao-encontrada' } as SettleAiUsageResult;
     if (op.status === 'succeeded') return { ok: true, alreadySettled: true, operationId: op.id, status: op.status } as SettleAiUsageResult;
     if (op.status !== 'reserved' && op.status !== 'running') {
@@ -773,7 +799,9 @@ export interface ReleaseAiUsageResult {
  */
 export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Promise<ReleaseAiUsageResult> {
   const resultado = await db.transaction(async (tx) => {
-    const op = await buscarOperacao(input.operationId);
+    // Lock de linha na operação: serializa releases concorrentes (dupla
+    // liberação é impedida pela guarda de status sob lock).
+    const op = await buscarOperacaoParaUpdate(tx, input.operationId);
     if (!op) return { ok: false, reason: 'operacao-nao-encontrada' } as ReleaseAiUsageResult;
     if (op.status === 'failed' || op.status === 'released') {
       return { ok: true, alreadyReleased: true, operationId: op.id, status: op.status } as ReleaseAiUsageResult;

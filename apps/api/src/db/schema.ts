@@ -310,7 +310,9 @@ export const appLogs = pgTable('app_logs', {
 // Operações de IA com reserva prévia — fonte auditável da execução de LLM.
 export const aiOperations = pgTable('ai_operations', {
   id: uuid('id').defaultRandom().primaryKey(),
-  idempotencyKey: text('idempotency_key').notNull().unique(),
+  // Unicidade por (escritorio_id, idempotency_key) — migration 0020.
+  idempotencyKey: text('idempotency_key').notNull(),
+  idempotencyFingerprint: text('idempotency_fingerprint'),
   escritorioId: uuid('escritorio_id').notNull(),
   usuarioId: uuid('usuario_id'),
   operationType: text('operation_type').notNull(),
@@ -341,6 +343,7 @@ export const aiOperations = pgTable('ai_operations', {
   escIdx: index('ai_operations_esc_idx').on(table.escritorioId, table.createdAt),
   statusIdx: index('ai_operations_status_idx').on(table.status),
   parentIdx: index('ai_operations_parent_idx').on(table.parentOperationId),
+  tenantKeyIdx: uniqueIndex('ai_operations_tenant_key_unique').on(table.escritorioId, table.idempotencyKey),
 }));
 
 // Ledger de créditos (append-only): reserva, liquidação, liberação, ajuste.
@@ -354,11 +357,12 @@ export const creditLedger = pgTable('credit_ledger', {
   creditsDelta: integer('credits_delta').notNull().default(0),
   costCents: integer('cost_cents').notNull().default(0),
   model: text('model'),
-  idempotencyKey: text('idempotency_key').unique(),
+  idempotencyKey: text('idempotency_key'),
   status: text('status'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   escIdx: index('credit_ledger_esc_idx').on(table.escritorioId, table.createdAt),
+  tenantKeyIdx: uniqueIndex('credit_ledger_tenant_key_unique').on(table.escritorioId, table.idempotencyKey),
 }));
 
 

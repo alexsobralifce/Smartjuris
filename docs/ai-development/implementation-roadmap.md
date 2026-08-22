@@ -528,6 +528,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
+| 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 
 ## Critério final
 

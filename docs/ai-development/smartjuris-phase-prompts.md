@@ -683,3 +683,71 @@ Confirme:
 
 Retorne o veredito em JSON.
 ```
+
+# 3C — Integração SSE
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 3C — integração SSE.
+
+Confirme que 2F (idempotência e reserva) e 3B (fallback Flash/Pro) estão
+`AUDIT_APPROVED`.
+
+Integre o orquestrador de operação de IA (`services/aiOperation.ts`, 2F) ao
+fluxo de geração de peças com STREAMING SSE, cobrando corretamente:
+
+Fluxo (roadmap 3C):
+estimativa → confirmação → reserva → fila → análise → RAG → redação →
+revisão → settle → saldo atualizado
+
+Requisitos:
+- Novo endpoint (ou extensão de `routes/rag.ts`/`routes/pecas.ts`) com SSE
+  (text/event-stream) que executa o fluxo COMPLETO por peça:
+  1. estimativa (estimateAiOperation) e envio de evento inicial de progresso;
+  2. reserva idempotente (reserveAiUsage com chave do cliente, validação no
+     servidor — 2F);
+  3. busca RAG (chunks do escritório, escopo por tenant — 2A) + streaming
+     da redação via DeepSeek (modelo conforme classificação/fallback 3B);
+  4. eventos SSE de progresso (progresso, label, texto parcial);
+  5. settle com uso REAL (tokens do stream) — nunca zero sem confirmação;
+  6. evento final com saldo atualizado.
+- Eventos SSE tipados e estáveis (ex.: {type:'progresso'|'texto'|'erro'|'concluido',
+  dados}), incluindo estado da operação (operationId, status);
+- Erros: falha ambígua (timeout/rede) retém reserva (reconciliação) e emite
+  evento de erro SEM liberar integralmente; falha confirmada libera reserva;
+- Revalidação backend (nunca confiar no cliente: chave, tipo, área, limites);
+- Isolamento por escritório em TODAS as etapas (RAG, reserva, settle);
+- NÃO alterar classifier, catálogo, migrations ou frontend (3D é a próxima).
+
+Testes com banco real:
+- fluxo SSE completo: reserva → streaming → settle → saldo atualizado
+  (eventos recebidos em ordem, uso real registrado);
+- idempotência: mesma chave não duplica reserva nem settle;
+- erro ambíguo → evento de erro + reserva retida (reconciliação);
+- erro confirmado → reserva liberada;
+- isolamento: escritório B não acessa RAG/reserva de A.
+
+Não altere frontend, migrations, classifier ou catálogo.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 3C — integração SSE.
+
+Analise a integração SSE do fluxo completo de geração.
+
+Confirme:
+- fluxo estimativa → reserva → RAG → redação (SSE) → settle → saldo;
+- eventos SSE tipados/estáveis e ordem correta;
+- settle com uso real (nunca zero sem confirmação);
+- erro ambíguo retém reserva (reconciliação); confirmado libera;
+- revalidação backend (não confiar no cliente);
+- isolamento por escritório em todas as etapas;
+- idempotência por chave (sem dupla reserva/settle);
+- testes com banco real cobrindo os cenários acima;
+- nenhuma alteração fora de escopo (sem frontend/migrations).
+
+Retorne o veredito em JSON.
+```

@@ -25,6 +25,7 @@ dsh-skin/
 precificacao.pdf
 reasonix.toml
 .DS_Store
+.ignore
 
 # Platform-managed agentplat state, not project source. In the
 # client-initiated single-repo workspace layout (make's `Path: "."` spec) the

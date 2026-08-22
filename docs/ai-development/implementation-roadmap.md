@@ -53,7 +53,7 @@ migrations validadas, quando aplicável
 | 2A.1 | Testes HTTP de tenancy | 2A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2A.2 | Correção da exportação | 2A.1 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2B | Catálogo compartilhado | 2A.2 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2C | Builder do payload real | 2B | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 2C | Builder do payload real | 2B | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Terra |
 | 2D | Desenho da análise documental | 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 2E | Migration dos metadados do classificador | 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 2F | Idempotência e reserva | 2B, 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
@@ -227,7 +227,7 @@ Criar uma fonte única em `packages/shared` para planos e operações de IA.
 
 ### 2C — Builder do payload real
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 2B aprovada.
 
@@ -515,6 +515,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-22 | 2B | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

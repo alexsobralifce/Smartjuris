@@ -255,6 +255,7 @@ function buildImplementerReport(opts: {
   phaseId: string;
   response: string;
   tests: ExecResult;
+  webTests: ExecResult;
   buildApi: ExecResult;
   buildWeb: ExecResult;
   diffStat: string;
@@ -270,6 +271,11 @@ function buildImplementerReport(opts: {
         command: opts.tests.command,
         result: opts.tests.ok ? 'PASS' : 'FAIL',
         details: opts.tests.stdout.slice(0, 2000),
+      },
+      {
+        command: opts.webTests.command,
+        result: opts.webTests.ok ? 'PASS' : 'FAIL',
+        details: opts.webTests.stdout.slice(0, 2000),
       },
     ],
     build: {
@@ -455,6 +461,10 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       cwd: deps.repoRoot,
       timeoutMs: 600_000,
     });
+    const webTests = await deps.exec.runConfigCommand(deps.config.commands.webTests, {
+      cwd: deps.repoRoot,
+      timeoutMs: 600_000,
+    });
     const buildApi = await deps.exec.runConfigCommand(deps.config.commands.apiBuild, {
       cwd: deps.repoRoot,
       timeoutMs: 600_000,
@@ -463,7 +473,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       cwd: deps.repoRoot,
       timeoutMs: 900_000,
     });
-    const testsText = formatEvidence([tests]);
+    const testsText = formatEvidence([tests, webTests]);
     const buildText = formatEvidence([buildApi, buildWeb]);
     artifact('05-tests.txt', testsText);
     artifact('06-build.txt', buildText);
@@ -486,6 +496,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       phaseId,
       response,
       tests,
+      webTests,
       buildApi,
       buildWeb,
       diffStat: gitArtifacts.diffStat,
@@ -559,7 +570,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
 
     // 12) Gate de aprovação
     const gate: EvidenceGate = {
-      testsPass: tests.ok,
+      testsPass: tests.ok && webTests.ok,
       buildsPass: buildApi.ok && buildWeb.ok,
       hasDiff: gitArtifacts.diff.trim().length > 0,
       requireTests: deps.config.limits.requireTests,

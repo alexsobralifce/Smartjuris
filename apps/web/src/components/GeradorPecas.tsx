@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { chaveIdempotenciaPeca, montarBodyGeracao, parseEventosSSE } from '../utils/sseParser'
 import { api, getErrorMessage, Decision } from '../api/client'
 import { getApiBaseUrl } from '../api/config'
 import Toast, { ToastMessage } from './Toast'
@@ -209,7 +210,8 @@ export default function GeradorPecas() {
   const [area, setArea] = useState('Trabalhista')
   const [tipo, setTipo] = useState('')
   // Peça complexa (Recurso/Contestação) => roteia para o modelo Pro.
-  const [isComplex, setIsComplex] = useState(false)
+  // Fase 3D: tamanho de saída (SHORT/STANDARD/COMPLETE) enviado ao endpoint SSE.
+  const [outputSize, setOutputSize] = useState<'SHORT' | 'STANDARD' | 'COMPLETE'>('STANDARD')
   const [progresso, setProgresso] = useState(0)
   const [progressoLabel, setProgressoLabel] = useState('')
   const [copied, setCopied] = useState(false)
@@ -274,12 +276,6 @@ export default function GeradorPecas() {
   }, [])
 
   // Regra de negócio: tipo Recurso/Contestação => peça complexa (modelo Pro).
-  // A heurística de "mais de 5 documentos" não é auto-detectável aqui (os
-  // documentos vivem na Base RAG); o toggle da Etapa 2 cobre esse caso manualmente.
-  useEffect(() => {
-    setIsComplex(tipo.includes('Recurso') || tipo.includes('Contestação'))
-  }, [tipo])
-
   const [showDecisoesModal, setShowDecisoesModal] = useState(false)
 
   // Importa jurisprudência selecionada da busca externa
@@ -359,19 +355,38 @@ export default function GeradorPecas() {
         setTextoEmGeracao('');
         setPecaSalvaId('');
         setEditJson(null);
+        // Fases 3C/3D: o MODELO (Flash/Pro) é decisão de SERVIDOR (2C/3B);
+        // o `isComplex` manual foi REMOVIDO — nenhum dado financeiro/modelo sai
+        // do cliente. Payload REAL de geração (3C): dadosCaso final incorpora
+        // os dados processuais; a CHAVE DE IDEMPOTÊNCIA cobre TODOS eles.
+        const dadosCasoFinal = `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.`;
+        const idempotencyKey = await chaveIdempotenciaPeca({
+          tipo: tipo || 'petição',
+          area,
+          processoId: processoSelecionadoId || undefined,
+          dadosCaso: dadosCasoFinal,
+          outputSize,
+          nomeCliente,
+          parteAdversa,
+          varaTribunal,
+          valorCausa,
+        });
         try {
           const apiBase = getApiBaseUrl();
-          const response = await fetch(`${apiBase}/api/rag/generate`, {
+          const body = montarBodyGeracao({
+            pieceType: tipo || 'Petição',
+            area,
+            processoId: processoSelecionadoId || undefined,
+            outputSize,
+            includeJurisprudence: true,
+            idempotencyKey,
+            dadosCaso: dadosCasoFinal,
+          });
+          const response = await fetch(`${apiBase}/api/pecas/gerar-sse`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ 
-              tipo, 
-              area, 
-              isComplex,
-              processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
-              dadosCaso: `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.` 
-            })
+            body: JSON.stringify(body),
           });
 
           if (!response.ok) {
@@ -386,70 +401,109 @@ export default function GeradorPecas() {
           if (!response.body) throw new Error('No body');
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
-          
+
           // Acumulador com flush throttled (50ms) para não re-renderizar a cada token.
           let acc = '';
           let lastFlush = 0;
           let buffer = '';
+          let erroReconciliacao = false;
+          let recebeuTerminal = false;
+          let pecaPersistida = false;
+          const persistirPeca = async (conteudo: string) => {
+            if (pecaPersistida) return; // evita duplicação (evento terminal repetido)
+            pecaPersistida = true;
+            const res = await api.pecas.create({
+              processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
+              tipo: tipo || 'Petição',
+              area,
+              cliente: nomeCliente || 'Cliente SmartJuris',
+              status: 'revisao',
+              prazo: new Date().toISOString().slice(0, 10),
+              modelo: 'DeepSeek (classificação de servidor + fallback Flash/Pro)',
+              fontes: 0,
+              conteudo,
+            });
+            if (!res.ok) {
+              throw new Error(await getErrorMessage(res, 'Erro ao salvar a peça gerada.'));
+            }
+            const created = await res.json().catch(() => ({}));
+            setPecaSalvaId(created?.id ?? '');
+            setTimeout(() => setStep('revisao'), 800);
+          };
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
-            
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const dataStr = line.substring(6).trim();
-                if (!dataStr) continue;
-                
-                let data: any;
-                try {
-                  data = JSON.parse(dataStr);
-                } catch {
-                  // Linha SSE malformada: ignora e continua o stream
-                  continue;
-                }
-                
-                if (data.progress !== undefined) {
-                  setProgresso(data.progress);
-                  setProgressoLabel(data.label);
-                }
-                if (data.token !== undefined) {
-                  acc += data.token;
-                  const now = Date.now();
-                  if (now - lastFlush >= 50) {
-                    setTextoEmGeracao(acc);
-                    lastFlush = now;
-                  }
-                }
-                if (data.done) {
-                  // Flush final do acumulador antes de consolidar a peça.
+            if (done) {
+              // Flush do decoder UTF-8 incremental (bytes finais incompletos).
+              buffer += decoder.decode();
+              // Buffer residual ao término do stream (último evento sem o
+              // delimitador final).
+              const residual = parseEventosSSE(buffer);
+              for (const data of residual) {
+                if (data.type === 'texto') acc += data.delta ?? '';
+                else if (data.type === 'concluido') {
+                  // Evento terminal no residual (servidor encerrou sem
+                  // delimitador final) — consolida normalmente.
+                  recebeuTerminal = true;
                   setTextoEmGeracao(acc);
-                  setPecaConteudo(data.conteudo);
-                  setFontesRecuperadas(data.fontes || []);
-                  setPromptUsado(data.prompt || '');
-                  
-                  // Salva a peça no banco
-                  const res = await api.pecas.create({
-                    processoId: processoSelecionadoId ? processoSelecionadoId : undefined,
-                    tipo: tipo || 'Petição',
-                    area,
-                    cliente: nomeCliente || 'Cliente SmartJuris',
-                    status: 'revisao',
-                    prazo: new Date().toISOString().slice(0, 10),
-                    modelo: 'DeepSeek Chat (RAG BGE-M3)',
-                    fontes: data.fontes?.length || 3,
-                    conteudo: data.conteudo,
-                  });
-                  if (!res.ok) {
-                    throw new Error(await getErrorMessage(res, 'Erro ao salvar a peça gerada.'));
-                  }
-                  const created = await res.json().catch(() => ({}));
-                  setPecaSalvaId(created?.id ?? '');
-                  setTimeout(() => setStep('revisao'), 800);
+                  setPecaConteudo(acc);
+                  setProgresso(100);
+                  setProgressoLabel('Peça gerada com sucesso.');
+                  await persistirPeca(acc);
+                } else if (data.type === 'erro') {
+                  erroReconciliacao = Boolean(data.reconciliacao);
+                  throw new Error(
+                    data.reconciliacao
+                      ? 'Falha sem resposta do provedor; a geração pode estar em reconciliação financeira. Tente novamente em instantes.'
+                      : (data.reason ?? 'Falha ao gerar a peça. Tente novamente.')
+                  );
                 }
+              }
+              // Stream terminou SEM evento terminal (concluido/erro): falha
+              // EXPLÍCITA — nunca deixa a geração "terminar" sem resultado.
+              if (!recebeuTerminal) {
+                throw new Error('A geração terminou sem confirmação de conclusão. Tente novamente.');
+              }
+              setTextoEmGeracao(acc);
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            // Fragmentação: processa apenas eventos completos (terminados em
+            // linha vazia); o restante fica no buffer para o próximo chunk.
+            const blocos = buffer.split(/\r?\n\r?\n/);
+            buffer = blocos.pop() || '';
+            const eventos = parseEventosSSE(blocos.join('\n\n'));
+            for (const data of eventos) {
+              // Eventos TIPADOS da Fase 3C.
+              if (data.type === 'progresso') {
+                setProgresso(data.progresso ?? 0);
+                setProgressoLabel(data.label ?? '');
+              } else if (data.type === 'texto') {
+                acc += data.delta ?? '';
+                const now = Date.now();
+                if (now - lastFlush >= 50) {
+                  setTextoEmGeracao(acc);
+                  lastFlush = now;
+                }
+              } else if (data.type === 'concluido') {
+                recebeuTerminal = true;
+                // Flush final do acumulador antes de consolidar a peça.
+                setTextoEmGeracao(acc);
+                setPecaConteudo(acc);
+                setProgresso(100);
+                setProgressoLabel('Peça gerada com sucesso.');
+
+                // Persiste UMA VEZ (guarda anti-duplicata via persistirPeca).
+                await persistirPeca(acc);
+              } else if (data.type === 'erro') {
+                // Erro com `reconciliacao:true` = falha ambígua (reserva
+                // retida para reconciliação): mensagem clara ao usuário.
+                erroReconciliacao = Boolean(data.reconciliacao);
+                throw new Error(
+                  data.reconciliacao
+                    ? 'Falha sem resposta do provedor; a geração pode estar em reconciliação financeira. Tente novamente em instantes.'
+                    : (data.reason ?? 'Falha ao gerar a peça. Tente novamente.')
+                );
               }
             }
           }
@@ -458,14 +512,17 @@ export default function GeradorPecas() {
           const msg = e?.message || 'Erro na geração da peça. Tente novamente.';
           setProgressoLabel(msg);
           addToast('error', msg);
-          // Volta para o passo de dados para o usuário poder corrigir e tentar novamente
-          setProgresso(0);
-          setStep('dados');
+          // Falha ambígua: mantém o usuário no passo de geração (reconciliação
+          // pode estar em curso) — sem voltar aos dados automaticamente.
+          if (!erroReconciliacao) {
+            setProgresso(0);
+            setStep('dados');
+          }
         }
       }
       run()
     }
-  }, [step, tipo, area])
+  }, [step, tipo, area, processoSelecionadoId])
 
   return (
     <PageContainer>
@@ -749,17 +806,29 @@ export default function GeradorPecas() {
             border: '1px solid var(--color-border)',
             borderRadius: RADIUS.control,
           }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, cursor: 'pointer', fontSize: FONT.base, color: 'var(--color-foreground)', fontWeight: 500 }}>
-              <input
-                type="checkbox"
-                checked={isComplex}
-                onChange={e => setIsComplex(e.target.checked)}
-                style={{ width: 16, height: 16, cursor: 'pointer' }}
-              />
-              Peça complexa — usar modelo Pro (DeepSeek V4-Pro)
+            {/* Fase 3D: o MODELO (Flash/Pro) é decisão de SERVIDOR (2C/3B) —
+                o cliente escolhe apenas o TAMANHO da saída. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, fontSize: FONT.base, color: 'var(--color-foreground)', fontWeight: 500 }}>
+              Extensão da peça:
             </label>
+            <select
+              value={outputSize}
+              onChange={e => setOutputSize(e.target.value as 'SHORT' | 'STANDARD' | 'COMPLETE')}
+              style={{
+                padding: '8px 10px',
+                borderRadius: RADIUS.control,
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-foreground)',
+                fontSize: FONT.base,
+              }}
+            >
+              <option value="SHORT">Curta (resumo + requerimento)</option>
+              <option value="STANDARD">Padrão (completa)</option>
+              <option value="COMPLETE">Extensa (detalhada)</option>
+            </select>
             <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-              Recomendado para Recursos e Contestações. O modelo Pro consome mais tokens.
+              O modelo (Flash/Pro) é selecionado automaticamente pelo sistema conforme a complexidade e o orçamento do escritório.
             </span>
           </div>
 

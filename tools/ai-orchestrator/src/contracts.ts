@@ -66,6 +66,7 @@ export const AutomationConfig = z.object({
   }),
   commands: z.object({
     apiTests: z.string(),
+    webTests: z.string(),
     apiBuild: z.string(),
     webBuild: z.string(),
     gitStatus: z.string(),

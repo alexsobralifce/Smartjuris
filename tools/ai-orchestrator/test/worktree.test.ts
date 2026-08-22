@@ -125,6 +125,7 @@ const CONFIG: AutomationConfig = {
   },
   commands: {
     apiTests: 'pnpm --filter @lexia/api test',
+    webTests: 'pnpm --filter @lexia/web test',
     apiBuild: 'pnpm --filter @lexia/api build',
     webBuild: 'pnpm --filter @lexia/web build',
     gitStatus: 'git status --short',

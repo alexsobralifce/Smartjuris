@@ -248,7 +248,13 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'IMPLEMENTING' }));
     roadmapMarked = true;
 
-    // 5) Prompt da fase + chamada ao implementador (DeepSeek)
+    // 5) Prompt da fase + implementação.
+    //    Se o working tree já contém o diff da fase (allow-dirty com arquivos
+    //    seguros), a implementação é externa (agente/humano): não há o que o
+    //    LLM escrever. Pular a chamada ao DeepSeek nesse caso elimina a fonte
+    //    de intermitência (resposta vazia / raciocínio esgotando max_tokens) e
+    //    acelera o ciclo — o revisor é alimentado por git diff + testes + build,
+    //    não pela resposta do implementador.
     const prompts = extractPhasePrompts(readText(promptsFile), phaseId);
     const envelope = buildImplementerEnvelope({
       phaseId,
@@ -260,9 +266,22 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       completionCriteria: COMPLETION_CRITERIA,
     });
     artifact('00-prompt-implementer.txt', envelope);
-    deps.log.info(`Chamando implementador (${runSummary.implementerModel}) para ${phaseId}...`);
-    const response = await deps.llm.implementer(envelope);
-    artifact('01-response-implementer.txt', response);
+    const alreadyImplemented = mode === 'allow-dirty' && prep.preRunFiles.length > 0;
+    let response: string;
+    if (alreadyImplemented) {
+      deps.log.info(
+        `Diff da fase já presente no working tree (${prep.preRunFiles.length} arquivo(s)); pulando o implementador.`,
+      );
+      response = [
+        `Implementação já presente no working tree (${prep.preRunFiles.length} arquivo(s)):`,
+        ...prep.preRunFiles.map((p) => `- ${p}`),
+      ].join('\n');
+      artifact('01-response-implementer.txt', response);
+    } else {
+      deps.log.info(`Chamando implementador (${runSummary.implementerModel}) para ${phaseId}...`);
+      response = await deps.llm.implementer(envelope);
+      artifact('01-response-implementer.txt', response);
+    }
 
     // 6) Evidências: testes e builds (apenas comandos permitidos)
     const tests = await deps.exec.runConfigCommand(deps.config.commands.apiTests, {

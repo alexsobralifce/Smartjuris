@@ -64,14 +64,21 @@ export async function chatCompletion(opts: {
         throw new Error(`LLM HTTP ${res.status}: ${redactSecret(errBody, opts.apiKey)}`);
       }
       const data = (await res.json()) as {
-        choices?: { message?: { content?: unknown } }[];
+        choices?: { message?: { content?: unknown; reasoning_content?: unknown } }[];
       };
-      const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== 'string' || content.trim() === '') {
-        lastError = new Error('LLM retornou resposta vazia.');
-        continue; // tenta novamente uma vez
+      const message = data.choices?.[0]?.message;
+      const content = message?.content;
+      if (typeof content === 'string' && content.trim() !== '') {
+        return content;
       }
-      return content;
+      // Modelos de raciocínio (ex.: deepseek-v4-flash) podem consumir todo o
+      // max_tokens no `reasoning_content` e devolver `content` vazio. Nesse
+      // caso, usa o raciocínio como fallback em vez de derrubar a fase.
+      if (typeof message?.reasoning_content === 'string' && message.reasoning_content.trim() !== '') {
+        return message.reasoning_content;
+      }
+      lastError = new Error('LLM retornou resposta vazia.');
+      continue; // tenta novamente uma vez
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         lastError = new Error('LLM excedeu o tempo limite.');

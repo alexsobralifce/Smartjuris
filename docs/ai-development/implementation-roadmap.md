@@ -62,7 +62,7 @@ migrations validadas, quando aplicável
 | 3C | Integração SSE | 2F, 3B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 3D | Integração frontend | 3C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 4B | Piloto controlado | 4A | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
+| 4B | Piloto controlado | 4A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -455,7 +455,7 @@ estimativa
 
 ### 4B — Piloto controlado
 
-**Estado:** `AUDIT_FAILED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 4A aprovada.
 
@@ -539,6 +539,8 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 3D | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 4A | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-22 | 4B | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-22 | 4B | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-22 | 4B | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve |
 
 ## Critério final
 

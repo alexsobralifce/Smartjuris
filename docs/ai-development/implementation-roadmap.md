@@ -54,7 +54,7 @@ migrations validadas, quando aplicável
 | 2A.2 | Correção da exportação | 2A.1 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2B | Catálogo compartilhado | 2A.2 | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2C | Builder do payload real | 2B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2D | Desenho da análise documental | 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 2D | Desenho da análise documental | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2E | Migration dos metadados do classificador | 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 2F | Idempotência e reserva | 2B, 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 3A | Unidades de análise documental | 2D | `PLANNED` | DeepSeek | GPT-5.6 Terra |
@@ -273,7 +273,7 @@ Montar o payload do classificador usando dados reais autenticados e do banco.
 
 ### 2D — Desenho da análise documental
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 2C aprovada.
 
@@ -519,6 +519,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-22 | 2C | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
+| 2026-08-22 | 2D | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve (fase de documentação em dir protegido) |
 
 ## Critério final
 

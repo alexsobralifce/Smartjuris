@@ -17,6 +17,15 @@ logs/
 # Roadmap, prompts e templates NÃO são ignorados.
 /docs/ai-development/runs/
 /docs/ai-development/.orchestrator.lock
+
+# Ferramentas locais e artefatos de máquina (não são código-fonte do projeto).
+.pnpm-store/
+.reasonix/
+dsh-skin/
+precificacao.pdf
+reasonix.toml
+.DS_Store
+
 # Platform-managed agentplat state, not project source. In the
 # client-initiated single-repo workspace layout (make's `Path: "."` spec) the
 # repo root IS the workspace root, so these land inside this repo rather than

@@ -20,28 +20,33 @@ export async function chatCompletion(opts: {
   user: string;
   temperature?: number;
   maxTokens?: number;
+  /** Campo de limite de conclusão: DeepSeek aceita `max_tokens`; modelos
+   *  OpenAI mais novos exigem `max_completion_tokens`. */
+  completionTokensField?: 'max_tokens' | 'max_completion_tokens';
   timeoutMs?: number;
 }): Promise<string> {
   const url = `${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 300_000);
   try {
+    const body: Record<string, unknown> = {
+      model: opts.model,
+      messages: [
+        { role: 'system', content: opts.system },
+        { role: 'user', content: opts.user },
+      ],
+      stream: false,
+    };
+    // Só envia parâmetros informados (alguns endpoints rejeitam extras).
+    if (opts.temperature !== undefined) body.temperature = opts.temperature;
+    body[opts.completionTokensField ?? 'max_tokens'] = opts.maxTokens ?? 8000;
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${opts.apiKey}`,
       },
-      body: JSON.stringify({
-        model: opts.model,
-        messages: [
-          { role: 'system', content: opts.system },
-          { role: 'user', content: opts.user },
-        ],
-        temperature: opts.temperature ?? 0.3,
-        max_tokens: opts.maxTokens ?? 8000,
-        stream: false,
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -140,6 +145,7 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
         user: prompt,
         temperature: 0.3,
         maxTokens: 8000,
+        completionTokensField: 'max_tokens', // DeepSeek
       });
     },
     async reviewer(context: string, correctionHint?: string): Promise<string> {
@@ -152,8 +158,8 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
         model: modelForReview,
         system: REVIEW_SYSTEM_PROMPT,
         user,
-        temperature: 0,
         maxTokens: 4000,
+        completionTokensField: 'max_completion_tokens', // OpenAI (modelos novos)
       });
     },
   };

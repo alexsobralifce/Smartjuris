@@ -38,6 +38,7 @@ export function createRealDeps(opts: {
         user: prompt,
         temperature: 0.3,
         maxTokens: 8000,
+        completionTokensField: 'max_tokens', // DeepSeek
       });
     },
     async reviewer(context: string, correctionHint?: string): Promise<string> {
@@ -64,8 +65,8 @@ export function createRealDeps(opts: {
           '  "rollbackRisks": string[], "nextPhase": string|null }',
         ].join('\n'),
         user,
-        temperature: 0,
         maxTokens: 4000,
+        completionTokensField: 'max_completion_tokens', // OpenAI (modelos novos)
       });
     },
   };

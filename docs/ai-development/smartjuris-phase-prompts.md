@@ -247,6 +247,72 @@ Liste qualquer campo artificial ou não confiável e retorne o veredito em JSON.
 
 ---
 
+# 2D — Desenho da análise documental
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2D — desenho da análise documental.
+
+Confirme que 2C está `AUDIT_APPROVED`.
+
+Esta fase entrega DESENHO TÉCNICO (documentação), NÃO implementação — a
+implementação ocorre na Fase 3A.
+
+Projete o processamento de documentos em blocos de até 20 páginas
+(`ANALYSIS_BLOCK_SIZE_PAGES`), documentando:
+
+- resumo por bloco;
+- fatos estruturados extraídos por bloco;
+- status por bloco (pending/processing/completed/failed);
+- retry (quais falhas retentam, limite de tentativas, backoff);
+- falhas parciais (como um bloco com falha afeta os demais e o resultado final);
+- versionamento de prompt (identificador de versão por bloco e global);
+- tokens (estimativa por bloco: entrada/saída, margem de segurança);
+- custo (centavos: como o custo por bloco é calculado e somado);
+- páginas já analisadas (rastreio incremental; como evitar reanalisar);
+- idempotência (chave derivada: escritório + processo + bloco + versão de prompt);
+- isolamento por escritório (nenhum bloco cruza tenants).
+
+Use como fonte de verdade `packages/shared` (OPERATION_CATALOG,
+ANALYSIS_BLOCK_SIZE_PAGES), `services/classifier.ts`, `services/usage.ts`,
+`services/payloadBuilder.ts` e o schema (`documentos`, `chunks`, `ai_operations`).
+
+Entregue um documento em `docs/ai-development/` (ex.: `design-analise-documental.md`)
+com: visão geral, fluxo por bloco, contratos de entrada/saída, regras de retry e
+falha parcial, modelo de custo/tokens, estratégia de idempotência, isolamento por
+escritório e decisões de projeto. NÃO crie código de implementação.
+
+Não altere classifier, usage, payloadBuilder, catálogo, migrations, rotas ou frontend.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2D — desenho da análise documental.
+
+Analise o desenho técnico (documentação).
+
+Confirme que o desenho cobre:
+- blocos de até 20 páginas;
+- resumo e fatos estruturados por bloco;
+- status por bloco;
+- retry com limites;
+- falhas parciais definidas;
+- versionamento de prompt;
+- estimativa de tokens por bloco;
+- custo em centavos por bloco;
+- páginas já analisadas (rastreio incremental);
+- idempotência por bloco (chave derivada sem dupla cobrança);
+- isolamento por escritório;
+- coerência com o catálogo compartilhado e com classifier/usage/payloadBuilder;
+- nenhuma implementação prematura (sem código de produção nesta fase).
+
+Liste qualquer lacuna do desenho e retorne o veredito em JSON.
+```
+
+---
+
 # Formato de passagem para o Terra
 
 ```text

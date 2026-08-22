@@ -523,3 +523,92 @@ AUDIT_PENDING
 ```
 
 A próxima fase não pode iniciar até a aprovação.
+
+# 3A — Unidades de análise documental
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 3A — unidades de análise documental.
+
+Confirme que 2D (design) e 2F (idempotência e reserva) estão `AUDIT_APPROVED`.
+
+Implemente o serviço de análise documental em blocos de 20 páginas, seguindo o
+design `docs/ai-development/design-analise-documental.md` (seção 2D).
+
+Requisitos:
+
+- Serviço novo (ex.: `apps/api/src/services/analiseDocumental.ts`) com entrada
+  tipada `BlocoAnaliseInput` e saída tipada `BlocoAnaliseOutput` e
+  `ContextoProcessado` (conforme §3 do design).
+- Agrupamento em blocos de `ANALYSIS_BLOCK_SIZE_PAGES` (20, do catálogo
+  compartilhado) com ordem estável (documento por created_at/nome; dentro do
+  documento por índice de página). `pagesAlreadyAnalyzed` é descontado.
+- Escopo: apenas documentos elegíveis do escritório autenticado
+  (`escritorio_id` do contexto; `indexed_status <> 'unscoped'`). Nenhum bloco
+  cruza tenants.
+- Fluxo por bloco: derivar chave de idempotência NO SERVIDOR
+  `analise:{escritorioId}:{processoId|'sem-processo'}:{documentoId}:{paginaInicial}-{paginaFinal}:{versaoPrompt}`
+  (versaoPrompt = 'analise-documental-v1') → reserva via `reserveAiUsage`
+  (chave idempotente; repetição reutiliza alreadyReserved, sem novo débito) →
+  chamada IA com a operação `DOCUMENT_ANALYSIS_20_PAGES` (Flash, 1 crédito/bloco,
+  limites maxInputTokens/maxOutputTokens do catálogo) → persistir status do
+  bloco + resumo/fatos + token_usage → settle com uso real
+  (calculateAiSettlementCents, arredondamento nearest) ou release em falha
+  (releaseAiUsageReservation devolve créditos/custo; erro de release NÃO é
+  suprimido).
+- Retry: falhas retryable (timeout, 5xx, 429, resposta vazia, erro transitório
+  de rede) até 2 tentativas com backoff curto (1s, 2s); falhas não-retryable
+  (bloco ilegível/OCR, contrato inválido) marcam o bloco `failed` sem retry.
+- Falha parcial: um bloco `failed` NÃO cancela os demais; blocos `completed`
+  permanecem válidos; `pagesAlreadyAnalyzed` conta só blocos concluídos;
+  `statusPorBloco` expõe blocos com falha.
+- Consolidação: `summariesAvailable`/`structuredFactsAvailable` = true se ≥1
+  bloco concluiu; os campos alimentam `documents.summariesAvailable`,
+  `documents.structuredFactsAvailable` e `documents.pagesAlreadyAnalyzed`
+  (regra Q5 do classificador).
+- Integre com o `payloadBuilder` (2C) para derivar o escritório/processo/
+  documentos elegíveis; revalide no backend (nunca confiar em campos do cliente).
+- NENHUMA conexão com SSE/frontend/rotas nesta fase (Fases 3C/3D).
+
+Testes com banco real (siga o padrão de `aiOperation.test.ts`):
+- blocos corretos para N páginas (1 bloco para ≤20, 2 blocos para 21–40, etc.);
+- `pagesAlreadyAnalyzed` descontado;
+- idempotência por bloco (reprocessar a mesma chave reutiliza, sem novo débito
+  nem novo token_usage);
+- falha retryable → retry com backoff; falha não-retryable → bloco `failed`;
+- falha parcial preserva blocos concluídos;
+- isolamento entre escritórios (documentos de outro tenant nunca entram);
+- settle usa tokens reais; release devolve créditos em falha.
+
+Não altere classifier, usage, payloadBuilder, catálogo, migrations, rotas,
+SSE ou frontend — apenas o novo serviço + testes.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 3A — unidades de análise documental.
+
+Analise o serviço de análise documental e os testes (referência: design 2D).
+
+Confirme:
+- blocos de 20 páginas com ordem estável e `pagesAlreadyAnalyzed` descontado;
+- escopo restrito ao escritório autenticado; documentos `unscoped` excluídos;
+  nenhum bloco cruza tenants;
+- chave de idempotência derivada no servidor e usada na reserva; reprocessar a
+  mesma chave reutiliza (alreadyReserved) sem novo débito nem novo token_usage;
+- fluxo reserva → IA (DOCUMENT_ANALYSIS_20_PAGES, Flash, 1 crédito/bloco) →
+  persistência → settle (uso real, nearest) / release (falha devolve créditos;
+  erro de release não é suprimido);
+- retry limitado (2 tentativas, backoff curto) só para falhas retryable;
+- falha parcial preserva blocos concluídos e `pagesAlreadyAnalyzed` conta só
+  concluídos;
+- consolidação alimenta summariesAvailable/structuredFactsAvailable/
+  pagesAlreadyAnalyzed (Q5);
+- revalidação backend (não confiar no cliente);
+- nenhuma alteração fora de escopo (sem SSE/frontend/rotas nesta fase);
+- testes com banco real cobrindo os cenários acima.
+
+Retorne o veredito em JSON.
+```

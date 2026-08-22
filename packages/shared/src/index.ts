@@ -43,3 +43,6 @@ export interface DB {
   pecas: Peca[]
   documentos: Documento[]
 }
+
+// --- Fonte única de planos e operações de IA (Fase 2B) ---
+export * from './catalog.js'

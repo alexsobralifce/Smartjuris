@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @lexia/shared build",
     "dev": "vite --host 0.0.0.0 --port 5173",
+    "prebuild": "pnpm --filter @lexia/shared build",
     "build": "vite build",
     "preview": "vite preview",
     "format": "oxfmt",

@@ -4,6 +4,16 @@ import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '../middlewares/audit.js';
 import type { AuthenticatedRequest } from '../middlewares/auth.js';
 import type { Request } from 'express';
+import {
+  OPERATION_CATALOG as SHARED_OPERATION_CATALOG,
+  PLAN_LIMITS as SHARED_PLAN_LIMITS,
+  PLAN_CODES as SHARED_PLAN_CODES,
+  AI_OPERATIONS as SHARED_AI_OPERATIONS,
+  normalizePlan,
+  type PlanCode,
+  type AiOperation as SharedAiOperation,
+  type OperationCatalogEntry,
+} from '@lexia/shared';
 
 // ===========================================================================
 // Compatibilidade preservada: isHorarioPico, trackTokenUsage, getTokenUsageMes,
@@ -252,21 +262,30 @@ export interface OperationLimits {
   maxAnnexPages: number;
 }
 
-export const OPERATION_LIMITS: Record<AiOperationType, OperationLimits> = {
-  SIMPLE_PETITION: { model: 'flash', credits: 1, maxInputTokens: 8_000, maxOutputTokens: 2_500, maxOutputPages: 3, maxAnnexPages: 10 },
-  SECTION_REVIEW: { model: 'flash', credits: 1, maxInputTokens: 8_000, maxOutputTokens: 2_000, maxOutputPages: 3, maxAnnexPages: 10 },
-  STANDARD_PETITION: { model: 'flash', credits: 2, maxInputTokens: 25_000, maxOutputTokens: 10_000, maxOutputPages: 12, maxAnnexPages: 20 },
-  DOCUMENT_ANALYSIS_20_PAGES: { model: 'flash', credits: 1, maxInputTokens: 25_000, maxOutputTokens: 4_000, maxOutputPages: 20, maxAnnexPages: 20 },
-  JURISPRUDENCE_RESEARCH: { model: 'flash', credits: 1, maxInputTokens: 12_000, maxOutputTokens: 3_000, maxOutputPages: 8, maxAnnexPages: 8 },
-  APPEAL: { model: 'pro', credits: 4, maxInputTokens: 35_000, maxOutputTokens: 13_000, maxOutputPages: 15, maxAnnexPages: 40 },
-  COMPLEX_DOCUMENT: { model: 'pro', credits: 6, maxInputTokens: 45_000, maxOutputTokens: 18_000, maxOutputPages: 20, maxAnnexPages: 60 },
-};
+export const OPERATION_LIMITS: Record<AiOperationType, OperationLimits> = Object.fromEntries(
+  SHARED_AI_OPERATIONS.map((operation: SharedAiOperation) => [
+    operation,
+    toOperationLimits(SHARED_OPERATION_CATALOG[operation]),
+  ]),
+) as Record<AiOperationType, OperationLimits>;
+
+/** Adapta a fonte única (@lexia/shared, contrato 2B) para a forma interna. */
+function toOperationLimits(entry: OperationCatalogEntry): OperationLimits {
+  return {
+    model: entry.model.toLowerCase() as ModeloTier,
+    credits: entry.credits,
+    maxInputTokens: entry.maxInputTokens ?? 0,
+    maxOutputTokens: entry.maxOutputTokens ?? 0,
+    maxOutputPages: entry.maxOutputPages ?? 0,
+    maxAnnexPages: entry.maxAttachmentPages ?? 0,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Planos
 // ---------------------------------------------------------------------------
 
-export type PlanTier = 'ESSENTIAL' | 'PROFESSIONAL' | 'OFFICE';
+export type PlanTier = PlanCode;
 
 export interface PlanConfig {
   creditsPerCycle: number;
@@ -274,22 +293,32 @@ export interface PlanConfig {
   maxOpCostCents: number;
 }
 
-export const PLANS: Record<PlanTier, PlanConfig> = {
-  ESSENTIAL: { creditsPerCycle: 20, maxReserveCents: 4_500, maxOpCostCents: 240 },
-  PROFESSIONAL: { creditsPerCycle: 50, maxReserveCents: 7_500, maxOpCostCents: 400 },
-  OFFICE: { creditsPerCycle: 100, maxReserveCents: 12_500, maxOpCostCents: 600 },
-};
+/** Planos derivados da FONTE ÚNICA (@lexia/shared, contrato 2B).
+ *  Construídos A PARTIR de SHARED_PLAN_CODES (sem lista canônica paralela);
+ *  o guard em tempo de execução garante cobertura sem casts inseguros. */
+function planConfigFromShared(plan: PlanCode): PlanConfig {
+  return {
+    creditsPerCycle: SHARED_PLAN_LIMITS[plan].creditsMonthly,
+    maxReserveCents: SHARED_PLAN_LIMITS[plan].maxReserveCents,
+    maxOpCostCents: SHARED_PLAN_LIMITS[plan].maxOpCostCents,
+  };
+}
 
-export function planoDoEscritorio(plano: string | null | undefined): PlanTier {
-  switch ((plano ?? '').toLowerCase()) {
-    case 'pro':
-    case 'professional':
-      return 'PROFESSIONAL';
-    case 'office':
-      return 'OFFICE';
-    default:
-      return 'ESSENTIAL';
+export const PLANS: Record<PlanTier, PlanConfig> = Object.fromEntries(
+  SHARED_PLAN_CODES.map((plan) => [plan, planConfigFromShared(plan)]),
+) as Record<PlanTier, PlanConfig>;
+
+// Guard de exaustividade em tempo de execução: se o shared ganhar um plano
+// novo sem entrada em PLANS (construção cega), falha imediatamente.
+for (const plan of SHARED_PLAN_CODES) {
+  if (!(plan in PLANS)) {
+    throw new Error(`Plano ${plan} do catálogo compartilhado sem entrada em PLANS.`);
   }
+}
+
+/** Normaliza plano do banco/painel (aliases) para o canônico; desconhecido → ESSENTIAL. */
+export function planoDoEscritorio(plano: string | null | undefined): PlanTier {
+  return normalizePlan(plano) ?? 'ESSENTIAL';
 }
 
 // ---------------------------------------------------------------------------

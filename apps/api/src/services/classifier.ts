@@ -6,6 +6,8 @@
 // backend (services/usage.ts). `canStartDrafting` significa apenas que o
 // frontend pode exibir a possibilidade de iniciar a operação.
 //
+// Fase 2B: o catálogo de planos/operações vem de `@lexia/shared` (fonte única).
+//
 // Invariantes desta fase (sempre retornados):
 //   estimatedCostCents = null       (o backend calcula o custo)
 //   requiresBackendEstimation = true
@@ -22,12 +24,20 @@
 // ===========================================================================
 
 import { z } from 'zod';
+import {
+  OPERATION_CATALOG as SHARED_OPERATION_CATALOG,
+  AI_OPERATIONS as SHARED_AI_OPERATIONS,
+  PLAN_CODES as SHARED_PLAN_CODES,
+  type AiOperation as SharedAiOperation,
+  type OperationCatalogEntry,
+} from '@lexia/shared';
 
 // ---------------------------------------------------------------------------
 // Enums e tipos do contrato
 // ---------------------------------------------------------------------------
 
-export const PLAN_CODES = ['ESSENTIAL', 'PROFESSIONAL', 'OFFICE'] as const;
+/** Fonte única (Fase 2B): planos canônicos vindos de @lexia/shared. */
+export const PLAN_CODES = SHARED_PLAN_CODES;
 export type PlanCode = (typeof PLAN_CODES)[number];
 
 export const OUTPUT_SIZES = ['SHORT', 'STANDARD', 'COMPLETE'] as const;
@@ -39,15 +49,8 @@ export type ReviewTarget = (typeof REVIEW_TARGETS)[number];
 export const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH'] as const;
 export type RiskLevel = (typeof RISK_LEVELS)[number];
 
-export const AI_OPERATIONS = [
-  'SIMPLE_PETITION',
-  'SECTION_REVIEW',
-  'STANDARD_PETITION',
-  'DOCUMENT_ANALYSIS_20_PAGES',
-  'JURISPRUDENCE_RESEARCH',
-  'APPEAL',
-  'COMPLEX_DOCUMENT',
-] as const;
+/** Fonte única (Fase 2B): operações vindas de @lexia/shared. */
+export const AI_OPERATIONS = SHARED_AI_OPERATIONS;
 export type AiOperation = (typeof AI_OPERATIONS)[number];
 
 export const CLASSIFIER_STATUSES = [
@@ -252,43 +255,33 @@ export interface OperationPolicy {
   isAnalysis: boolean;
 }
 
-export const OPERATION_CATALOG: Record<AiOperation, OperationPolicy> = {
-  SIMPLE_PETITION: {
-    operation: 'SIMPLE_PETITION', modelTier: 'FLASH', credits: 1, creditsArePerBlock: false,
-    maxInputTokens: 8_000, maxOutputTokens: 2_500, maxOutputPages: 3, maxAnnexPages: 10,
-    classification: 'SIMPLE', producesText: true, isAnalysis: false,
-  },
-  SECTION_REVIEW: {
-    operation: 'SECTION_REVIEW', modelTier: 'FLASH', credits: 1, creditsArePerBlock: false,
-    maxInputTokens: 8_000, maxOutputTokens: 2_000, maxOutputPages: 3, maxAnnexPages: 10,
-    classification: 'SIMPLE', producesText: true, isAnalysis: false,
-  },
-  STANDARD_PETITION: {
-    operation: 'STANDARD_PETITION', modelTier: 'FLASH', credits: 2, creditsArePerBlock: false,
-    maxInputTokens: 25_000, maxOutputTokens: 10_000, maxOutputPages: 12, maxAnnexPages: 20,
-    classification: 'STANDARD', producesText: true, isAnalysis: false,
-  },
-  DOCUMENT_ANALYSIS_20_PAGES: {
-    operation: 'DOCUMENT_ANALYSIS_20_PAGES', modelTier: 'FLASH', credits: 1, creditsArePerBlock: true,
-    maxInputTokens: null, maxOutputTokens: null, maxOutputPages: 20, maxAnnexPages: 20,
-    classification: 'STANDARD', producesText: false, isAnalysis: true,
-  },
-  JURISPRUDENCE_RESEARCH: {
-    operation: 'JURISPRUDENCE_RESEARCH', modelTier: 'FLASH', credits: 1, creditsArePerBlock: false,
-    maxInputTokens: null, maxOutputTokens: null, maxOutputPages: null, maxAnnexPages: null,
-    classification: 'SIMPLE', producesText: false, isAnalysis: false,
-  },
-  APPEAL: {
-    operation: 'APPEAL', modelTier: 'PRO', credits: 4, creditsArePerBlock: false,
-    maxInputTokens: 35_000, maxOutputTokens: 13_000, maxOutputPages: 15, maxAnnexPages: 40,
-    classification: 'COMPLEX', producesText: true, isAnalysis: false,
-  },
-  COMPLEX_DOCUMENT: {
-    operation: 'COMPLEX_DOCUMENT', modelTier: 'PRO', credits: 6, creditsArePerBlock: false,
-    maxInputTokens: 45_000, maxOutputTokens: 18_000, maxOutputPages: 20, maxAnnexPages: 60,
-    classification: 'COMPLEX', producesText: true, isAnalysis: false,
-  },
-};
+/**
+ * Fase 2B — catálogo derivado da FONTE ÚNICA em @lexia/shared (nenhum valor
+ * duplicado aqui). Adapta o formato do shared (contrato 2B) para a forma
+ * interna OperationPolicy do classificador.
+ */
+function toOperationPolicy(entry: OperationCatalogEntry): OperationPolicy {
+  return {
+    operation: entry.operation,
+    modelTier: entry.model,
+    credits: entry.credits,
+    creditsArePerBlock: entry.isAnalysisOperation && entry.blockSizePages != null,
+    maxInputTokens: entry.maxInputTokens,
+    maxOutputTokens: entry.maxOutputTokens,
+    maxOutputPages: entry.maxOutputPages,
+    maxAnnexPages: entry.maxAttachmentPages,
+    classification: entry.classification,
+    producesText: entry.isDraftingOperation,
+    isAnalysis: entry.isAnalysisOperation,
+  };
+}
+
+export const OPERATION_CATALOG: Record<AiOperation, OperationPolicy> = Object.fromEntries(
+  SHARED_AI_OPERATIONS.map((operation: SharedAiOperation) => [
+    operation,
+    toOperationPolicy(SHARED_OPERATION_CATALOG[operation]),
+  ]),
+) as Record<AiOperation, OperationPolicy>;
 
 // ---------------------------------------------------------------------------
 // Funções auxiliares puras (contrato v3, seção 18)

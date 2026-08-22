@@ -4,14 +4,14 @@
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { tokenizeCommand, validateArgv, CommandDeniedError, SafeExecutor } from '../src/executor.js';
-import { safeJoin, resolveAiDevDir, findRepoRoot, moduleDir } from '../src/paths.js';
+import { safeJoin, resolveAiDevDir, findRepoRoot, moduleDir, type Env } from '../src/paths.js';
 import { runDirForRunId } from '../src/run.js';
-import { validateConfigPaths } from '../src/config.js';
+import { validateConfigPaths, applyRepoDotEnv, applyLegacyAliases } from '../src/config.js';
 import { acquireLock, releaseLock, withLock } from '../src/io.js';
 import { AutomationConfig } from '../src/contracts.js';
 
@@ -296,5 +296,54 @@ describe('.gitignore raiz', () => {
   test('repositório real resolve para docs/ai-development', { skip: !repoRoot || !existsSync(join(repoRoot!, 'docs', 'ai-development')) }, () => {
     const dir = resolveAiDevDir(repoRoot!);
     assert.equal(dir, join(repoRoot!, 'docs', 'ai-development'));
+  });
+});
+
+// --- Carregamento do .env da raiz (sem expor valores) ---
+
+describe('.env da raiz (applyRepoDotEnv / applyLegacyAliases)', () => {
+  test('lê .env, aplica sem sobrescrever e aceita o alias legado DEEP_SEEK_API', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ai-orb-env-'));
+    tempRoots.push(root);
+    writeFileSync(
+      join(root, '.env'),
+      [
+        '# comentário',
+        'DEEP_SEEK_API=abc-secret-123',
+        'REQUIRE_EMAIL_OTP=false',
+        'QUOTED="valor com espaço"',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    const env: Env = {};
+    applyRepoDotEnv(root, env);
+    applyLegacyAliases(env);
+    assert.equal(env.REQUIRE_EMAIL_OTP, 'false');
+    assert.equal(env.QUOTED, 'valor com espaço');
+    // alias legado: DEEP_SEEK_API vira DEEPSEEK_API_KEY (sem logar o valor)
+    assert.equal(env.DEEPSEEK_API_KEY, 'abc-secret-123');
+  });
+
+  test('não sobrescreve variáveis já definidas no ambiente', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ai-orb-env2-'));
+    tempRoots.push(root);
+    writeFileSync(join(root, '.env'), 'DEEP_SEEK_API=do-arquivo\nPORT=9999\n', 'utf8');
+    const env: Env = { PORT: '3001', DEEP_SEEK_API: 'ja-definida' };
+    applyRepoDotEnv(root, env);
+    applyLegacyAliases(env);
+    assert.equal(env.PORT, '3001', 'PORT existente preservado');
+    assert.equal(env.DEEP_SEEK_API, 'ja-definida', 'chave existente preservada');
+    assert.equal(env.DEEPSEEK_API_KEY, 'ja-definida', 'alias usa a chave existente');
+  });
+
+  test('sem .env não lança e não altera o ambiente', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ai-orb-env3-'));
+    tempRoots.push(root);
+    const env: Env = { PORT: '1' };
+    applyRepoDotEnv(root, env);
+    applyLegacyAliases(env);
+    assert.equal(env.PORT, '1');
+    assert.equal(env.DEEPSEEK_API_KEY, undefined);
   });
 });

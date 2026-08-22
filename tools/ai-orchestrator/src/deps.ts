@@ -7,7 +7,7 @@
 import { SafeExecutor } from './executor.js';
 import { createGitOps } from './git.js';
 import { chatCompletion, type LlmClient } from './llm.js';
-import { loadEnv } from './config.js';
+import { loadEnv, applyRepoDotEnv, applyLegacyAliases } from './config.js';
 import type { AutomationConfig } from './contracts.js';
 import { createLogger, type Logger } from './io.js';
 import { type Env } from './paths.js';
@@ -20,6 +20,9 @@ export function createRealDeps(opts: {
   aiDevDir: string;
   log?: Logger;
 }): RunDeps {
+  // Carrega o .env da raiz (sem override) e aceita o alias legado DEEP_SEEK_API.
+  applyRepoDotEnv(opts.repoRoot, opts.env);
+  applyLegacyAliases(opts.env);
   const log = opts.log ?? createLogger(opts.env);
   const exec = new SafeExecutor();
 

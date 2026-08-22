@@ -320,6 +320,9 @@ export const aiOperations = pgTable('ai_operations', {
   model: text('model'),
   modelUsed: text('model_used'),
   fallbackReason: text('fallback_reason'),
+  // Fase 3A — token de posse (fencing) do lease de execução de análise
+  // documental (migration 0022). Semântica própria: quem detém o lease.
+  leaseToken: text('lease_token'),
   creditsReserved: integer('credits_reserved').notNull().default(0),
   creditsSettled: integer('credits_settled').notNull().default(0),
   costCentsReserved: integer('cost_cents_reserved').notNull().default(0),

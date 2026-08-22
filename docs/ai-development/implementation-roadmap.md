@@ -57,7 +57,7 @@ migrations validadas, quando aplicável
 | 2D | Desenho da análise documental | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2E | Migration dos metadados do classificador | 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2F | Idempotência e reserva | 2B, 2C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 3A | Unidades de análise documental | 2D | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 3A | Unidades de análise documental | 2D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 3B | Fallback Flash/Pro | 2F | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 3C | Integração SSE | 2F, 3B | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 3D | Integração frontend | 3C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
@@ -352,7 +352,7 @@ idempotencyKey
 
 ### 3A — Unidades de análise documental
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 2D aprovada.
 
@@ -533,6 +533,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2F | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2F | DeepSeek | LOOPGAIN (determinístico) | REJECT | Não | Sem convergência entre rodadas (achados graves não reduziram). Decisão humana requerida. |
 | 2026-08-22 | 2F | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: todos os requiredFixes do revisor aplicados (generate não reexecuta em retry/concorrência, release sem suprimir erro, fingerprint de intenção por tenant, migrations 0020/0021 escopam idempotência, testes exatos por operationId); 173/173 testes; 2ª falha foi falso positivo do loopgain v1 corrigido |
+| 2026-08-22 | 3A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

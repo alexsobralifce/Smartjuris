@@ -583,6 +583,57 @@ describe('2E — migration metadados do classificador', () => {
       await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`)).catch(() => {});
     }
   });
+
+  test('0022: migration lease_token aplica e é idempotente (fencing de análise 3A)', async () => {
+    const schemaAux = `mig_3a_${suffix}`;
+    await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`));
+    await db.execute(sql.raw(`CREATE SCHEMA "${schemaAux}";`));
+    try {
+      // Runner oficial sobre o schema limpo: 0000..0022.
+      const res = await runMigrations({ schema: schemaAux });
+      assert.ok(res.applied.includes('0022_lease_token'), '0022 aplicada');
+      const cols = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = 'ai_operations'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.column_name);
+      });
+      assert.ok(cols.includes('lease_token'), 'coluna lease_token presente');
+
+      // Idempotência: reaplicar não duplica.
+      const res2 = await runMigrations({ schema: schemaAux });
+      assert.ok(!res2.applied.includes('0022_lease_token'), '0022 não reaplicada');
+
+      // Aplicável em ambiente atualizado a partir de versão ANTERIOR (sem a
+      // coluna E sem o registro): remove coluna + registro de controle e
+      // reaplica — o runner deve aplicar a 0022 de novo e recriar a coluna.
+      // Remove o REGISTRO da 0022 da tabela de controle pelo hash (coluna
+      // `hash`, não `name`) para simular ambiente pré-0022.
+      const hash0022 = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(`SELECT hash FROM drizzle_migrations ORDER BY id`);
+        return String(rows[rows.length - 1]?.hash ?? '');
+      });
+      await noSchemaAsync(schemaAux, async (q) => {
+        await q('ALTER TABLE ai_operations DROP COLUMN IF EXISTS lease_token');
+        await q(`DELETE FROM drizzle_migrations WHERE hash = $1`, [hash0022]);
+      });
+      const res3 = await runMigrations({ schema: schemaAux, allowLegacyBackfill: true });
+      assert.ok(res3.applied.includes('0022_lease_token'), '0022 REAPLICADA após remoção');
+      const cols3 = await noSchemaAsync(schemaAux, async (q) => {
+        const rows = await q(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = 'ai_operations'`,
+          [schemaAux],
+        );
+        return rows.map((r: any) => r.column_name);
+      });
+      assert.ok(cols3.includes('lease_token'), 'coluna lease_token recriada na reaplicação');
+    } finally {
+      await db.execute(sql.raw(`DROP SCHEMA IF EXISTS "${schemaAux}" CASCADE;`)).catch(() => {});
+    }
+  });
 });
 
 /** Variante do noSchema com schema arbitrário (para testes com schema auxiliar). */

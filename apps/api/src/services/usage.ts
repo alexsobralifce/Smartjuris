@@ -546,6 +546,7 @@ interface AiOperationRow {
   model: string | null;
   model_used: string | null;
   fallback_reason: string | null;
+  lease_token: string | null;
   max_output_tokens: number | null;
   error: string | null;
 }
@@ -682,6 +683,11 @@ export interface SettleAiUsageInput {
   inputTokens: number;
   outputTokens: number;
   isPeak?: boolean;
+  /** Fencing: se informado, a liquidação só ocorre se lease_token ainda
+   *  for este token (o executor ainda é o dono do lease). Validação ATÔMICA
+   *  dentro do lock da operação — impede liquidação por executor que perdeu
+   *  a posse para uma retomada (TOCTOU-free). */
+  fencingToken?: string;
   req?: Request;
 }
 
@@ -707,6 +713,13 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
     // sem duplicar credit_ledger nem token_usage.
     const op = await buscarOperacaoParaUpdate(tx, input.operationId);
     if (!op) return { ok: false, reason: 'operacao-nao-encontrada' } as SettleAiUsageResult;
+    // Fencing ATÔMICO ANTES de qualquer caminho de sucesso (incl. já liquidada
+    // por OUTRO executor): se o token de posse não confere, esta chamada NÃO
+    // é dona da liquidação — nunca recebe alreadySettled/completed por
+    // liquidação realizada por outro executor (evita sucesso indevido).
+    if (input.fencingToken != null && String(op.lease_token ?? '') !== input.fencingToken) {
+      return { ok: false, reason: 'posse-perdida', status: op.status } as SettleAiUsageResult;
+    }
     if (op.status === 'succeeded') return { ok: true, alreadySettled: true, operationId: op.id, status: op.status } as SettleAiUsageResult;
     if (op.status !== 'reserved' && op.status !== 'running') {
       return { ok: false, reason: 'operacao-ja-finalizada', status: op.status } as SettleAiUsageResult;
@@ -780,6 +793,10 @@ export interface ReleaseAiUsageInput {
   reason?: string;
   partialInputTokens?: number;
   partialOutputTokens?: number;
+  /** Fencing: se informado, a liberação só ocorre se lease_token ainda
+   *  for este token (o executor ainda é o dono do lease). Validação ATÔMICA
+   *  dentro do lock — impede compensação por executor que perdeu a posse. */
+  fencingToken?: string;
   req?: Request;
 }
 
@@ -803,6 +820,11 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
     // liberação é impedida pela guarda de status sob lock).
     const op = await buscarOperacaoParaUpdate(tx, input.operationId);
     if (!op) return { ok: false, reason: 'operacao-nao-encontrada' } as ReleaseAiUsageResult;
+    // Fencing ATÔMICO ANTES dos caminhos idempotentes: executor com token
+    // obsoleto NUNCA recebe alreadyReleased nem compensa operação de outro.
+    if (input.fencingToken != null && String(op.lease_token ?? '') !== input.fencingToken) {
+      return { ok: false, reason: 'posse-perdida', status: op.status } as ReleaseAiUsageResult;
+    }
     if (op.status === 'failed' || op.status === 'released') {
       return { ok: true, alreadyReleased: true, operationId: op.id, status: op.status } as ReleaseAiUsageResult;
     }

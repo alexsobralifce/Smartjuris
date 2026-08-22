@@ -51,7 +51,7 @@ migrations validadas, quando aplicável
 |---|---|---|---|---|---|
 | 2A | Segurança documental e metadados | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
 | 2A.1 | Testes HTTP de tenancy | 2A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Terra |
-| 2A.2 | Correção da exportação | 2A.1 | `PLANNED` | DeepSeek | GPT-5.6 Terra |
+| 2A.2 | Correção da exportação | 2A.1 | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Terra |
 | 2B | Catálogo compartilhado | 2A.2 | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 2C | Builder do payload real | 2B | `PLANNED` | DeepSeek | GPT-5.6 Terra |
 | 2D | Desenho da análise documental | 2C | `PLANNED` | DeepSeek | GPT-5.6 Terra |
@@ -155,7 +155,7 @@ Validar o fluxo completo por HTTP, incluindo autenticação, cookies, tenancy, u
 
 ### 2A.2 — Correção da exportação
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_FAILED`
 
 **Dependência:** 2A.1 aprovada.
 
@@ -507,6 +507,7 @@ Use este modelo ao concluir cada fase:
 | — | 2A | DeepSeek | GPT-5.6 Terra | APPROVE | Sim | Segurança documental aprovada |
 | 2026-08-22 | 2A.1 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2A.1 | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve |
+| 2026-08-22 | 2A.2 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 
 ## Critério final
 

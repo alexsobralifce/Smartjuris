@@ -149,17 +149,20 @@ export async function cachedAuditForContext(
 }
 
 /**
- * LOOPGAIN (convergência): conta achados HIGH/BLOCKER de um audit e, se a
- * rodada anterior da fase teve o MESMO número (ou mais), o loop NÃO está
- * convergindo — abre o circuito antes do teto de tentativas, exigindo decisão
- * humana. Retorna a rodada anterior se a convergência falhou.
+ * LOOPGAIN (convergência por CONTEÚDO): compara os achados HIGH/BLOCKER da
+ * rodada atual com os da rodada anterior da MESMA fase. Considera "resolvidos"
+ * os achados anteriores que NÃO aparecem mais (mesmo requirement+file) e
+ * "novos" os que surgiram. O loop só abre o circuito (decisão humana) quando
+ * NENHUM achado anterior foi resolvido E ainda há graves — contagem total
+ * igual/maior NÃO é sinal de estagnação se houve progresso real (achados
+ * antigos corrigidos, novos legítimos detectados).
  */
 export async function convergenciaFalhou(
   aiDevDir: string,
   phaseId: string,
   currentRunId: string,
   audit: import('./contracts.js').AuditResult,
-): Promise<{ anterior: string; gravesAtual: number; gravesAnterior: number } | null> {
+): Promise<{ anterior: string; resolvidos: number; novos: number; gravesAtual: number } | null> {
   const { readdir, readFile } = await import('node:fs/promises');
   const runsDir = safeJoin(aiDevDir, 'runs');
   let entries: string[] = [];
@@ -168,21 +171,31 @@ export async function convergenciaFalhou(
   } catch {
     return null;
   }
-  const gravesAtual = audit.findings.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER').length;
-  if (gravesAtual === 0) return null; // convergiu (sem achados graves)
 
-  const anteriores: { ts: number; runId: string; graves: number }[] = [];
+  // Chave de um achado: severity + file + requirement (estável entre rodadas).
+  const chaveDe = (f: { severity?: string; file?: string | null; requirement?: string }): string =>
+    [f.severity ?? '', f.file ?? '', f.requirement ?? ''].join('::');
+
+  const gravesAtual = audit.findings.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER');
+  const chavesAtuais = new Set(gravesAtual.map(chaveDe));
+  if (gravesAtual.length === 0) return null; // convergiu (sem achados graves)
+
+  const anteriores: { ts: number; runId: string; chaves: Set<string> }[] = [];
   for (const entry of entries) {
     if (!entry.endsWith(`-${phaseId}`) || entry === currentRunId) continue;
     try {
       const raw = await readFile(safeJoin(runsDir, entry, 'run.json'), 'utf8');
-      const parsed = JSON.parse(raw) as { audit?: { findings?: { severity?: string }[] } };
+      const parsed = JSON.parse(raw) as { audit?: { findings?: { severity?: string; file?: string | null; requirement?: string }[] } };
       if (!parsed.audit?.findings) continue;
       const m = entry.match(/^(\d{8}T\d{6}Z)/);
       anteriores.push({
         ts: m ? Date.parse(m[1]) : 0,
         runId: entry,
-        graves: parsed.audit.findings.filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER').length,
+        chaves: new Set(
+          parsed.audit.findings
+            .filter((f) => f.severity === 'HIGH' || f.severity === 'BLOCKER')
+            .map(chaveDe),
+        ),
       });
     } catch {
       // ignora
@@ -191,10 +204,16 @@ export async function convergenciaFalhou(
   if (anteriores.length === 0) return null; // primeira rodada de correção
   anteriores.sort((a, b) => b.ts - a.ts);
   const ultimo = anteriores[0];
-  if (gravesAtual >= ultimo.graves && ultimo.graves > 0) {
-    return { anterior: ultimo.runId, gravesAtual, gravesAnterior: ultimo.graves };
+
+  // Resolvidos = achados anteriores que não aparecem mais; novos = atuais sem
+  // equivalente anterior. Se ALGUM foi resolvido, o loop está progredindo.
+  const resolvidos = [...ultimo.chaves].filter((c) => !chavesAtuais.has(c)).length;
+  const novos = [...chavesAtuais].filter((c) => !ultimo.chaves.has(c)).length;
+
+  if (resolvidos === 0 && gravesAtual.length > 0) {
+    return { anterior: ultimo.runId, resolvidos, novos, gravesAtual: gravesAtual.length };
   }
-  return null; // reduziu achados → convergindo
+  return null; // houve progresso (achados resolvidos) → convergindo
 }
 
 export function compactTimestamp(date: Date): string {
@@ -561,7 +580,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     if (previousState === 'CORRECTION_PENDING' || previousState === 'AUDIT_FAILED') {
       const loop = await convergenciaFalhou(deps.aiDevDir, phaseId, runId, audit);
       if (loop) {
-        const motivo = `Rodada de correção sem convergência: ${loop.gravesAtual} achado(s) grave(s) (HIGH/BLOCKER) agora vs. ${loop.gravesAnterior} na rodada ${loop.anterior}. O loop não está reduzindo o retrabalho — circuito aberto para decisão humana.`;
+        const motivo = `Rodada de correção sem convergência: nenhum dos achados graves anteriores foi resolvido (${loop.resolvidos} resolvido(s), ${loop.novos} novo(s), ${loop.gravesAtual} grave(s) atuais). O loop não está progredindo — circuito aberto para decisão humana (rodada anterior: ${loop.anterior}).`;
         deps.log.warn(`[loopgain] ${motivo}`);
         artifact('16-loopgain.txt', motivo);
         const loopRow = buildHistoryRow({

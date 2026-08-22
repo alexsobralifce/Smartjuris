@@ -741,6 +741,67 @@ describe('cache de auditoria + loopgain (economia)', () => {
   });
 });
 
+  test('loopgain NÃO abre circuito quando achado anterior foi resolvido (progresso real)', async () => {
+    const repo = makeRepo();
+    writeFileSync(join(repo.root, 'apps', 'api', 'src', 'code.ts'), 'export const a = 602;\n', 'utf8');
+
+    // Roadmap em CORRECTION_PENDING com 1 falha anterior.
+    const roadmapFase = ROADMAP
+      .replace('| 2A.1 | Testes HTTP de tenancy | 2A | \`PLANNED\` | DeepSeek | GPT-5.6 Terra |', '| 2A.1 | Testes HTTP de tenancy | 2A | \`CORRECTION_PENDING\` | DeepSeek | GPT-5.6 Terra |')
+      .replace('**Estado:** \`PLANNED\`\n\n**Dependência:** 2A aprovada.', '**Estado:** \`CORRECTION_PENDING\`\n\n**Dependência:** 2A aprovada.')
+      + '| 2026-08-20 | 2A.1 | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |\n';
+    writeFileSync(join(repo.aiDevDir, 'implementation-roadmap.md'), roadmapFase, 'utf8');
+    git(repo.root, ['add', '-A']);
+    git(repo.root, ['commit', '-q', '-m', 'roadmap fase correcao2']);
+
+    // Run anterior com 2 HIGH (r1, r2).
+    const runsDir = join(repo.aiDevDir, 'runs');
+    const prevRun = '20260107T000000Z-2A.1';
+    mkdirSync(join(runsDir, prevRun), { recursive: true });
+    writeFileSync(join(runsDir, prevRun, 'run.json'), JSON.stringify({
+      runId: prevRun, phase: '2A.1', startedAt: '2026-01-07T00:00:00.000Z', finishedAt: '2026-01-07T00:00:01.000Z',
+      status: 'AUDIT_FAILED', branch: 'phase/2A.1', implementerModel: 'x', reviewerModel: 'y',
+      artifactFiles: [],
+      audit: { phase: '2A.1', verdict: 'REJECT', advanceAllowed: false, findings: [
+        { severity: 'HIGH', file: 'a', line: 1, requirement: 'r1', evidence: 'e', impact: 'i', action: 'a' },
+        { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
+      ], requiredFixes: ['x'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null },
+    }), 'utf8');
+
+    // Fake LLM: veredito REJECT com r1 RESOLVIDO (sumiu) e r2 ainda presente
+    // (progresso real: 1 resolvido, 1 novo equivalente) → NÃO abre circuito.
+    const hybrid = new HybridExecutor(new SafeExecutor());
+    const fakeLlm: LlmClient = {
+      async implementer(): Promise<string> { return 'ok'; },
+      async reviewer(): Promise<string> {
+        return JSON.stringify({
+          phase: '2A.1', verdict: 'REJECT', advanceAllowed: false,
+          findings: [
+            { severity: 'HIGH', file: 'b', line: 2, requirement: 'r2', evidence: 'e', impact: 'i', action: 'a' },
+            { severity: 'HIGH', file: 'c', line: 3, requirement: 'r3', evidence: 'e', impact: 'i', action: 'a' },
+          ],
+          requiredFixes: ['y'], missingTests: [], scopeViolations: [], migrationRisks: [], securityRisks: [], financialRisks: [], rollbackRisks: [], nextPhase: null,
+        });
+      },
+    };
+    const deps = {
+      exec: hybrid,
+      git: createGitOps(hybrid, repo.root),
+      llm: fakeLlm,
+      repoRoot: repo.root,
+      aiDevDir: repo.aiDevDir,
+      config: CONFIG,
+      env: {},
+      now: () => new Date('2026-01-07T00:00:10.000Z'),
+      log: silentLog,
+    };
+
+    // r1 foi resolvido → o loop está progredindo → NÃO deve lançar circuito.
+    const summary = await runPhase(deps, '2A.1', { mode: 'allow-dirty' });
+    assert.ok(summary.status === 'AUDIT_FAILED' || summary.status === 'CORRECTION_PENDING',
+      `progresso permite continuar (status=${summary.status})`);
+  });
+
 describe('modo autônomo (--autonomous)', () => {
   test('autonomous com código modificado cria checkpoint e commit sem confirmação', async () => {
     const repo = makeRepo();

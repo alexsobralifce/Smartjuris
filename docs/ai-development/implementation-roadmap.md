@@ -531,6 +531,7 @@ Use este modelo ao concluir cada fase:
 | 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2E | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
 | 2026-08-22 | 2F | DeepSeek | GPT-5.6 Terra | REJECT | Não | reprovado |
+| 2026-08-22 | 2F | DeepSeek | LOOPGAIN (determinístico) | REJECT | Não | Sem convergência entre rodadas (achados graves não reduziram). Decisão humana requerida. |
 
 ## Critério final
 

@@ -11,7 +11,7 @@
     "db:migrate": "drizzle-kit generate && drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
     "db:seed:test": "tsx src/db/test-seed.ts",
-    "test": "tsx --test src/services/usage.test.ts src/services/classifier.test.ts src/services/documento.test.ts src/services/demoSeed.test.ts src/integration/segurancaDocumentos.test.ts"
+    "test": "tsx --test src/services/usage.test.ts src/services/classifier.test.ts src/services/documento.test.ts src/services/demoSeed.test.ts src/integration/segurancaDocumentos.test.ts src/integration/exportacaoPecas.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

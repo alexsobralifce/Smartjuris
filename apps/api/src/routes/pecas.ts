@@ -90,8 +90,20 @@ router.get('/:id/export', async (req, res) => {
     if (!canMutateTenant(req, peca.escritorioId, peca.usuarioId)) {
       return res.status(403).json({ error: 'Acesso negado.' });
     }
-    if (peca.status === 'reprovado') {
-      return res.status(403).json({ error: 'Peça reprovada não pode ser exportada.' });
+    // Fase 2A.2 — validação humana obrigatória antes da exportação (regra no
+    // BACKEND, não apenas no frontend):
+    //   aprovado/protocolado → permitida; revisao/reprovado (e qualquer status
+    //   desconhecido) → bloqueada, com auditoria do bloqueio.
+    const EXPORTACAO_PERMITIDA = new Set(['aprovado', 'protocolado']);
+    if (!EXPORTACAO_PERMITIDA.has(peca.status)) {
+      await recordAudit(req, 'EXPORTACAO_BLOQUEADA', {
+        alvoId: peca.id,
+        detalhes: { motivo: 'status', status: peca.status },
+      });
+      const mensagem = peca.status === 'reprovado'
+        ? 'Peça reprovada não pode ser exportada.'
+        : 'Peça em revisão não pode ser exportada até a aprovação.';
+      return res.status(403).json({ error: mensagem });
     }
 
     const format = req.query.format === 'docx' ? 'docx' : 'pdf';

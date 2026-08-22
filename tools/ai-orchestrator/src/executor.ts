@@ -154,6 +154,7 @@ export function validateArgv(argv: string[]): void {
     }
     if (sub === 'diff' && rest.length === 1) return;
     if (sub === 'diff' && rest.length === 2 && rest[1] === '--stat') return;
+    if (sub === 'diff' && rest.length === 3 && rest[1] === 'HEAD' && rest[2] === '--stat') return;
     if (sub === 'diff' && rest.length === 3 && rest[1] === '--' && rest[2] === '.') return;
     if (
       sub === 'diff' &&
@@ -163,6 +164,17 @@ export function validateArgv(argv: string[]): void {
       rest.slice(3).every((p) => GIT_DIFF_EXCLUDE.test(p))
     ) {
       for (const p of rest.slice(3)) assertPathspec(p);
+      return;
+    }
+    if (
+      sub === 'diff' &&
+      rest[1] === 'HEAD' &&
+      rest[2] === '--' &&
+      rest[3] === '.' &&
+      rest.slice(4).length >= 1 &&
+      rest.slice(4).every((p) => GIT_DIFF_EXCLUDE.test(p))
+    ) {
+      for (const p of rest.slice(4)) assertPathspec(p);
       return;
     }
     if (sub === 'checkout') {

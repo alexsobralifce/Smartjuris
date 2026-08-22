@@ -285,3 +285,41 @@ export async function commitRoadmapUpdate(opts: {
   log.info(`Roadmap commitado após a fase: ${sha ?? '(sem HEAD)'}`);
   return sha;
 }
+
+/**
+ * Commit da implementação aprovada (auto-commit em AUDIT_APPROVED).
+ * Adiciona todos os safePaths de código/teste alterados pela fase.
+ */
+export async function commitPhaseImplementation(opts: {
+  git: GitOps;
+  log: Logger;
+  aiDevRel: string;
+  phaseId: string;
+  reviewerModel: string;
+}): Promise<string | null> {
+  const { git, log, aiDevRel, phaseId, reviewerModel } = opts;
+  const plan = await inspectWorktree(git, aiDevRel);
+
+  if (plan.safePaths.length === 0) {
+    return null;
+  }
+
+  const addRes = await git.addPaths(plan.safePaths);
+  if (!addRes.ok) {
+    log.warn(`Não foi possível adicionar arquivos da implementação ao índice: ${addRes.stderr || addRes.stdout}`);
+    return null;
+  }
+
+  const commitMsg = `feat(phase/${phaseId}): implementation approved by ${reviewerModel}`;
+  const commitRes = await git.commit(commitMsg);
+  const output = commitRes.stdout + commitRes.stderr;
+  if (!commitRes.ok && !/nothing to commit/i.test(output)) {
+    log.warn(`Não foi possível commitar a implementação da fase: ${output}`);
+    return null;
+  }
+
+  const sha = await git.headSha();
+  log.info(`Implementação da fase ${phaseId} commitada automaticamente: ${sha ?? '(sem HEAD)'}`);
+  return sha;
+}
+

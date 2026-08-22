@@ -26,44 +26,63 @@ export async function chatCompletion(opts: {
   timeoutMs?: number;
 }): Promise<string> {
   const url = `${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 300_000);
-  try {
-    const body: Record<string, unknown> = {
-      model: opts.model,
-      messages: [
-        { role: 'system', content: opts.system },
-        { role: 'user', content: opts.user },
-      ],
-      stream: false,
-    };
-    // Só envia parâmetros informados (alguns endpoints rejeitam extras).
-    if (opts.temperature !== undefined) body.temperature = opts.temperature;
-    body[opts.completionTokensField ?? 'max_tokens'] = opts.maxTokens ?? 8000;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${opts.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`LLM HTTP ${res.status}: ${redactSecret(body, opts.apiKey)}`);
+  const field = opts.completionTokensField ?? 'max_tokens';
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    messages: [
+      { role: 'system', content: opts.system },
+      { role: 'user', content: opts.user },
+    ],
+    stream: false,
+  };
+  if (opts.temperature !== undefined) body.temperature = opts.temperature;
+  body[field] = opts.maxTokens ?? 8000;
+
+  // Retry para falhas transitórias (5xx/429) e resposta vazia (intermitente na
+  // API do DeepSeek). Erros determinísticos (4xx como 400) NÃO são repetidos.
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 300_000);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${opts.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (res.status >= 500 || res.status === 429) {
+        const errBody = await res.text().catch(() => '');
+        lastError = new Error(`LLM HTTP ${res.status}: ${redactSecret(errBody, opts.apiKey)}`);
+        continue; // tenta novamente uma vez
+      }
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`LLM HTTP ${res.status}: ${redactSecret(errBody, opts.apiKey)}`);
+      }
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: unknown } }[];
+      };
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || content.trim() === '') {
+        lastError = new Error('LLM retornou resposta vazia.');
+        continue; // tenta novamente uma vez
+      }
+      return content;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        lastError = new Error('LLM excedeu o tempo limite.');
+        continue;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: unknown } }[];
-    };
-    const content = data.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || content.trim() === '') {
-      throw new Error('LLM retornou resposta vazia.');
-    }
-    return content;
-  } finally {
-    clearTimeout(timer);
   }
+  throw lastError ?? new Error('LLM falhou após retry.');
 }
 
 export function redactSecret(text: string, ...secrets: string[]): string {

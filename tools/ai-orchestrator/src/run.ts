@@ -40,6 +40,7 @@ import { auditNextState, canAdvance, evidenceOk, type EvidenceGate } from './aud
 import {
   prepareWorkingTree,
   commitRoadmapUpdate,
+  commitPhaseImplementation,
   type PrepareResult,
 } from './worktree.js';
 
@@ -363,6 +364,16 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       deps.log.info(`Fase ${phaseId}: ${state}. Próxima fase só via ai:next (após merge manual da branch).`);
     }
     if (mode === 'auto-commit' || mode === 'autonomous') {
+      if (state === 'AUDIT_APPROVED') {
+        const implSha = await commitPhaseImplementation({
+          git: deps.git,
+          log: deps.log,
+          aiDevRel,
+          phaseId,
+          reviewerModel: deps.config.reviewer.model,
+        });
+        if (implSha) runSummary.finalSha = implSha;
+      }
       const sha = await commitRoadmapUpdate({ git: deps.git, log: deps.log, aiDevRel, phaseId });
       if (sha) runSummary.finalSha = sha;
     } else {

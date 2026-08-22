@@ -451,12 +451,11 @@ describe('runPhase end-to-end com git real (--auto-commit)', () => {
     assert.equal(summary.initialSha, repo.baselineSha);
     assert.deepEqual((summary.preRunFiles ?? []).sort(), ['apps/api/src/code.ts']);
 
-    // 3 commits: baseline → checkpoint → roadmap update.
-    const log = git(repo.root, ['log', '--oneline', '-3']);
-    const lines = log.split('\n');
-    assert.equal(lines.length, 3, log);
-    assert.ok(lines[1].includes(CHECKPOINT_MSG_PREFIX + '2A.1'), log);
-    assert.ok(lines[0].includes(ROADMAP_COMMIT_MSG_PREFIX + '2A.1'), log);
+    // Commits esperados: baseline → checkpoint → implementação da fase → roadmap update.
+    const log = git(repo.root, ['log', '--oneline', '-4']);
+    assert.ok(log.includes(CHECKPOINT_MSG_PREFIX + '2A.1'), log);
+    assert.ok(log.includes('feat(phase/2A.1): implementation approved'), log);
+    assert.ok(log.includes(ROADMAP_COMMIT_MSG_PREFIX + '2A.1'), log);
 
     // Checkpoint não inclui docs; roadmap commitado separadamente.
     const checkpointStat = git(repo.root, ['show', '--stat', '--format=', 'HEAD~1']);

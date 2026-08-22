@@ -25,7 +25,9 @@ describe('allowlist de comandos', () => {
     validateArgv(['git', 'status', '--porcelain']);
     validateArgv(['git', 'status', '--porcelain=v1', '--untracked-files=all']);
     validateArgv(['git', 'diff', '--stat']);
+    validateArgv(['git', 'diff', 'HEAD', '--stat']);
     validateArgv(['git', 'diff', '--', '.', ':(exclude)docs/ai-development/runs/**']);
+    validateArgv(['git', 'diff', 'HEAD', '--', '.', ':(exclude)docs/ai-development/runs/**']);
     validateArgv(['git', 'checkout', '-b', 'phase/2A.1']);
     validateArgv(['git', 'checkout', 'phase/2A.1']);
     validateArgv(['git', 'rev-parse', '--abbrev-ref', 'HEAD']);

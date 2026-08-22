@@ -71,9 +71,11 @@ export function createGitOps(exec: Executor, repoRoot: string): GitOps {
       diff: string;
     }> {
       const statusRes = await exec.run(['git', 'status', '--porcelain'], opts);
-      const diffStatRes = await exec.run(['git', 'diff', '--stat'], opts);
+      const diffStatRes = await exec.run(['git', 'diff', 'HEAD', '--stat'], opts);
+      // `git diff HEAD` inclui staged e unstaged (arquivos novos staged ficam
+      // visíveis ao revisor; untracked não aparecem — ver allow-dirty).
       const diffRes = await exec.run(
-        ['git', 'diff', '--', '.', ...excludes.map((e) => `:(exclude)${e}`)],
+        ['git', 'diff', 'HEAD', '--', '.', ...excludes.map((e) => `:(exclude)${e}`)],
         opts,
       );
       return {

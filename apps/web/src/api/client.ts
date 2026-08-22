@@ -294,6 +294,10 @@ export const api = {
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}/permanente`, { method: 'DELETE' })),
     getMetricasAgregadas: () => authFetch('/api/root/metricas').then(r => r.json()),
     getAuditoria: () => authFetch('/api/root/auditoria').then(r => r.json()),
+    getLogs: (params: Record<string, string | number> = {}) =>
+      authFetch(`/api/root/logs/sistema?${new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])))}`).then(r => r.json()),
+    getLogsTexto: (params: Record<string, string | number> = {}) =>
+      authFetch(`/api/root/logs/sistema?format=text&${new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])))}`).then(r => r.text()),
     getCreditos: () => authFetch('/api/root/creditos').then(r => r.json()),
     adicionarCreditosEscritorio: async (id: string, quantidade: number) =>
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),

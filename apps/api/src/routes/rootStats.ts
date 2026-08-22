@@ -358,4 +358,68 @@ router.get('/auditoria', async (_req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// GET /logs/sistema — eventos de log de aplicação (syslog), com filtro por
+// nível e texto de busca. Root vê tudo (detalhado, não agregado).
+// ---------------------------------------------------------------------------
+router.get('/logs/sistema', async (req, res) => {
+  try {
+    const { level, busca, from, to, escritorioId, limit, offset, format } = req.query as {
+      level?: string; busca?: string; from?: string; to?: string; escritorioId?: string; limit?: string; offset?: string; format?: string;
+    };
+    const invalid = validateDateRange(from, to);
+    if (invalid) return res.status(400).json({ error: invalid });
+
+    const conds: SQL[] = [];
+    if (level) conds.push(sql`al.level = ${level}`);
+    if (escritorioId) conds.push(sql`al.escritorio_id = ${escritorioId}`);
+    if (busca) conds.push(sql`(al.message ILIKE ${'%' + busca + '%'} OR al.stack ILIKE ${'%' + busca + '%'} OR al.source ILIKE ${'%' + busca + '%'})`);
+    if (from) conds.push(sql`al.created_at >= ${new Date(from)}`);
+    if (to) conds.push(sql`al.created_at <= ${new Date(to)}`);
+    const whereSql = conds.length ? sql` WHERE ${sql.join(conds, sql` AND `)}` : sql``;
+
+    const limitN = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const offsetN = Math.max(Number(offset) || 0, 0);
+
+    const rows = (await db.execute(sql`
+      SELECT * FROM app_logs al ${whereSql} ORDER BY al.created_at DESC LIMIT ${limitN} OFFSET ${offsetN}
+    `)) as any[];
+
+    if (format === 'text') {
+      // Texto puro estilo .log — fácil de colar/copiar e enviar ao dev.
+      const text = rows.map((r) => {
+        const t = new Date(r.created_at).toISOString();
+        const linha = `[${t}] ${String(r.level).toUpperCase()} ${r.message}`;
+        const extras = [r.source && `(fonte: ${r.source})`, r.ip && `(ip: ${r.ip})`].filter(Boolean).join(' ');
+        return `${linha}${extras ? ' ' + extras : ''}${r.stack ? '\n' + r.stack : ''}`;
+      }).join('\n\n');
+      res.type('text/plain').send(text);
+      return;
+    }
+
+    const total = (await db.execute(sql`SELECT COUNT(*)::int AS n FROM app_logs al ${whereSql}`)) as any[];
+    res.json({
+      total: Number(total[0]?.n ?? 0),
+      rows: rows.map((r) => ({
+        id: r.id,
+        level: r.level,
+        message: r.message,
+        stack: r.stack ?? null,
+        source: r.source ?? null,
+        method: r.method ?? null,
+        path: r.path ?? null,
+        status: r.status ?? null,
+        ip: r.ip ?? null,
+        usuarioId: r.usuario_id ?? null,
+        escritorioId: r.escritorio_id ?? null,
+        context: r.context ?? null,
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching app logs:', error);
+    res.status(500).json({ error: 'Erro ao buscar logs do sistema.' });
+  }
+});
+
 export default router;

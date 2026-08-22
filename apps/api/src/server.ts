@@ -29,6 +29,10 @@ import { forcePasswordChange } from './middlewares/forcePasswordChange.js';
 import { requireModule } from './middlewares/moduleGuard.js';
 import { globalApiLimiter } from './middlewares/rateLimit.js';
 import { client } from './db/client.js';
+import { initLogCapture } from './services/logger.js';
+
+// Captura logs de aplicação (console.* → app_logs) para o Painel Root.
+initLogCapture();
 
 const app = express();
 const port = process.env.PORT || 3001;

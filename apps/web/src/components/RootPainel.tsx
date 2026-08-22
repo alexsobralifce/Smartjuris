@@ -3,7 +3,7 @@ import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
 import { Button, EmptyRow, EmptyState, FONT, Field, FormGrid, FormRow, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
-type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria'
+type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria' | 'logs'
 
 interface Escritorio {
   id: string
@@ -93,6 +93,23 @@ const fmtDetalhes = (v: unknown): string => {
   } catch {
     return String(v)
   }
+}
+
+const nivelMeta: Record<string, { label: string; color: string; bg: string }> = {
+  info:  { label: 'INFO',  color: 'var(--color-primary)', bg: 'var(--color-badge-tint)' },
+  warn:  { label: 'WARN',  color: 'var(--color-warning)', bg: 'var(--color-warning-light)' },
+  error: { label: 'ERRO',  color: 'var(--color-danger)',  bg: 'var(--color-danger-light)' },
+}
+
+const formatarLogTexto = (l: any): string => {
+  const t = l.createdAt ? new Date(l.createdAt).toISOString() : ''
+  const linha = `[${t}] ${String(l.level).toUpperCase()} ${l.message}`
+  const extras = [
+    l.source && `fonte: ${l.source}`,
+    l.path && `rota: ${l.method || ''} ${l.path}`,
+    l.ip && `ip: ${l.ip}`,
+  ].filter(Boolean).join(' | ')
+  return `${linha}${extras ? ' · ' + extras : ''}${l.stack ? '\n' + l.stack : ''}`
 }
 
 async function copiarTexto(text: string): Promise<boolean> {
@@ -297,6 +314,12 @@ export default function RootPainel() {
   const [auditoria, setAuditoria] = useState<any[]>([])
   const [creditos, setCreditos] = useState<CreditoEscritorio[]>([])
   const [loadingCreditos, setLoadingCreditos] = useState(false)
+  const [logs, setLogs] = useState<any[]>([])
+  const [logTotal, setLogTotal] = useState(0)
+  const [logCarregando, setLogCarregando] = useState(false)
+  const [logNivel, setLogNivel] = useState('')
+  const [logBusca, setLogBusca] = useState('')
+  const [logExpanded, setLogExpanded] = useState<string | null>(null)
   const [expandedEsc, setExpandedEsc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ModalState>(null)
@@ -352,10 +375,43 @@ export default function RootPainel() {
     }
   }, [addToast])
 
+  const loadLogs = useCallback(async () => {
+    setLogCarregando(true)
+    try {
+      const params: Record<string, string | number> = { limit: 200 }
+      if (logNivel) params.level = logNivel
+      if (logBusca) params.busca = logBusca
+      const data = await api.raiz.getLogs(params)
+      setLogs(Array.isArray(data?.rows) ? data.rows : [])
+      setLogTotal(Number(data?.total ?? 0))
+    } catch {
+      addToast('error', 'Não foi possível carregar os logs.')
+    } finally {
+      setLogCarregando(false)
+    }
+  }, [addToast, logNivel, logBusca])
+
   useEffect(() => { loadEscritorios() }, [loadEscritorios])
   useEffect(() => { if (activeTab === 'metricas') loadMetricas() }, [activeTab, loadMetricas])
   useEffect(() => { if (activeTab === 'auditoria') loadAuditoria() }, [activeTab, loadAuditoria])
   useEffect(() => { if (activeTab === 'creditos') loadCreditos() }, [activeTab, loadCreditos])
+  useEffect(() => { if (activeTab === 'logs') loadLogs() }, [activeTab, loadLogs])
+
+  const copiarLog = async (l: any) => {
+    const ok = await copiarTexto(formatarLogTexto(l))
+    addToast(ok ? 'success' : 'error', ok ? 'Log copiado.' : 'Falha ao copiar.')
+  }
+  const copiarErrosFiltrados = async () => {
+    const erros = logs.filter((l) => l.level === 'error')
+    const texto = erros.length ? erros.map(formatarLogTexto).join('\n\n') : 'Nenhum erro no filtro atual.'
+    const ok = await copiarTexto(texto)
+    addToast(ok ? 'success' : 'error', ok ? `${erros.length} erro(s) copiado(s).` : 'Falha ao copiar.')
+  }
+  const copiarTodosFiltrados = async () => {
+    const texto = logs.length ? logs.map(formatarLogTexto).join('\n\n') : 'Nenhum log no filtro atual.'
+    const ok = await copiarTexto(texto)
+    addToast(ok ? 'success' : 'error', ok ? 'Log filtrado copiado.' : 'Falha ao copiar.')
+  }
 
   const handleCriarEscritorio = async (data: { nome: string; adminNome: string; adminEmail: string }) => {
     try {
@@ -502,7 +558,7 @@ export default function RootPainel() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28, overflowX: 'auto' }}>
-        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria']] as [Tab, string][]).map(([t, label]) => (
+        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria'], ['logs', 'Logs']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 2px',
             border: 'none',
@@ -853,6 +909,86 @@ export default function RootPainel() {
             </tbody>
           </Table>
         </TableShell>
+      )}
+
+      {activeTab === 'logs' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+          {/* contadores + ações */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: SPACE.sm, alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: SPACE.sm, flexWrap: 'wrap' }}>
+              <StatCard label="Total" value={fmtNum(logTotal)} />
+              <StatCard label="Erros" value={fmtNum(logs.filter(l => l.level === 'error').length)} />
+              <StatCard label="Warnings" value={fmtNum(logs.filter(l => l.level === 'warn').length)} />
+            </div>
+            <div style={{ display: 'flex', gap: SPACE.sm, flexWrap: 'wrap' }}>
+              <Button variant="secondary" size="sm" onClick={copiarErrosFiltrados}>📋 Copiar erros</Button>
+              <Button variant="secondary" size="sm" onClick={copiarTodosFiltrados}>📄 Copiar filtrados</Button>
+            </div>
+          </div>
+
+          {/* filtros */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '220px 1fr auto', gap: SPACE.sm }}>
+            <Field label="Nível">
+              <select value={logNivel} onChange={e => setLogNivel(e.target.value)} style={inputStyle()}>
+                <option value="">Todos</option>
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Erro</option>
+              </select>
+            </Field>
+            <Field label="Buscar">
+              <input value={logBusca} onChange={e => setLogBusca(e.target.value)} placeholder="mensagem, source ou stack..." style={inputStyle()} />
+            </Field>
+            <div style={{ alignSelf: 'end' }}>
+              <Button size="sm" onClick={loadLogs} disabled={logCarregando}>{logCarregando ? 'Carregando...' : 'Filtrar'}</Button>
+            </div>
+          </div>
+
+          {/* lista */}
+          <TableShell>
+            <Table>
+              <thead>
+                <THeadRow>
+                  <Th>Data</Th><Th>Nível</Th><Th>Mensagem / Stack</Th><Th>Origem</Th><Th style={{ width: 90 }}>Copiar</Th>
+                </THeadRow>
+              </thead>
+              <tbody>
+                {logs.map(l => {
+                  const nm = nivelMeta[l.level] || nivelMeta.info
+                  const expanded = logExpanded === l.id
+                  return (
+                    <Tr key={l.id}>
+                      <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>{fmtDate(l.createdAt)}</Td>
+                      <Td>
+                        <span style={{ fontSize: FONT.xs, fontWeight: 600, color: nm.color, background: nm.bg, padding: '3px 8px', borderRadius: RADIUS.chip }}>{nm.label}</span>
+                      </Td>
+                      <Td style={{ fontSize: FONT.base, maxWidth: 560 }}>
+                        <div>{l.message}</div>
+                        {l.stack && (
+                          <>
+                            <button onClick={() => setLogExpanded(expanded ? null : l.id)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', fontSize: FONT.xs, cursor: 'pointer', marginTop: 2 }}>
+                              {expanded ? '▲ ocultar stack' : '▼ ver stack'}
+                            </button>
+                            {expanded && <pre style={{ background: 'var(--color-surface-2)', padding: 8, borderRadius: RADIUS.control, fontFamily: 'var(--font-mono)', fontSize: FONT.xs, overflow: 'auto', maxHeight: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{l.stack}</pre>}
+                          </>
+                        )}
+                      </Td>
+                      <Td style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>
+                        <div>{l.source || '—'}</div>
+                        {l.path && <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs }}>{l.method} {l.path}</div>}
+                        {l.ip && <div style={{ fontSize: FONT.xs }}>ip {l.ip}</div>}
+                      </Td>
+                      <Td>
+                        <Button variant="secondary" size="sm" onClick={() => copiarLog(l)}>Copiar</Button>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+                {logs.length === 0 && <EmptyRow colSpan={5} message={logCarregando ? 'Carregando logs...' : 'Nenhum log registrado.'} />}
+              </tbody>
+            </Table>
+          </TableShell>
+        </div>
       )}
 
       {/* ===== MODAIS ===== */}

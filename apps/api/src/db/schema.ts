@@ -266,5 +266,26 @@ export const codigosVerificacao = pgTable('codigos_verificacao', {
   emailIdx: index('codigos_verificacao_email_idx').on(table.email),
 }));
 
+// Log de aplicação (syslog) — eventos info/warn/error do runtime, consumidos
+// pelo Painel Root com filtro por nível e cópia de erros.
+export const appLogs = pgTable('app_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  level: text('level').notNull().default('info'),
+  message: text('message').notNull(),
+  stack: text('stack'),
+  source: text('source'),
+  method: text('method'),
+  path: text('path'),
+  status: integer('status'),
+  ip: text('ip'),
+  usuarioId: uuid('usuario_id'),
+  escritorioId: uuid('escritorio_id'),
+  context: jsonb('context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  createdIdx: index('app_logs_created_idx').on(table.createdAt),
+  levelIdx: index('app_logs_level_idx').on(table.level),
+}));
+
 
 

@@ -77,6 +77,15 @@ export async function chatCompletion(opts: {
         lastError = new Error('LLM excedeu o tempo limite.');
         continue;
       }
+      // Erros de rede transitórios (undici/fetch): conexão derrubada no meio da
+      // requisição (`terminated`), `fetch failed`, DNS/TCP (`ENOTFOUND`,
+      // `ECONNRESET`, `ETIMEDOUT`, `EAI_AGAIN`, `ECONNREFUSED`) e `socket hang
+      // up` são intermitentes — repetem uma vez como 5xx/429/vazio.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/fetch failed|terminated|ENOTFOUND|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|socket hang up/i.test(msg)) {
+        lastError = new Error(`LLM erro de rede: ${redactSecret(msg, opts.apiKey)}`);
+        continue;
+      }
       throw err;
     } finally {
       clearTimeout(timer);

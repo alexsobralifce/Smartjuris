@@ -371,6 +371,67 @@ Retorne o veredito em JSON.
 
 ---
 
+# 2F — Idempotência e reserva
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 2F — idempotência e reserva.
+
+Confirme que 2B e 2C estão `AUDIT_APPROVED`.
+
+Implemente o fluxo completo de uma operação de IA com idempotência segura:
+
+  idempotencyKey
+  → buildClassifierPayload (2C, deriva escritório/plano/saldo/processo/documentos/RAG)
+  → classifyAiOperation (classificador)
+  → revalidação no backend (nunca confiar nos campos do cliente)
+  → reserveAiUsage (reserva de créditos + custo, FOR UPDATE + idempotência UNIQUE)
+  → geração (ponto de integração; NÃO conectar SSE/frontend nesta fase)
+  → settleAiUsage (liquidação com uso real) ou releaseAiUsageReservation (liberação em falha)
+
+Requisitos:
+- chave de idempotência OBRIGATÓRIA (rejeitar sem ela);
+- retry seguro: reexecutar a mesma chave reutiliza a operação reservada
+  (alreadyReserved), sem débito duplicado;
+- nenhuma reserva duplicada (UNIQUE em ai_operations.idempotency_key);
+- nenhum token_usage duplicado (settle idempotente por operationId);
+- falhas liberam reservas (release devolve créditos/custo);
+- concorrência controlada (FOR UPDATE serializa por escritório);
+- isolamento entre escritórios (escritorioId sempre do contexto autenticado).
+
+Crie um serviço (ex.: services/aiOperation.ts) que orquestra o fluxo acima
+com um resultado tipado (operationId, estado, créditos, custo, payload,
+classificação). Adicione testes com banco real: chave repetida, chave ausente,
+concorrência (2 reservas simultâneas da mesma chave), falha na geração libera
+reserva, settle não duplica token_usage, e isolamento entre escritórios.
+
+Não altere classifier, usage (primitivas já existem), payloadBuilder, catálogo,
+rotas, migrations ou frontend — apenas crie o orquestrador + testes.
+```
+
+## GPT-5.6 Terra — revisão
+
+```text
+Fase: 2F — idempotência e reserva.
+
+Analise o orquestrador de operação e os testes.
+
+Confirme:
+- chave de idempotência obrigatória e validada;
+- reexecução da mesma chave não duplica reserva nem débito;
+- nenhum token_usage duplicado no settle;
+- falha na geração libera a reserva (créditos/custo devolvidos);
+- concorrência controlada (FOR UPDATE / lock);
+- isolamento entre escritórios em todas as etapas;
+- revalidação backend (não confiar em campos do cliente);
+- testes com banco real para os cenários acima.
+
+Retorne o veredito em JSON.
+```
+
+---
+
 # Formato de passagem para o Terra
 
 ```text

@@ -71,7 +71,7 @@ migrations validadas, quando aplicável
 | 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -635,7 +635,7 @@ Ajustar os fluxos existentes (reserva idempotente, fallback Flash→Pro, anális
 - Reserva idempotente não duplica nem arredonda incorretamente
 ### 5I — Expor telemetria com precisão de custo reservado
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 5F, 5G aprovada(s).
 
@@ -715,6 +715,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5G | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 5G | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao manual (regressao formal, ramo alternativo do achado HIGH do revisor): a implementacao de producao do orcamento com precisao de reserva foi entregue na 5F (ed07b8f): calculateAiCostCents arredonda o TOTAL uma unica vez no centesimo (deterministico); reserve/settle/release usam a MESMA regra ROUND; cost_cents_reserved numeric(10,2) preserva fracao. Esta fase adiciona a cobertura de regressao formalmente aprovada exigida pelo revisor: (1) efetivacao da reserva com custo fracionario 1.55 — reserve_cents_used arredonda (ROUND) e cost_cents_reserved preserva a fracao no banco; (2) fluxo REAL de calculo FLASH/PRO (estimativa -> elegibilidade -> reserveAiUsage) com consistencia entre custo avaliado, reservado e persistido; (3) limite exato de 4500 centavos inclusivo e casos fracionarios imediatamente abaixo (0.5 cabe) e acima (1.5 estoura). Suite API 322/322 verde (63 custo/reserva/fallback/analise). |
 | 2026-08-23 | 5H | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-23 | 5I | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

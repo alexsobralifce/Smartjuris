@@ -462,10 +462,10 @@ describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
       const ops = await db.execute(sql`SELECT cost_cents_actual FROM ai_operations WHERE id = ${r.operationId}`) as any[];
       assert.equal(Number(ops[0]?.cost_cents_actual), Math.round(real.brlCents), 'cost_cents_actual = ROUND(custo real)');
 
-      // O ledger SETTLE registra EXATAMENTE o delta aplicado (5H) — não um
-      // Math.round(real - reservado) que divergia (ex.: 0 vs 1 no exemplo 2.40-1.55).
+      // Fase 5I: o ledger SETTLE (numeric(10,2)) registra o delta financeiro
+      // PRECISO (custo real − reservado fracionário) — telemetria com fração.
       const ledger = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${r.operationId} AND kind = 'SETTLE'`) as any[];
-      assert.equal(Number(ledger[0]?.cost_cents), esperadoMovimento, 'ledger SETTLE == movimento real do reserve_cents_used');
+      assert.equal(Number(ledger[0]?.cost_cents), real.brlCents - 1.55, 'ledger SETTLE registra o delta fracionário (real − reservado)');
     } finally {
       await limparEscritorioTeste(escId);
     }
@@ -499,7 +499,7 @@ describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
       assert.equal(Number(ops[0].cost_cents_actual), Math.round(real.brlCents));
 
       const ledger = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${op[0].id} AND kind = 'SETTLE'`) as any[];
-      assert.equal(Number(ledger[0]?.cost_cents), Math.round(real.brlCents) - 22, 'ledger espelha o movimento da operação legada');
+      assert.equal(Number(ledger[0]?.cost_cents), real.brlCents - 22, 'ledger SETTLE registra o delta fracionário da operação legada');
     } finally {
       await limparEscritorioTeste(escId);
     }
@@ -578,6 +578,66 @@ describe('releaseAiUsageReservation (banco)', { skip: !dbDisponivel }, () => {
 
       const ops = await db.execute(sql`SELECT status FROM ai_operations WHERE id = ${op[0].id}`) as any[];
       assert.equal(ops[0].status, 'failed');
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 5I — Telemetria com precisão de custo reservado
+// ---------------------------------------------------------------------------
+
+describe('Fase 5I — telemetria do ledger (banco)', { skip: !dbDisponivel }, () => {
+  test('ledger registra cost_cents com precisão decimal em RESERVE/SETTLE/RELEASE', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      const estimativa: AiEstimateResult = { ...estimativaSimples('SIMPLE_PETITION'), estimatedCostCents: 1.55 };
+      const chave = randomUUID();
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: chave, operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r.ok, true);
+
+      // RESERVE: telemetria do evento com a FRAÇÃO (não Math.round → 2).
+      const reserva = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${r.operationId} AND kind = 'RESERVE'`) as any[];
+      assert.equal(Number(reserva[0]?.cost_cents), 1.55, 'RESERVE registra 1.55 (não 2)');
+
+      // SETTLE: delta financeiro preciso (custo real − reservado).
+      const real = calculateAiSettlementCents({ model: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 0, isPeak: isHorarioPico() });
+      const s = await settleAiUsage({ operationId: r.operationId!, modelUsed: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 0 });
+      assert.equal(s.ok, true);
+      const settle = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${r.operationId} AND kind = 'SETTLE'`) as any[];
+      assert.equal(Number(settle[0]?.cost_cents), real.brlCents - 1.55, 'SETTLE registra o delta fracionário');
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('RELEASE registra -custo reservado exato e eventos legados sem casas decimais continuam aceitos', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      // Reserva fracionária liberada em falha: RELEASE = -1.55 (não -2).
+      const estimativa: AiEstimateResult = { ...estimativaSimples('SIMPLE_PETITION'), estimatedCostCents: 1.55 };
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r.ok, true);
+      const l = await releaseAiUsageReservation({ operationId: r.operationId!, reason: 'timeout' });
+      assert.equal(l.ok, true);
+      const release = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${r.operationId} AND kind = 'RELEASE'`) as any[];
+      assert.equal(Number(release[0]?.cost_cents), -1.55, 'RELEASE registra o valor reservado exato');
+
+      // Evento LEGADO (pré-5I): cost_cents integer (22) lido como número.
+      await db.execute(sql`
+        INSERT INTO credit_ledger (escritorio_id, operation_id, operation_type, kind, credits_delta, cost_cents, model, idempotency_key, status)
+        VALUES (${escId}, ${r.operationId}, 'SIMPLE_PETITION', 'ADJUST', 0, 22, 'deepseek-v4-flash', 'legado-5i', 'committed')
+      `);
+      const legado = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE idempotency_key = 'legado-5i' AND escritorio_id = ${escId}`) as any[];
+      assert.equal(Number(legado[0]?.cost_cents), 22, 'evento legado integer continua legível como número');
+
+      // Ambos os formatos coexistem como numeric(10,2) legível.
+      const misto = await db.execute(sql`
+        SELECT data_type FROM information_schema.columns
+        WHERE table_name = 'credit_ledger' AND column_name = 'cost_cents'
+      `) as any[];
+      assert.equal(misto[0]?.data_type, 'numeric', 'coluna é numeric(10,2)');
     } finally {
       await limparEscritorioTeste(escId);
     }

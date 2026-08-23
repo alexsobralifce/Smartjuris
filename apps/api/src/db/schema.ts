@@ -427,7 +427,10 @@ export const creditLedger = pgTable('credit_ledger', {
   operationType: text('operation_type'),
   kind: text('kind').notNull(),
   creditsDelta: integer('credits_delta').notNull().default(0),
-  costCents: integer('cost_cents').notNull().default(0),
+  // Fase 5I: numeric(10,2) — a telemetria de eventos de custo registra o custo
+  // reservado com centésimos (ex.: 1.55); leitores que esperam inteiro seguem
+  // funcionando (Number('22') = 22).
+  costCents: numericCents('cost_cents').notNull().default(0),
   model: text('model'),
   idempotencyKey: text('idempotency_key'),
   status: text('status'),

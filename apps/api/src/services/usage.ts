@@ -699,7 +699,9 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
       operationType: input.operation,
       kind: 'RESERVE',
       creditsDelta: -credits,
-      costCents: Math.round(costCents), // ledger é integer (exibição); o numeric preserva a fração
+      // Fase 5I: ledger numeric(10,2) registra o custo reservado com a fração
+      // (ex.: 1.55) — telemetria de evento com a precisão da reserva.
+      costCents,
       model: OPERATION_LIMITS[input.operation].model,
       idempotencyKey: input.idempotencyKey,
       status: 'committed',
@@ -802,12 +804,11 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       operationType: op.operation_type,
       kind: 'SETTLE',
       creditsDelta: 0,
-      // Fase 5H: o ledger integer espelha EXATAMENTE o movimento aplicado ao
-      // reserve_cents_used (ROUND(custoReal) - ROUND(reservado)). Arredondar a
-      // DIFERENÇA (custoReal - reservado fracionário) antes divergia do valor
-      // persistido — ex.: reservado 1.55 + real 2.40 => movimento 0, mas
-      // Math.round(2.40 - 1.55)=1 registrava um delta inexistente.
-      costCents: Math.round(custoReal.brlCents) - Math.round(op.cost_cents_reserved),
+      // Fase 5I: com o ledger numeric(10,2), o evento SETTLE registra o delta
+      // financeiro PRECISO (custo real − reservado fracionário). O contador do
+      // ciclo (reserve_cents_used, integer) continua movendo por ROUND(real) −
+      // ROUND(reservado) — o ledger é a telemetria; o contador é o orçamento.
+      costCents: custoReal.brlCents - op.cost_cents_reserved,
       model: input.modelUsed,
       idempotencyKey: `${op.idempotency_key}:settle`,
       status: 'committed',
@@ -925,7 +926,8 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
         operationType: op.operation_type,
         kind: 'ADJUST',
         creditsDelta: 0,
-        costCents: Math.round(custoParcial),
+        // Fase 5I: consumo parcial com precisão (numeric(10,2)).
+        costCents: custoParcial,
         model: op.model,
         idempotencyKey: `${op.idempotency_key}:adjust`,
         status: 'committed',
@@ -938,7 +940,8 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
       operationType: op.operation_type,
       kind: 'RELEASE',
       creditsDelta: op.credits_reserved,
-      costCents: -Math.round(custoLiberado),
+      // Fase 5I: liberação registra o valor reservado exato (numeric(10,2)).
+      costCents: -custoLiberado,
       model: op.model,
       idempotencyKey: `${op.idempotency_key}:release`,
       status: 'committed',

@@ -20,6 +20,8 @@ import {
   limparRateLimit,
   limparCache,
   cacheSize,
+  avisoJurisprudencia,
+  montarEventoJurisprudencia,
   type RastreabilidadeJurisprudencia,
 } from '../services/jurisprudenciaRag.js';
 
@@ -467,5 +469,46 @@ describe('rastreabilidade persistida (fase 6A)', () => {
     });
     assert.equal(r.origem, 'pausa');
     assert.equal(metas[0].origem, 'pausa');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo
+// ---------------------------------------------------------------------------
+
+describe('aviso estruturado de jurisprudência (fase 6B)', () => {
+  test('avisoJurisprudencia: fallbacks têm motivo legível; sucesso/cache não', () => {
+    assert.equal(avisoJurisprudencia({ origem: 'ao-vivo' }), '');
+    assert.equal(avisoJurisprudencia({ origem: 'cache' }), '');
+    assert.ok(avisoJurisprudencia({ origem: 'pausa' }).includes('rate limit'));
+    assert.ok(avisoJurisprudencia({ origem: 'falha' }).includes('RAG local'));
+    assert.ok(avisoJurisprudencia({ origem: 'sem-termos' }).includes('termos'));
+    assert.ok(avisoJurisprudencia({ origem: 'zero-resultados' }).includes('Nenhuma decisão'));
+    assert.ok(avisoJurisprudencia({ origem: 'section-review' }).includes('revisão'));
+    assert.ok(avisoJurisprudencia({ origem: undefined }).length > 0, 'sem origem → aviso padrão');
+  });
+
+  test('montarEventoJurisprudencia: status estruturado sem conteúdo sensível', () => {
+    const evento = montarEventoJurisprudencia({
+      bloco: '',
+      decisoesUsadas: 0,
+      tribunais: [],
+      fromCache: false,
+      origem: 'pausa',
+      termos: ['consumidor'],
+      rateLimitRestante: 1,
+    });
+    assert.equal(evento.status, 'pausa');
+    assert.ok(evento.aviso.includes('rate limit'));
+    assert.equal(evento.decisoesUsadas, 0);
+    assert.deepEqual(evento.tribunais, []);
+    assert.equal(evento.fromCache, false);
+    assert.ok(!JSON.stringify(evento).includes('consumidor'), 'termos não vazam no evento');
+
+    const ok = montarEventoJurisprudencia({ bloco: 'x', decisoesUsadas: 3, tribunais: ['stj'], fromCache: false, origem: 'ao-vivo' });
+    assert.equal(ok.status, 'ao-vivo');
+    assert.equal(ok.aviso, '');
+    assert.equal(ok.decisoesUsadas, 3);
+    assert.deepEqual(ok.tribunais, ['stj']);
   });
 });

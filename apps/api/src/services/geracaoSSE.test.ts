@@ -19,7 +19,7 @@ import { EventEmitter } from 'node:events';
 
 const { db, client } = await import('../db/client.js');
 const s = await import('../db/schema.js');
-const { gerarPecaComSSE, emitir } = await import('../services/geracaoSSE.js');
+const { gerarPecaComSSE, emitir, emitirJurisprudencia, montarSubOperacoesJurisprudencia, persistirSubOperacoes } = await import('../services/geracaoSSE.js');
 import type { GeradorSSE } from '../services/geracaoSSE.js';
 const { ErroGeracaoIA } = await import('../services/analiseDocumental.js');
 const { saldoEscritorio, tokenUsageCount } = await import('../services/aiOperationTestHelpers.js');
@@ -379,5 +379,69 @@ describe('5B — prompt final com jurisprudência ao vivo', () => {
     // mas a geração não falha (best-effort): o evento concluido existe.
     assert.ok(c.modeloUsado, 'modelo usado registrado');
     assert.ok(!r.eventos.some((e) => e.type === 'erro'), 'sem evento de erro');
+  });
+});
+
+describe('6B — aviso estruturado de jurisprudência no fluxo real', { skip: !dbDisponivel }, () => {
+  test('emitirJurisprudencia: fallback emite status + aviso; ao vivo emite sem aviso', () => {
+    const { res, eventos } = respostaSSEFake();
+    // Fallback (pausa de rate limit) → aviso legível.
+    emitirJurisprudencia(res, { bloco: '', decisoesUsadas: 0, tribunais: [], fromCache: false, origem: 'pausa' });
+    // Sucesso ao vivo → sem aviso.
+    emitirJurisprudencia(res, { bloco: 'x', decisoesUsadas: 2, tribunais: ['stj'], fromCache: false, origem: 'ao-vivo' });
+
+    const juris = eventos.filter((e) => e.type === 'jurisprudencia');
+    assert.equal(juris.length, 2, 'dois eventos jurisprudencia');
+    assert.equal(juris[0].status, 'pausa');
+    assert.ok(juris[0].aviso.includes('rate limit'), 'aviso de rate limit legível');
+    assert.equal(juris[0].decisoesUsadas, 0);
+    assert.equal(juris[1].status, 'ao-vivo');
+    assert.equal(juris[1].aviso, '');
+    assert.equal(juris[1].decisoesUsadas, 2);
+    assert.deepEqual(juris[1].tribunais, ['stj']);
+    // Nenhum termo/conteúdo sensível no payload do evento.
+    assert.ok(!JSON.stringify(juris).includes('termos'), 'evento não carrega termos');
+  });
+
+  test('persistência: sub_operations grava texto-gerado + metadados de jurisprudência', async () => {
+    const opId = randomUUID();
+    // Operação de teste no banco (tenant real do teste).
+    await db.insert(s.aiOperations).values({
+      id: opId,
+      idempotencyKey: `6b-${suffix}-${randomUUID()}`,
+      escritorioId: escA.id,
+      usuarioId: adminA.id,
+      operationType: 'SIMPLE_PETITION',
+      status: 'reserved',
+      model: 'deepseek-v4-flash',
+      creditsReserved: 1,
+      costCentsReserved: 0,
+      costCentsActual: 0,
+    }).onConflictDoNothing().catch(() => {});
+    opIds.push(opId);
+
+    const subOps = montarSubOperacoesJurisprudencia(
+      'Texto gerado da peça.',
+      'deepseek-v4-flash',
+      { bloco: '', decisoesUsadas: 0, tribunais: [], fromCache: false, origem: 'falha' },
+    );
+    const ok = await persistirSubOperacoes(opId, subOps);
+    assert.equal(ok, true, 'persistência retorna true');
+
+    const rows = await db.execute(sql`SELECT sub_operations FROM ai_operations WHERE id = ${opId}`) as any[];
+    const raw = rows[0]?.sub_operations;
+    assert.ok(Array.isArray(raw) && raw.length === 2, 'texto + jurisprudência persistidos');
+    const texto = raw.find((x: any) => x.tipo === 'texto-gerado');
+    const juris = raw.find((x: any) => x.tipo === 'jurisprudencia');
+    assert.ok(texto && texto.texto === 'Texto gerado da peça.', 'texto persistido');
+    assert.ok(juris, 'metadados de jurisprudência persistidos');
+    assert.equal(juris.status, 'falha');
+    assert.ok(juris.aviso.includes('RAG local'), 'aviso persistido');
+    assert.equal(juris.decisoesUsadas, 0);
+    assert.ok(!JSON.stringify(raw).includes('termos'), 'sem termos/conteúdo sensível persistido');
+
+    // Operação inexistente → false (sem erro).
+    const falso = await persistirSubOperacoes(randomUUID(), subOps);
+    assert.equal(falso, false, 'operação inexistente retorna false');
   });
 });

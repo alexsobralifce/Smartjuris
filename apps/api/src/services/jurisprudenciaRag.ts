@@ -266,6 +266,50 @@ export function rastreabilidadePadrao(meta: RastreabilidadeJurisprudencia): void
   }
 }
 
+// ---------------------------------------------------------------------------
+// Fase 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo
+// ---------------------------------------------------------------------------
+
+const AVISOS_ORIGEM: Record<string, string> = {
+  'ao-vivo': '',
+  cache: '',
+  pausa: 'Busca ao vivo pausada por rate limit — peça gerada somente com RAG local.',
+  falha: 'Busca ao vivo indisponível no momento — peça gerada somente com RAG local.',
+  'sem-termos': 'Não foi possível extrair termos de busca — peça gerada somente com RAG local.',
+  'sem-inclusao': 'Jurisprudência ao vivo não solicitada (includeJurisprudence=false).',
+  'section-review': 'Operação de revisão — jurisprudência ao vivo não consultada.',
+  'zero-resultados': 'Nenhuma decisão encontrada na busca ao vivo — peça gerada somente com RAG local.',
+  // Fail-safe (6B): qualquer origem ausente/desconhecida vira consulta não realizada.
+  'sem-consulta': 'Consulta de jurisprudência ao vivo não realizada.',
+};
+
+/** Aviso legível em PT para o resultado da busca ('' quando não há aviso).
+ *  Origens desconhecidas/ausentes caem em 'sem-consulta' (fail-safe, nunca ''). */
+export function avisoJurisprudencia(resultado: Pick<ResultadoJurisprudencia, 'origem'>): string {
+  const origem = resultado.origem ?? 'sem-consulta';
+  return AVISOS_ORIGEM[origem] ?? AVISOS_ORIGEM['sem-consulta'];
+}
+
+/**
+ * Monta o payload do evento SSE `jurisprudencia` (fase 6B): status estruturado
+ * + aviso legível, sem conteúdo de decisões nem dados sensíveis.
+ */
+export function montarEventoJurisprudencia(resultado: ResultadoJurisprudencia): {
+  status: string;
+  aviso: string;
+  decisoesUsadas: number;
+  tribunais: string[];
+  fromCache: boolean;
+} {
+  return {
+    status: resultado.origem ?? 'sem-consulta',
+    aviso: avisoJurisprudencia(resultado),
+    decisoesUsadas: resultado.decisoesUsadas,
+    tribunais: resultado.tribunais,
+    fromCache: resultado.fromCache,
+  };
+}
+
 // --- Rate limit por escritório (fase 5C) ---
 
 interface RateLimitEstado {

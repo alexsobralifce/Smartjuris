@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import type { ClassifierOutput } from './classifier.js';
 import { ErroGeracaoIA } from './analiseDocumental.js';
-import { buscarJurisprudenciaSeNecessario, anexarBlocoAoContexto } from './jurisprudenciaRag.js';
+import { buscarJurisprudenciaSeNecessario, anexarBlocoAoContexto, montarEventoJurisprudencia, type ResultadoJurisprudencia } from './jurisprudenciaRag.js';
 
 // ---------------------------------------------------------------------------
 // Eventos SSE (tipados e estáveis)
@@ -34,13 +34,45 @@ export type EventoSSE =
   | { type: 'texto'; delta: string }
   | { type: 'operacao'; operationId: string | null; status: string }
   | { type: 'concluido'; operationId: string | null; modeloUsado: string | null; tokens: { in: number; out: number }; saldo: { credits: number | null; reserveCents: number | null } }
-  | { type: 'erro'; code: string; reason: string; reconciliacao?: boolean };
+  | { type: 'erro'; code: string; reason: string; reconciliacao?: boolean }
+  // Fase 6B — aviso estruturado de jurisprudência (fallback/cache/ao vivo).
+  | { type: 'jurisprudencia'; status: string; aviso: string; decisoesUsadas: number; tribunais: string[]; fromCache: boolean };
 
 /** Escreve um evento SSE (data: JSON). Exportado para testes validarem a
  *  serialização do protocolo real. */
 export function emitir(res: Response, evento: EventoSSE): void {
   if (res.writableEnded) return;
   res.write(`data: ${JSON.stringify(evento)}\n\n`);
+}
+
+/** Fase 6B — emite o evento `jurisprudencia` estruturado (status + aviso). */
+export function emitirJurisprudencia(res: Response, resultado: ResultadoJurisprudencia): void {
+  emitir(res, { type: 'jurisprudencia', ...montarEventoJurisprudencia(resultado) });
+}
+
+/**
+ * Fase 6B — monta o `sub_operations` persistido na operação: texto gerado +
+ * metadados estruturados da jurisprudência (status, aviso, decisões, tribunais,
+ * origem cache) — rastreável pela operationId, sem termos/conteúdo sensível.
+ */
+export function montarSubOperacoesJurisprudencia(texto: string, modelo: string, jurisprudencia: ResultadoJurisprudencia): unknown[] {
+  return [
+    { tipo: 'texto-gerado', texto, modelo },
+    { tipo: 'jurisprudencia', ...montarEventoJurisprudencia(jurisprudencia) },
+  ];
+}
+
+/** Fase 6B — persiste o conteúdo gerado + metadados de jurisprudência na
+ *  operação (replay idempotente). Retorna false se a operação não existe. */
+export async function persistirSubOperacoes(operationId: string, subOps: unknown[]): Promise<boolean> {
+  const res = await db.execute(sql`
+    UPDATE ai_operations
+    SET sub_operations = ${JSON.stringify(subOps)}::jsonb,
+        updated_at = now()
+    WHERE id = ${operationId}
+    RETURNING id
+  `) as any[];
+  return Array.isArray(res) && res.length > 0;
 }
 
 /** Saldo atual do escritório (créditos + reserva em uso). */
@@ -282,6 +314,11 @@ export async function gerarPecaComSSE(
       }
       const contextoFinal = anexarBlocoAoContexto(contexto, jurisprudenciaAoVivo.bloco);
 
+      // Fase 6B — aviso estruturado no SSE: status + motivo legível quando a
+      // peça sai sem jurisprudência ao vivo (fallback/pausa/sem termos/etc.),
+      // para o frontend exibir sem quebrar o contrato dos eventos existentes.
+      emitirJurisprudencia(res, jurisprudenciaAoVivo);
+
       emitir(res, { type: 'progresso', progresso: 50, label: `Enviando para o modelo ${modeloPorTier(modelTier)}...` });
 
       // Streaming real do DeepSeek com outputSize efetivo (prompt + max_tokens).
@@ -340,14 +377,13 @@ export async function gerarPecaComSSE(
       // AMBÍGUO — a reserva é retida para reconciliação (nunca cobra uma peça
       // que não possa ser recuperada no replay).
       try {
-        const resPersist = await db.execute(sql`
-          UPDATE ai_operations
-          SET sub_operations = ${JSON.stringify([{ tipo: 'texto-gerado', texto: deltas.join(''), modelo: modeloPorTier(modelTier) }])}::jsonb,
-              updated_at = now()
-          WHERE id = ${operationId}
-          RETURNING id
-        `) as any[];
-        if (!Array.isArray(resPersist) || resPersist.length === 0) {
+        // Fase 6B — metadados da peça/operação: o status da jurisprudência é
+        // persistido junto do texto gerado (rastreável pela operationId).
+        const persistido = await persistirSubOperacoes(
+          operationId,
+          montarSubOperacoesJurisprudencia(deltas.join(''), modeloPorTier(modelTier), jurisprudenciaAoVivo),
+        );
+        if (!persistido) {
           throw new Error('operação não encontrada para persistência do conteúdo');
         }
       } catch (errPersist) {

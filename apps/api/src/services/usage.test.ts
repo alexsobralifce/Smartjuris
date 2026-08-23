@@ -231,6 +231,26 @@ describe('avaliarElegibilidade', () => {
     assert.equal(r.reason, 'orcamento-interno-do-ciclo-insuficiente');
   });
 
+  test('Fase 5G: FLASH cabe mas PRO estoura com precisão de centésimos', () => {
+    // Com a precisão de centésimos (5F), custos fracionários distinguem volumes:
+    // um orçamento onde o custo FLASH (pequeno) cabe mas o PRO (3x) não.
+    const estado: CreditStateEscritorio = { creditsAvailable: 20, reserveCentsUsed: 4_499, cycleMonth: cicloAtual(), plano: 'basico' };
+    // FLASH: 0.5 centavos → cabe (4499 + 0.5 <= 4500)
+    const flash = { ...estimativa, estimatedCostCents: 0.5 };
+    const rFlash = avaliarElegibilidade(estado, flash, PLANS.ESSENTIAL);
+    assert.equal(rFlash.allowed, true, `FLASH cabe (${estado.reserveCentsUsed} + 0.5)`);
+    // PRO: 1.5 centavos → estoura (4499 + 1.5 > 4500)
+    const pro = { ...estimativa, estimatedCostCents: 1.5 };
+    const rPro = avaliarElegibilidade(estado, pro, PLANS.ESSENTIAL);
+    assert.equal(rPro.allowed, false, 'PRO estoura o orçamento (precisão de centésimos)');
+    assert.equal(rPro.reason, 'orcamento-interno-do-ciclo-insuficiente');
+
+    // Limite EXATO de 4500 centavos é inclusivo: 4499 + 1.0 === 4500 => permitido.
+    const exato = { ...estimativa, estimatedCostCents: 1.0 };
+    const rExato = avaliarElegibilidade(estado, exato, PLANS.ESSENTIAL);
+    assert.equal(rExato.allowed, true, '4500 exato é permitido (limite inclusivo)');
+  });
+
   test('Rollover de ciclo: mês antigo usa o saldo do plano', () => {
     const state: CreditStateEscritorio = { creditsAvailable: 0, reserveCentsUsed: 4_400, cycleMonth: '2020-01', plano: 'basico' };
     const r = avaliarElegibilidade(state, estimativa, PLANS.ESSENTIAL, '2026-08');
@@ -286,6 +306,66 @@ describe('reserveAiUsage (banco)', { skip: !dbDisponivel }, () => {
       assert.equal(r.reason, 'creditos-insuficientes');
       const saldo = await saldoEscritorio(escId);
       assert.equal(saldo.credits, 0);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Fase 5G: efetivação da reserva com custo fracionário (reserve_cents_used arredonda, cost_cents_reserved preserva fração)', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      // Estimativa com custo FRACIONÁRIO (centésimos de centavo — precisão 5F).
+      const estimativaFracionaria: AiEstimateResult = { ...estimativaSimples(), estimatedCostCents: 1.55 };
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativaFracionaria });
+      assert.equal(r.ok, true);
+      assert.equal(r.costCentsReserved, 1.55, 'costCentsReserved preserva a fração');
+
+      // reserve_cents_used (integer) acumula o ROUND do custo (determinístico).
+      const saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.reserveUsed, Math.round(1.55), `reserve_cents_used arredonda (veio ${saldo.reserveUsed})`);
+
+      // O cost_cents_reserved na operação é numeric(10,2) com a fração.
+      const rows = await db.execute(sql`SELECT cost_cents_reserved FROM ai_operations WHERE id = ${r.operationId}`) as any[];
+      assert.equal(Number(rows[0]?.cost_cents_reserved), 1.55, 'numeric(10,2) preserva a fração no banco');
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Fase 5G: fluxo REAL de cálculo (FLASH e PRO) até a reserva efetiva com consistência', async () => {
+    const { escId, userId } = await criarEscritorioTeste(50);
+    try {
+      // Custos calculados pela estimativa real (tokens → tabela de preços → centésimos),
+      // NÃO injetados manualmente.
+      const estFlash = estimativaSimples('SIMPLE_PETITION'); // FLASH
+      const estPro = estimativaSimples('APPEAL');             // PRO (3x FLASH)
+      assert.ok(estFlash.estimatedCostCents > 0, `custo FLASH real > 0 (${estFlash.estimatedCostCents})`);
+      assert.ok(estPro.estimatedCostCents > 0, `custo PRO real > 0 (${estPro.estimatedCostCents})`);
+
+      for (const { operation, est } of [
+        { operation: 'SIMPLE_PETITION' as const, est: estFlash },
+        { operation: 'APPEAL' as const, est: estPro },
+      ]) {
+        const antes = await saldoEscritorio(escId);
+        // Elegibilidade avalia com o MESMO custo que será reservado.
+        const eleg = avaliarElegibilidade(
+          { creditsAvailable: antes.credits, reserveCentsUsed: antes.reserveUsed, cycleMonth: cicloAtual(), plano: 'basico' },
+          est,
+          PLANS.ESSENTIAL,
+        );
+        assert.equal(eleg.allowed, true, `${operation} elegível com custo real ${est.estimatedCostCents}`);
+
+        const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation, estimate: est });
+        assert.equal(r.ok, true);
+        // Consistência: elegibilidade → reserva → persistência usam o mesmo custo fracionário.
+        assert.equal(r.costCentsReserved, est.estimatedCostCents, `${operation}: reserva == custo usado na elegibilidade`);
+
+        const depois = await saldoEscritorio(escId);
+        assert.equal(depois.reserveUsed - antes.reserveUsed, Math.round(est.estimatedCostCents), `${operation}: reserve_cents_used acumula o ROUND do custo real`);
+
+        const rows = await db.execute(sql`SELECT cost_cents_reserved FROM ai_operations WHERE id = ${r.operationId}`) as any[];
+        assert.equal(Number(rows[0]?.cost_cents_reserved), est.estimatedCostCents, `${operation}: numeric(10,2) preserva a fração do custo real`);
+      }
     } finally {
       await limparEscritorioTeste(escId);
     }

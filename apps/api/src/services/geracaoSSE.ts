@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import type { ClassifierOutput } from './classifier.js';
 import { ErroGeracaoIA } from './analiseDocumental.js';
+import { buscarJurisprudenciaSeNecessario } from './jurisprudenciaRag.js';
 
 // ---------------------------------------------------------------------------
 // Eventos SSE (tipados e estáveis)
@@ -258,10 +259,26 @@ export async function gerarPecaComSSE(
       // validados; incluído apenas se includeJurisprudence !== false).
       const contexto = await buscarContextoRag(req, escritorioId, payload, input.dadosCaso ?? '', input.processoId ?? null, input.area, input.includeJurisprudence, res);
 
+      // Fase 5A — jurisprudência AO VIVO (best-effort): quando includeJurisprudence
+      // está ativo e não é SECTION_REVIEW, consulta a Jurisprudências.ai e anexa
+      // o bloco formatado (fonte rastreável) ao contexto que fundamenta a redação.
+      // Falhas (sem chave/indisponível/rate limit) NUNCA derrubam a geração.
+      const jurisprudenciaAoVivo = await buscarJurisprudenciaSeNecessario({
+        includeJurisprudence: input.includeJurisprudence,
+        sectionReview: payload.operation === 'SECTION_REVIEW',
+        area: input.area,
+        fatos: input.dadosCaso ?? '',
+        escritorioId,
+        log: (msg: string) => console.log(msg),
+      });
+      const contextoFinal = jurisprudenciaAoVivo
+        ? `${contexto}\n\n${jurisprudenciaAoVivo}`.trim()
+        : contexto;
+
       emitir(res, { type: 'progresso', progresso: 50, label: `Enviando para o modelo ${modeloPorTier(modelTier)}...` });
 
       // Streaming real do DeepSeek com outputSize efetivo (prompt + max_tokens).
-      const prompt = montarPrompt(payload, input.dadosCaso ?? '', contexto, input.outputSize);
+      const prompt = montarPrompt(payload, input.dadosCaso ?? '', contextoFinal, input.outputSize);
       // Streaming com USO REAL: `stream_options.include_usage` faz o provedor
       // retornar um chunk final com `usage` (tokens reais) — a liquidação usa
       // essas métricas, NUNCA uma aproximação (Math.ceil/contagem de chunks)

@@ -63,7 +63,7 @@ migrations validadas, quando aplicável
 | 3D | Integração frontend | 3C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 4B | Piloto controlado | 4A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5A | Integrar busca ao vivo de jurisprudência no orquestrador de geração | 4B | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
+| 5A | Integrar busca ao vivo de jurisprudência no orquestrador de geração | 4B | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 | 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -503,7 +503,7 @@ Use este modelo ao concluir cada fase:
 
 ### 5A — Integrar busca ao vivo de jurisprudência no orquestrador de geração
 
-**Estado:** `AUDIT_FAILED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 4B aprovada(s).
 
@@ -610,6 +610,7 @@ Adicionar logs estruturados e informações de auditoria sobre decisões usadas 
 | 2026-08-22 | 4B | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual via ai:approve |
 | 2026-08-23 | 5A | DeepSeek | PRE-FLIGHT (determinístico) | REJECT | Não | Nenhuma alteração detectada; pre-flight e auditoria foram poupados. |
 | 2026-08-23 | 5A | DeepSeek | PRE-FLIGHT (determinístico) | REJECT | Não | Nenhuma alteração detectada; pre-flight e auditoria foram poupados. |
+| 2026-08-23 | 5A | DeepSeek | PRE-FLIGHT (determinístico) | APPROVE_WITH_CONDITIONS | Não | Pré-condições locais falharam (testes/build). Auditor poupado para economizar tokens. |
 
 ## Critério final
 

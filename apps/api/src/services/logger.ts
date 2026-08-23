@@ -97,6 +97,15 @@ export function logError(message: string, meta: LogMeta = {}) {
   log('error', message, meta);
 }
 
+/** Força o flush da fila (testes e shutdown). Idempotente. */
+export async function flushLogs(): Promise<void> {
+  while (fila.length > 0) {
+    const antes = fila.length;
+    await flushQueue();
+    if (fila.length === antes) break; // proteção contra loop infinito
+  }
+}
+
 /**
  * Inicia a captura de console.* e o flush periódico. Deve ser chamado UMA vez
  * no boot, antes de o servidor tratar requisições.

@@ -271,6 +271,10 @@ export async function gerarPecaComSSE(
         area: input.area,
         fatos: input.dadosCaso ?? '',
         escritorioId,
+        // Fase 6A — metadados de auditoria persistida (app_logs).
+        usuarioId: req.user?.id ?? null,
+        operationId,
+        operation: payload.operation,
         log: (msg: string) => console.log(msg),
       });
       if (jurisprudenciaAoVivo.decisoesUsadas > 0) {

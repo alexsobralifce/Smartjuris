@@ -20,6 +20,7 @@ import {
   limparRateLimit,
   limparCache,
   cacheSize,
+  type RastreabilidadeJurisprudencia,
 } from '../services/jurisprudenciaRag.js';
 
 function decisao(numero: string, texto: string): Record<string, unknown> {
@@ -345,5 +346,126 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
     await buscarJurisprudenciaSeNecessario({ ...base, escritorioId: 'esc-T1' });
     await buscarJurisprudenciaSeNecessario({ ...base, escritorioId: 'esc-T2' });
     assert.equal(chamadas, 2, 'escritórios diferentes não compartilham cache');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 6A — Rastreabilidade persistida (metadados de auditoria em cada caminho)
+// ---------------------------------------------------------------------------
+
+describe('rastreabilidade persistida (fase 6A)', () => {
+  let metas: RastreabilidadeJurisprudencia[] = [];
+  function coletor(meta: RastreabilidadeJurisprudencia): void {
+    metas.push(meta);
+  }
+
+  before(() => {
+    limparCache();
+    limparRateLimit();
+  });
+  after(() => {
+    limparCache();
+    limparRateLimit();
+    metas = [];
+  });
+
+  test('busca ao vivo registra origem, tribunal, termos, decisões e tenant', async () => {
+    metas = [];
+    const mock = async () => ({ data: [decisao('11', 'Ementa rastreável.')], meta: { page: 0, per_page: 10, has_next_page: false }, rateLimit: { limit: '5', remaining: '4', reset: '60' } });
+    const r = await buscarJurisprudenciaSeNecessario({
+      includeJurisprudence: true,
+      area: 'Cível',
+      fatos: 'negativa indevida de cobertura gera dano moral ao consumidor',
+      escritorioId: 'esc-6a',
+      usuarioId: 'user-1',
+      operationId: 'op-1',
+      operation: 'SIMPLE_PETITION',
+      searchOverride: mock as never,
+      rastreabilidade: coletor,
+    });
+    assert.equal(r.origem, 'ao-vivo');
+    assert.equal(metas.length, 1, 'um registro de auditoria por geração');
+    const m = metas[0];
+    assert.equal(m.escritorioId, 'esc-6a');
+    assert.equal(m.usuarioId, 'user-1');
+    assert.equal(m.operationId, 'op-1');
+    assert.equal(m.operation, 'SIMPLE_PETITION');
+    assert.equal(m.tribunal, 'stj');
+    assert.equal(m.origem, 'ao-vivo');
+    assert.ok((m.termos as string[]).length > 0, 'termos de busca presentes');
+    assert.equal(m.decisoesUsadas, 1);
+    assert.equal(m.rateLimitRestante, 4, 'rate limit restante observado');
+  });
+
+  test('cache registra origem cache (sem chamada à API)', async () => {
+    metas = [];
+    let chamadas = 0;
+    const mock = async () => {
+      chamadas += 1;
+      return { data: [decisao('12', 'Ementa de cache.')], meta: { page: 0, per_page: 10, has_next_page: false } };
+    };
+    const input = {
+      includeJurisprudence: true,
+      area: 'Cível',
+      fatos: 'rescisão contratual abusiva gera indenização ao consumidor',
+      escritorioId: 'esc-6a-cache',
+      searchOverride: mock as never,
+      rastreabilidade: coletor,
+    };
+    await buscarJurisprudenciaSeNecessario(input);
+    metas = [];
+    const r2 = await buscarJurisprudenciaSeNecessario(input);
+    assert.equal(r2.origem, 'cache');
+    assert.equal(chamadas, 1, 'segunda veio do cache');
+    assert.equal(metas.length, 1);
+    assert.equal(metas[0].origem, 'cache');
+    assert.equal(metas[0].decisoesUsadas, 1);
+  });
+
+  test('falha do provedor registra origem falha sem vazar detalhe interno', async () => {
+    metas = [];
+    const mock = async () => { throw new Error('chave inválida abc123'); };
+    const r = await buscarJurisprudenciaSeNecessario({
+      includeJurisprudence: true,
+      fatos: 'falha controlada testa rastreabilidade de erro',
+      escritorioId: 'esc-6a-falha',
+      searchOverride: mock as never,
+      rastreabilidade: coletor,
+    });
+    assert.equal(r.origem, 'falha');
+    assert.equal(r.bloco, '');
+    assert.equal(metas.length, 1);
+    assert.equal(metas[0].origem, 'falha');
+    assert.equal(metas[0].decisoesUsadas, 0);
+    assert.ok(!JSON.stringify(metas[0]).includes('abc123'), 'detalhe interno do provedor não persiste');
+  });
+
+  test('sem termos, sem inclusão e section review registram motivos correspondentes', async () => {
+    metas = [];
+    // Sem termos (fatos só com stopwords/palavras curtas).
+    await buscarJurisprudenciaSeNecessario({ includeJurisprudence: true, fatos: 'o e de um a', escritorioId: 'esc-6a-termos', rastreabilidade: coletor });
+    assert.equal(metas[0].origem, 'sem-termos');
+
+    metas = [];
+    await buscarJurisprudenciaSeNecessario({ includeJurisprudence: false, fatos: 'qualquer coisa relevante aqui', escritorioId: 'esc-6a-inc', rastreabilidade: coletor });
+    assert.equal(metas[0].origem, 'sem-inclusao');
+
+    metas = [];
+    await buscarJurisprudenciaSeNecessario({ includeJurisprudence: true, sectionReview: true, fatos: 'qualquer coisa relevante aqui', escritorioId: 'esc-6a-sr', rastreabilidade: coletor });
+    assert.equal(metas[0].origem, 'section-review');
+  });
+
+  test('pausa de rate limit registra origem pausa', async () => {
+    metas = [];
+    limparRateLimit();
+    registrarRateLimit('esc-6a-pausa', { remaining: '1', reset: '60' });
+    const r = await buscarJurisprudenciaSeNecessario({
+      includeJurisprudence: true,
+      fatos: 'nova busca durante pausa de rate limit registra motivo',
+      escritorioId: 'esc-6a-pausa',
+      rastreabilidade: coletor,
+    });
+    assert.equal(r.origem, 'pausa');
+    assert.equal(metas[0].origem, 'pausa');
   });
 });

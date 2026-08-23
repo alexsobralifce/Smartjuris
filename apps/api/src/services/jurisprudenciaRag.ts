@@ -9,7 +9,10 @@
 // API indisponível → retorna '' e registra aviso (a geração continua só com RAG).
 // ===========================================================================
 
+import { createHash } from 'node:crypto';
 import { searchDecisions } from './jurisprudencias.js';
+import { log } from './logger.js';
+import { redactPII } from './pii.js';
 
 // ---------------------------------------------------------------------------
 // Mapeamento área canônica → tribunal padrão
@@ -177,6 +180,12 @@ export interface BuscarJurisprudenciaInput {
   /** Injetável para testes (mock). Se ausente, usa a API real. */
   searchOverride?: typeof searchDecisions;
   log?: (msg: string) => void;
+  /** Metadados de auditoria (fase 6A): quem/persistência. */
+  usuarioId?: string | null;
+  operationId?: string | null;
+  operation?: string | null;
+  /** Registro de rastreabilidade injetável (produção usa rastreabilidadePadrao). */
+  rastreabilidade?: (meta: RastreabilidadeJurisprudencia) => void;
 }
 
 export interface ResultadoJurisprudencia {
@@ -188,6 +197,73 @@ export interface ResultadoJurisprudencia {
   tribunais: string[];
   /** true se veio do cache (sem chamada à API). */
   fromCache: boolean;
+  /** Fase 6A — origem da rastreabilidade (auditoria persistida). */
+  origem?: 'ao-vivo' | 'cache' | 'pausa' | 'falha' | 'sem-termos' | 'sem-inclusao' | 'section-review' | 'zero-resultados';
+  /** Termos de busca utilizados (para auditoria). */
+  termos?: string[];
+  /** Rate limit restante observado na última chamada (auditoria). */
+  rateLimitRestante?: number | null;
+}
+
+/**
+ * Fase 6A — metadados da rastreabilidade persistida (app_logs). Apenas
+ * metadados; NUNCA conteúdo de decisões nem dados sensíveis do caso (LGPD).
+ */
+export interface RastreabilidadeJurisprudencia {
+  escritorioId: string;
+  usuarioId?: string | null;
+  operationId?: string | null;
+  operation?: string | null;
+  tribunal?: string | null;
+  termos: string[];
+  decisoesUsadas: number;
+  origem: NonNullable<ResultadoJurisprudencia['origem']>;
+  rateLimitRestante?: number | null;
+  timestamp: string;
+}
+
+/**
+ * Fase 6A — hash NÃO REVERSÍVEL dos termos de busca para a auditoria (LGPD):
+ * termos derivados dos fatos podem conter nomes, locais ou dados sensíveis —
+ * portanto NUNCA são persistidos; grava-se apenas um resumo determinístico
+ * (mesmos termos → mesmo hash) + contagem, permitindo auditoria de
+ * equivalência sem expor conteúdo.
+ */
+export function hashTermosAuditoria(termos: string[]): string {
+  const normalizados = [
+    ...new Set(
+      termos
+        .map((t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
+        .filter((t) => t.length >= 4),
+    ),
+  ].sort();
+  const digest = createHash('sha256').update(normalizados.join('|')).digest('hex').slice(0, 16);
+  return `h:${digest}`;
+}
+
+/** Registro padrão (produção): persiste em app_logs via logger (best-effort). */
+export function rastreabilidadePadrao(meta: RastreabilidadeJurisprudencia): void {
+  try {
+    // LGPD (6A): NUNCA persiste termos brutos (podem conter nomes/CPF/locais).
+    // Grava hash não reversível + contagem; o contexto inteiro ainda passa por
+    // redactPII como defesa em profundidade.
+    const contexto: Record<string, unknown> = {
+      ...meta,
+      termos: undefined,
+      termosHash: hashTermosAuditoria(meta.termos),
+      termosContagem: meta.termos.length,
+      timestamp: undefined,
+    };
+    delete contexto.termos;
+    delete contexto.timestamp;
+    log('info', '[jurisprudenciaRag] rastreabilidade', {
+      usuarioId: meta.usuarioId ?? null,
+      escritorioId: meta.escritorioId,
+      context: JSON.parse(redactPII(JSON.stringify(contexto))) as Record<string, unknown>,
+    });
+  } catch {
+    // best-effort — nunca quebra a geração por falha de logging.
+  }
 }
 
 // --- Rate limit por escritório (fase 5C) ---
@@ -320,31 +396,62 @@ export function anexarBlocoAoContexto(ragContexto: string, blocoJurisprudencia: 
  * para fora e nunca expõe detalhes internos do provedor no retorno.
  */
 export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenciaInput): Promise<ResultadoJurisprudencia> {
-  const vazio: ResultadoJurisprudencia = { bloco: '', decisoesUsadas: 0, tribunais: [], fromCache: false };
-  if (input.includeJurisprudence !== true || input.sectionReview === true) {
-    return vazio;
+  const rastrear = input.rastreabilidade ?? rastreabilidadePadrao;
+  const vazio = (origem: NonNullable<ResultadoJurisprudencia['origem']>, extra: Partial<ResultadoJurisprudencia> = {}): ResultadoJurisprudencia => ({
+    bloco: '',
+    decisoesUsadas: 0,
+    tribunais: [],
+    fromCache: false,
+    origem,
+    termos: [],
+    rateLimitRestante: null,
+    ...extra,
+  });
+
+  // Condições que fazem a busca NÃO ser acionada (auditoria 6A).
+  if (input.includeJurisprudence !== true) {
+    const r = vazio('sem-inclusao');
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal: null, termos: [], decisoesUsadas: 0, origem: 'sem-inclusao', rateLimitRestante: null, timestamp: new Date().toISOString() });
+    return r;
   }
+  if (input.sectionReview === true) {
+    const r = vazio('section-review');
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal: null, termos: [], decisoesUsadas: 0, origem: 'section-review', rateLimitRestante: null, timestamp: new Date().toISOString() });
+    return r;
+  }
+
   const tribunal = tribunalParaArea(input.area);
   const termos = extrairTermosDeBusca(input.fatos);
-  if (termos.length === 0) return vazio;
+  if (termos.length === 0) {
+    const r = vazio('sem-termos');
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos: [], decisoesUsadas: 0, origem: 'sem-termos', rateLimitRestante: null, timestamp: new Date().toISOString() });
+    return r;
+  }
 
   // 1) CACHE PRIMEIRO: mesmo durante pausa de rate limit, reutiliza resultados
   //    já disponíveis por escritório (não desperdiça cache válido).
   const cached = cacheGet(input.escritorioId, tribunal, termos);
   if (cached) {
     input.log?.('[jurisprudenciaRag] cache hit — sem chamada à API');
-    return {
+    const r: ResultadoJurisprudencia = {
       bloco: montarBlocoJurisprudencia(cached),
       decisoesUsadas: cached.length,
       tribunais: [tribunal],
       fromCache: true,
+      origem: 'cache',
+      termos,
+      rateLimitRestante: null,
     };
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos, decisoesUsadas: cached.length, origem: 'cache', rateLimitRestante: null, timestamp: new Date().toISOString() });
+    return r;
   }
 
   // Rate limit: SÓ pausa NOVAS buscas ao vivo (cache já foi consultado acima).
   if (rateLimitPausado(input.escritorioId)) {
     input.log?.('[jurisprudenciaRag] rate limit baixo — busca ao vivo pausada (fallback RAG)');
-    return vazio;
+    const r = vazio('pausa', { termos });
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos, decisoesUsadas: 0, origem: 'pausa', rateLimitRestante: null, timestamp: new Date().toISOString() });
+    return r;
   }
 
   // 2) Busca ao vivo (com fallback best-effort). Erros viram mensagem GENÉRICA
@@ -352,19 +459,30 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
   try {
     const buscar = input.searchOverride ?? searchDecisions;
     const query = termos.slice(0, 6).join(' ');
+    const inicio = Date.now();
     const resultado = await buscar(tribunal, query, {});
     // 5C: interpreta headers de rate limit (pausa futuras buscas se baixo).
     registrarRateLimit(input.escritorioId, resultado.rateLimit);
+    const rateLimitRestante = resultado.rateLimit?.remaining != null ? Number(resultado.rateLimit.remaining) : null;
     const decisoes = resultado.data ?? [];
-    if (decisoes.length === 0) return vazio;
+    if (decisoes.length === 0) {
+      const r = vazio('zero-resultados', { termos, rateLimitRestante });
+      rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos, decisoesUsadas: 0, origem: 'zero-resultados', rateLimitRestante, timestamp: new Date().toISOString() });
+      return r;
+    }
     cacheSet(input.escritorioId, tribunal, termos, decisoes);
-    input.log?.(`[jurisprudenciaRag] ${decisoes.length} decisão(ões) de ${tribunal} usada(s) na geração`);
-    return {
+    input.log?.(`[jurisprudenciaRag] ${decisoes.length} decisão(ões) de ${tribunal} usada(s) na geração (${Date.now() - inicio}ms)`);
+    const r: ResultadoJurisprudencia = {
       bloco: montarBlocoJurisprudencia(decisoes),
       decisoesUsadas: decisoes.length,
       tribunais: [tribunal],
       fromCache: false,
+      origem: 'ao-vivo',
+      termos,
+      rateLimitRestante,
     };
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos, decisoesUsadas: decisoes.length, origem: 'ao-vivo', rateLimitRestante, timestamp: new Date().toISOString() });
+    return r;
   } catch (err) {
     // 5C: provedor retornou rate limit (429) → registra pausa para as próximas
     //    buscas ao vivo, mas segue com RAG local (best-effort, nunca falha).
@@ -376,7 +494,9 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
       // Mensagem GENÉRICA no log; detalhes internos NÃO são repassados (5D).
       input.log?.('[jurisprudenciaRag] busca ao vivo indisponível — fallback para RAG local');
     }
-    return vazio;
+    const r = vazio('falha', { termos });
+    rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos, decisoesUsadas: 0, origem: 'falha', rateLimitRestante: null, timestamp: new Date().toISOString() });
+    return r;
   }
 }
 

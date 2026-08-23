@@ -25,6 +25,7 @@ import {
   limiarRateLimitMin,
   duracaoPausaRateLimitMs,
   estadoRateLimit,
+  desconectarRedis,
   type RastreabilidadeJurisprudencia,
 } from '../services/jurisprudenciaRag.js';
 
@@ -39,6 +40,10 @@ function decisao(numero: string, texto: string): Record<string, unknown> {
   };
 }
 
+// Testes unitários: NUNCA persistem rastreabilidade em app_logs (evita
+// dependência de banco/UUID reais neste arquivo — a persistência real é
+// coberta por jurisprudenciaRastreabilidade.test.ts).
+function noop(): void {}
 const logs: string[] = [];
 function logFn(msg: string): void {
   logs.push(msg);
@@ -142,6 +147,7 @@ describe('rate limit (fase 5C)', () => {
       return { data: [decisao('1', 'Ementa RL.')], meta: { page: 0, per_page: 10, has_next_page: false }, rateLimit: { limit: '10', remaining: '1', reset: '60' } };
     };
     const input = {
+      rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'rate limit baixo testa pausa de busca ao vivo',
       escritorioId: 'esc-rl',
@@ -170,7 +176,7 @@ describe('rate limit (fase 5C)', () => {
       chamadas += 1;
       throw new Error('HTTP 429 too many requests');
     };
-    const r1 = await buscarJurisprudenciaSeNecessario({
+    const r1 = await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'cenario de rate limit 429 do provedor',
       escritorioId: 'esc-429',
@@ -179,7 +185,7 @@ describe('rate limit (fase 5C)', () => {
     assert.equal(r1.bloco, '', '429 → fallback RAG (não falha)');
     assert.ok(rateLimitPausado('esc-429'), '429 registra pausa para novas buscas');
     // Segunda tentativa com termos diferentes → pausada (sem nova chamada).
-    await buscarJurisprudenciaSeNecessario({
+    await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'outra busca diferente para confirmar pausa apos 429',
       escritorioId: 'esc-429',
@@ -228,7 +234,7 @@ describe('rate limit (fase 5C)', () => {
       (err as { statusCode?: number }).statusCode = 429;
       throw err;
     };
-    const r1 = await buscarJurisprudenciaSeNecessario({
+    const r1 = await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'rate limit via statusCode 429 sem texto',
       escritorioId: 'esc-429obj',
@@ -237,7 +243,7 @@ describe('rate limit (fase 5C)', () => {
     assert.equal(r1.bloco, '', '429 por objeto → fallback RAG');
     assert.ok(rateLimitPausado('esc-429obj'), '429 por objeto registra pausa');
     // Segunda busca com termos diferentes → pausada (sem nova chamada).
-    await buscarJurisprudenciaSeNecessario({
+    await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'outros termos para confirmar pausa apos 429 por objeto',
       escritorioId: 'esc-429obj',
@@ -256,7 +262,7 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
       args = { court, q: query };
       return { data: [decisao('1', 'Atraso na entrega gera dano moral.')], meta: { page: 0, per_page: 10, has_next_page: false } };
     };
-    const r = await buscarJurisprudenciaSeNecessario({
+    const r = await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       area: 'Trabalhista',
       fatos: 'Atraso na entrega causou danos morais ao consumidor',
@@ -278,7 +284,7 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
       chamadas += 1;
       return { data: [], meta: { page: 0, per_page: 10, has_next_page: false } };
     };
-    const r = await buscarJurisprudenciaSeNecessario({
+    const r = await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: false,
       fatos: 'qualquer coisa',
       escritorioId: 'esc-1',
@@ -294,7 +300,7 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
       chamadas += 1;
       return { data: [], meta: { page: 0, per_page: 10, has_next_page: false } };
     };
-    await buscarJurisprudenciaSeNecessario({
+    await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       sectionReview: true,
       fatos: 'x',
@@ -308,7 +314,7 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
     const mock = async () => {
       throw new Error('detalhe interno do provedor: api-key-12345 inválida');
     };
-    const r = await buscarJurisprudenciaSeNecessario({
+    const r = await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'teste de fallback com termos suficientes',
       escritorioId: 'esc-1',
@@ -327,6 +333,7 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
       return { data: [decisao('9', 'Ementa cacheada.')], meta: { page: 0, per_page: 10, has_next_page: false } };
     };
     const input = {
+      rastreabilidade: noop,
       includeJurisprudence: true,
       area: 'Cível',
       fatos: 'Vício oculto em produto gera dano ao consumidor',
@@ -347,7 +354,7 @@ describe('buscarJurisprudenciaSeNecessario (fluxo)', () => {
       chamadas += 1;
       return { data: [decisao('7', 'Ementa tenancy.')], meta: { page: 0, per_page: 10, has_next_page: false } };
     };
-    const base = { includeJurisprudence: true, area: 'Cível', fatos: 'violação contratual gera reparação ao consumidor', searchOverride: mock as never };
+    const base = { rastreabilidade: noop, includeJurisprudence: true, area: 'Cível', fatos: 'violação contratual gera reparação ao consumidor', searchOverride: mock as never };
     await buscarJurisprudenciaSeNecessario({ ...base, escritorioId: 'esc-T1' });
     await buscarJurisprudenciaSeNecessario({ ...base, escritorioId: 'esc-T2' });
     assert.equal(chamadas, 2, 'escritórios diferentes não compartilham cache');
@@ -590,7 +597,7 @@ describe('rate limit configurável e observável (fase 6C)', () => {
       chamadas += 1;
       throw new Error('HTTP 429 too many requests');
     };
-    await buscarJurisprudenciaSeNecessario({
+    await buscarJurisprudenciaSeNecessario({ rastreabilidade: noop,
       includeJurisprudence: true,
       fatos: 'cenario 429 observa motivo da pausa',
       escritorioId: 'esc-6c-429',
@@ -600,5 +607,66 @@ describe('rate limit configurável e observável (fase 6C)', () => {
     assert.ok(estado, 'pausa registrada após 429');
     assert.equal(estado!.motivo, '429', 'motivo = 429');
     assert.equal(estado!.restantes, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 6D — Cache Redis com fallback em memória
+// ---------------------------------------------------------------------------
+
+describe('cache Redis com fallback (fase 6D)', () => {
+  after(async () => {
+    await desconectarRedis();
+    const antes = process.env.REDIS_URL;
+    if (antes === undefined) delete process.env.REDIS_URL;
+    await limparCache();
+  });
+
+  test('Redis indisponível (URL inválida) → fallback para memória sem quebrar a geração', async () => {
+    process.env.REDIS_URL = 'redis://localhost:1'; // porta errada → connect falha
+    await desconectarRedis();
+    await limparCache();
+
+    let chamadas = 0;
+    const mock = async () => {
+      chamadas += 1;
+      return { data: [decisao('31', 'Ementa fallback Redis.')], meta: { page: 0, per_page: 10, has_next_page: false } };
+    };
+    const input = {
+      rastreabilidade: noop,
+      includeJurisprudence: true,
+      area: 'Cível',
+      fatos: 'fallback de redis indisponivel mantem cache em memoria',
+      escritorioId: 'esc-6d-fallback',
+      searchOverride: mock as never,
+    };
+    const b1 = await buscarJurisprudenciaSeNecessario(input);
+    const b2 = await buscarJurisprudenciaSeNecessario(input);
+    assert.equal(chamadas, 1, '2ª chamada veio do cache (memória) mesmo com Redis inválido');
+    assert.ok(b1.bloco && b2.bloco, 'blocos preenchidos');
+    assert.equal(b2.fromCache, true, 'origem cache');
+  });
+
+  test('sem REDIS_URL configurada → cache em memória funciona (comportamento atual preservado)', async () => {
+    delete process.env.REDIS_URL;
+    await desconectarRedis();
+    await limparCache();
+
+    let chamadas = 0;
+    const mock = async () => {
+      chamadas += 1;
+      return { data: [decisao('32', 'Ementa sem redis.')], meta: { page: 0, per_page: 10, has_next_page: false } };
+    };
+    const input = {
+      rastreabilidade: noop,
+      includeJurisprudence: true,
+      area: 'Cível',
+      fatos: 'cache em memoria sem redis configurado segue funcionando',
+      escritorioId: 'esc-6d-mem',
+      searchOverride: mock as never,
+    };
+    await buscarJurisprudenciaSeNecessario(input);
+    await buscarJurisprudenciaSeNecessario(input);
+    assert.equal(chamadas, 1, 'cache em memória sem Redis');
   });
 });

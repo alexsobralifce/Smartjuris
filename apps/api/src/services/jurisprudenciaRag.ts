@@ -92,8 +92,75 @@ function chaveDeCache(escritorioId: string, tribunal: string, termos: string[]):
   return `${escritorioId}::${tribunal}::${termos.join(' ')}`;
 }
 
-function cacheGet(escritorioId: string, tribunal: string, termos: string[]): unknown[] | null {
+// ---------------------------------------------------------------------------
+// Fase 6D — Cache persistente via Redis com fallback em memória.
+// Precedência: Redis (quando REDIS_URL configurada e conectado) → memória.
+// Qualquer falha do Redis cai para memória — a geração nunca quebra.
+// ---------------------------------------------------------------------------
+
+/** Cliente Redis lazy (undefined = ainda não inicializado; null = indisponível). */
+let redisCliente: { get: (k: string) => Promise<string | null>; set: (k: string, v: string, o: { EX: number }) => Promise<unknown>; del: (k: string) => Promise<unknown> } | null | undefined;
+
+const REDIS_PREFIXO = 'juris:v1:';
+const REDIS_TTL_S = Math.floor(CACHE_TTL_MS / 1000); // 1 hora
+
+function redisUrlConfigurada(): boolean {
+  const url = process.env.REDIS_URL;
+  return url != null && String(url).trim() !== '';
+}
+
+/** Conecta ao Redis de forma lazy e tolerante (falha → null, sem crash). */
+async function obterRedis(): Promise<typeof redisCliente> {
+  if (redisCliente !== undefined) return redisCliente;
+  if (!redisUrlConfigurada()) {
+    redisCliente = null;
+    return null;
+  }
+  let c: { connect: () => Promise<unknown>; on: (e: string, f: () => void) => void; quit?: () => Promise<unknown> } | null = null;
+  try {
+    const { createClient } = await import('redis');
+    c = createClient({
+      url: process.env.REDIS_URL,
+      // Falha rápida e sem reconexão infinita (tolerante): qualquer
+      // indisponibilidade cai imediatamente para o cache em memória.
+      socket: { connectTimeout: 1500, reconnectStrategy: false },
+    });
+    c.on('error', () => { /* tolerante: qualquer erro → fallback memória */ });
+    await c.connect();
+    redisCliente = c as unknown as typeof redisCliente;
+  } catch {
+    // Fecha o cliente órfão (connect falho) para não segurar o event loop.
+    try { await c?.quit?.(); } catch { /* já fechado */ }
+    redisCliente = null;
+  }
+  return redisCliente;
+}
+
+/** Limpa o cliente Redis (testes/reconexão). */
+export async function desconectarRedis(): Promise<void> {
+  if (redisCliente) {
+    try { await (redisCliente as unknown as { quit?: () => Promise<void> }).quit?.(); } catch { /* best-effort */ }
+  }
+  redisCliente = undefined;
+}
+
+async function cacheGet(escritorioId: string, tribunal: string, termos: string[]): Promise<unknown[] | null> {
   const chave = chaveDeCache(escritorioId, tribunal, termos);
+  // 1) Redis (se disponível).
+  try {
+    const redis = await obterRedis();
+    if (redis) {
+      const raw = await redis.get(REDIS_PREFIXO + chave);
+      if (raw != null) {
+        const decisoes = JSON.parse(raw) as unknown[];
+        return Array.isArray(decisoes) ? decisoes : null;
+      }
+      return null; // miss no Redis → não consulta memória (fonte única quando ativo)
+    }
+  } catch {
+    // Redis indisponível → cai para memória (best-effort).
+  }
+  // 2) Memória (fallback).
   const entry = cache.get(chave);
   if (!entry) return null;
   if (Date.now() > entry.expiraEm) {
@@ -103,10 +170,19 @@ function cacheGet(escritorioId: string, tribunal: string, termos: string[]): unk
   return entry.decisoes;
 }
 
-function cacheSet(escritorioId: string, tribunal: string, termos: string[], decisoes: unknown[]): void {
+async function cacheSet(escritorioId: string, tribunal: string, termos: string[], decisoes: unknown[]): Promise<void> {
   const chave = chaveDeCache(escritorioId, tribunal, termos);
+  // 1) Redis (best-effort): TTL nativo de 1h (expiração natural, sobrevive a restart).
+  try {
+    const redis = await obterRedis();
+    if (redis) {
+      await redis.set(REDIS_PREFIXO + chave, JSON.stringify(decisoes), { EX: REDIS_TTL_S });
+    }
+  } catch {
+    // Redis indisponível → memória (abaixo).
+  }
+  // 2) Memória SEMPRE como camada local (fallback + cacheSize/limparCache).
   cache.set(chave, { chave, escritorioId, decisoes, expiraEm: Date.now() + CACHE_TTL_MS });
-  // Limpeza simples: descarta entradas expiradas quando o cache cresce.
   if (cache.size > 200) {
     for (const [k, e] of cache) {
       if (Date.now() > e.expiraEm) cache.delete(k);
@@ -532,7 +608,7 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
 
   // 1) CACHE PRIMEIRO: mesmo durante pausa de rate limit, reutiliza resultados
   //    já disponíveis por escritório (não desperdiça cache válido).
-  const cached = cacheGet(input.escritorioId, tribunal, termos);
+  const cached = await cacheGet(input.escritorioId, tribunal, termos);
   if (cached) {
     input.log?.('[jurisprudenciaRag] cache hit — sem chamada à API');
     const r: ResultadoJurisprudencia = {
@@ -572,7 +648,7 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
       rastrear({ escritorioId: input.escritorioId, usuarioId: input.usuarioId, operationId: input.operationId, operation: input.operation, tribunal, termos, decisoesUsadas: 0, origem: 'zero-resultados', rateLimitRestante, timestamp: new Date().toISOString() });
       return r;
     }
-    cacheSet(input.escritorioId, tribunal, termos, decisoes);
+    await cacheSet(input.escritorioId, tribunal, termos, decisoes);
     input.log?.(`[jurisprudenciaRag] ${decisoes.length} decisão(ões) de ${tribunal} usada(s) na geração (${Date.now() - inicio}ms)`);
     const r: ResultadoJurisprudencia = {
       bloco: montarBlocoJurisprudencia(decisoes),
@@ -607,7 +683,16 @@ export function cacheSize(): number {
   return cache.size;
 }
 
-/** Limpa o cache (testes). */
-export function limparCache(): void {
+/** Limpa o cache (testes): memória + Redis (best-effort, sob o prefixo). */
+export async function limparCache(): Promise<void> {
   cache.clear();
+  try {
+    const redis = await obterRedis();
+    if (redis && 'keys' in redis) {
+      const chaves = await (redis as unknown as { keys: (p: string) => Promise<string[]> }).keys(REDIS_PREFIXO + '*');
+      for (const k of chaves) await redis.del(k);
+    }
+  } catch {
+    // best-effort
+  }
 }

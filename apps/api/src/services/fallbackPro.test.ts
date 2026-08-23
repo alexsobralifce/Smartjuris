@@ -160,7 +160,14 @@ describe('3B — fallback Flash/Pro', { skip: !dbDisponivel }, () => {
       saldoAntes.credits - (res.creditsReserved ?? 0),
       'FLASH liberada; apenas o PRO consumiu créditos (sem dupla cobrança)',
     );
-    assert.equal(depois.reserveCents, 0, 'reserva FLASH liberada (reserve_cents_used zera após settle PRO)');
+    // Política determinística (5F): o settle debita o custo REAL do PRO
+    // (tokens 500/300) menos o reservado (0, sem contexto) no reserve_cents_used
+    // do ciclo. Expectativa calculada explicitamente com o mesmo isPeak do settle.
+    const { calculateAiSettlementCents, isHorarioPico } = await import('../services/usage.js');
+    const custoRealPro = calculateAiSettlementCents({ model: 'deepseek-v4-pro', inputTokens: 500, outputTokens: 300, isPeak: isHorarioPico() });
+    const reservaPro = 0; // estimativa sem contexto = 0
+    const esperadoResidual = Math.max(0, Math.round(custoRealPro.brlCents - reservaPro));
+    assert.equal(depois.reserveCents, esperadoResidual, `reserva do ciclo reflete custo real PRO (esperado ${esperadoResidual}, veio ${depois.reserveCents})`);
   });
 
   test('falha recuperável COM orçamento apertado → fallback PRO executa e FLASH é liberada (sem dupla cobrança)', async () => {

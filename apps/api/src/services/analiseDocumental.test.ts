@@ -397,7 +397,9 @@ describe('3A — unidades de análise documental', { skip: !dbDisponivel }, () =
 
     const depois = await saldoEscritorio(escA.id);
     assert.equal(depois.credits, antes.credits - 2); // 1 crédito por bloco
-    assert.ok(depois.reserveCents <= antes.reserveCents, 'settle libera diferença da reserva');
+    // Política determinística (5F): o settle libera integralmente a reserva
+    // (mesma regra de arredondamento na reserva e no release — sem retenção).
+    assert.ok(depois.reserveCents <= antes.reserveCents, `settle libera reserva (antes=${antes.reserveCents}, depois=${depois.reserveCents})`);
 
     assert.equal(res.contexto.summariesAvailable, true);
     assert.equal(res.contexto.structuredFactsAvailable, true);

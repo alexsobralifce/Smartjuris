@@ -215,15 +215,38 @@ export interface AiCostResult {
   brlCents: number;
 }
 
+/**
+ * Calcula o custo em centavos com precisão de CENTÉSIMOS de centavo (2 casas
+ * decimais, fase 5E/5F). O TOTAL é arredondado UMA ÚNICA VEZ (determinístico,
+ * sem arredondar componentes individualmente — que contradiziam o total):
+ *  - `ceil`: teto no centésimo (reserva — nunca sub-reserva);
+ *  - `nearest`: centésimo mais próximo (liquidação).
+ * Os componentes (input/output) são expostos SEM arredondamento individual
+ * (somam exatamente o total). Usa aritmética decimal via strings.
+ */
 function calcularCustoCentavos(input: AiCostInput, arredondar: 'ceil' | 'nearest'): AiCostResult {
   const price = precoDoModelo(input.model, input.isPeak);
-  const arredondarPor = (raw: number): number => (arredondar === 'ceil' ? Math.ceil(raw) : Math.round(raw));
-  const inputCostCents = arredondarPor((Math.max(0, input.inputTokens) * price.inputCentsPerM) / 1_000_000);
-  const outputCostCents = arredondarPor((Math.max(0, input.outputTokens) * price.outputCentsPerM) / 1_000_000);
-  const usdCents = inputCostCents + outputCostCents;
+  const inT = Math.max(0, input.inputTokens);
+  const outT = Math.max(0, input.outputTokens);
   const usdBrl = Number(process.env.USD_BRL_RATE ?? '5.00');
-  const brlCents = arredondarPor(usdCents * usdBrl);
-  return { inputCostCents, outputCostCents, usdCents, brlCents };
+
+  // Custo em centavos (base 100) sem arredondar componentes.
+  const inputUsdCents = (inT * price.inputCentsPerM) / 1_000_000;
+  const outputUsdCents = (outT * price.outputCentsPerM) / 1_000_000;
+  const usdCentsRaw = inputUsdCents + outputUsdCents;
+  const brlRaw = usdCentsRaw * usdBrl;
+
+  // Arredonda o TOTAL uma única vez, no centésimo, com aritmética decimal.
+  const arredondarTotal = (raw: number): number => {
+    const emCentesimos = raw * 100;
+    const arredondado = arredondar === 'ceil' ? Math.ceil(emCentesimos - 1e-9) : Math.round(emCentesimos);
+    return arredondado / 100;
+  };
+
+  const usdCents = arredondarTotal(usdCentsRaw);
+  const brlCents = arredondarTotal(brlRaw);
+  // Componentes expostos SEM arredondamento (somam exatamente o total).
+  return { inputCostCents: inputUsdCents, outputCostCents: outputUsdCents, usdCents, brlCents };
 }
 
 /**
@@ -649,7 +672,7 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
     await tx.execute(sql`
       UPDATE escritorios
       SET credits_available = credits_available - ${credits},
-          reserve_cents_used = reserve_cents_used + ${costCents}
+          reserve_cents_used = ROUND(reserve_cents_used + ${costCents}::numeric)::int
       WHERE id = ${input.escritorioId}
     `);
 
@@ -676,7 +699,7 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
       operationType: input.operation,
       kind: 'RESERVE',
       creditsDelta: -credits,
-      costCents,
+      costCents: Math.round(costCents), // ledger é integer (exibição); o numeric preserva a fração
       model: OPERATION_LIMITS[input.operation].model,
       idempotencyKey: input.idempotencyKey,
       status: 'committed',
@@ -757,7 +780,7 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
     // integer — arredonda o resultado para evitar erro de cast.
     await tx.execute(sql`
       UPDATE escritorios
-      SET reserve_cents_used = GREATEST(0, ROUND(reserve_cents_used - ${op.cost_cents_reserved} + ${custoReal.brlCents})::int)
+      SET reserve_cents_used = GREATEST(0, ROUND(reserve_cents_used - ROUND(${op.cost_cents_reserved}::numeric) + ${custoReal.brlCents}::numeric)::int)
       WHERE id = ${op.escritorio_id}
     `);
 
@@ -766,7 +789,7 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       modelUsed: input.modelUsed,
       tokensIn: input.inputTokens,
       tokensOut: input.outputTokens,
-      costCentsActual: custoReal.brlCents,
+      costCentsActual: Math.round(custoReal.brlCents),
       creditsSettled: op.credits_reserved,
       finishedAt: new Date(),
       updatedAt: new Date(),
@@ -779,7 +802,7 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       operationType: op.operation_type,
       kind: 'SETTLE',
       creditsDelta: 0,
-      costCents: custoReal.brlCents - op.cost_cents_reserved,
+      costCents: Math.round(custoReal.brlCents - op.cost_cents_reserved),
       model: input.modelUsed,
       idempotencyKey: `${op.idempotency_key}:settle`,
       status: 'committed',
@@ -789,7 +812,7 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       ok: true,
       operationId: op.id,
       status: 'succeeded',
-      costCentsActual: custoReal.brlCents,
+      costCentsActual: Math.round(custoReal.brlCents),
       creditsSettled: op.credits_reserved,
     } as SettleAiUsageResult;
   });
@@ -874,7 +897,7 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
     await tx.execute(sql`
       UPDATE escritorios
       SET credits_available = credits_available + ${op.credits_reserved},
-          reserve_cents_used = GREATEST(0, reserve_cents_used - ${custoLiberado})
+          reserve_cents_used = GREATEST(0, ROUND(reserve_cents_used - ROUND(${custoLiberado}::numeric))::int)
       WHERE id = ${op.escritorio_id}
     `);
 
@@ -883,7 +906,7 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
       error: input.reason ?? 'liberada-sem-consumo',
       tokensIn: input.partialInputTokens ?? 0,
       tokensOut: input.partialOutputTokens ?? 0,
-      costCentsActual: custoParcial,
+      costCentsActual: Math.round(custoParcial),
       creditsSettled: 0,
       finishedAt: new Date(),
       updatedAt: new Date(),
@@ -897,7 +920,7 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
         operationType: op.operation_type,
         kind: 'ADJUST',
         creditsDelta: 0,
-        costCents: custoParcial,
+        costCents: Math.round(custoParcial),
         model: op.model,
         idempotencyKey: `${op.idempotency_key}:adjust`,
         status: 'committed',
@@ -910,7 +933,7 @@ export async function releaseAiUsageReservation(input: ReleaseAiUsageInput): Pro
       operationType: op.operation_type,
       kind: 'RELEASE',
       creditsDelta: op.credits_reserved,
-      costCents: -custoLiberado,
+      costCents: -Math.round(custoLiberado),
       model: op.model,
       idempotencyKey: `${op.idempotency_key}:release`,
       status: 'committed',

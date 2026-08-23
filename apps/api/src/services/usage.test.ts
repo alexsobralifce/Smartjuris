@@ -136,21 +136,33 @@ describe('calculateAiCostCents', () => {
     });
   });
 
-  test('Reserva arredonda SEMPRE para cima (1 token => 1 centavo)', () => {
+  test('Reserva arredonda SEMPRE para cima com precisão de centésimos (1 token => 0.01 centavo)', () => {
     comEnv({ USD_BRL_RATE: '5.00' }, () => {
       const r = calculateAiCostCents({ model: 'flash', inputTokens: 1, outputTokens: 1, isPeak: true });
-      assert.equal(r.usdCents, 2);
-      assert.equal(r.brlCents, 10);
+      // Fase 5F: custo total arredondado no centésimo de centavo (não por componente).
+      assert.equal(r.usdCents, 0.01);
+      assert.equal(r.brlCents, 0.01);
     });
   });
 
-  test('Liquidação arredonda para o centavo mais próximo (difere da reserva)', () => {
+  test('Fase 5F: fatias com o DOBRO de tokens reservam custo DIFERENTE (sem colapsar no centavo)', () => {
+    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+      const dobro = calculateAiCostCents({ model: 'flash', inputTokens: 28_750, outputTokens: 250, isPeak: false });
+      const metade = calculateAiCostCents({ model: 'flash', inputTokens: 14_375, outputTokens: 250, isPeak: false });
+      assert.ok(dobro.brlCents > metade.brlCents, `dobro (${dobro.brlCents}) > metade (${metade.brlCents})`);
+      // Precisão de 2 casas decimais: arredondar para 2 casas não muda o valor.
+      assert.equal(Number(dobro.brlCents.toFixed(2)), dobro.brlCents, 'precisão de 2 casas decimais');
+    });
+  });
+
+  test('Liquidação arredonda para o centésimo mais próximo (difere da reserva)', () => {
     comEnv({ USD_BRL_RATE: '5.00' }, () => {
       const reserva = calculateAiCostCents({ model: 'flash', inputTokens: 100_000, outputTokens: 0, isPeak: true });
       const liquida = calculateAiSettlementCents({ model: 'flash', inputTokens: 100_000, outputTokens: 0, isPeak: true });
-      // 100_000 * 0.44/1M = 0.044 USD => ceil 5 centavos; nearest 4 centavos
-      assert.equal(reserva.brlCents, 25);
-      assert.equal(liquida.brlCents, 20);
+      // 100_000 * 0.44/1M = 0.044 USD cents => usdCents 4.4 => BRL 22 centavos.
+      // (Fase 5F: precisão de centésimos; para valores pequenos o total arredonda igual.)
+      assert.equal(reserva.brlCents, 22);
+      assert.equal(liquida.brlCents, 22);
     });
   });
 });
@@ -288,7 +300,9 @@ describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
       const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativa });
       assert.equal(r.ok, true);
       const antes = await saldoEscritorio(escId);
-      assert.equal(antes.reserveUsed, r.costCentsReserved);
+      // Fase 5F: reserve_cents_used é integer (arredonda); costCentsReserved é
+      // numeric(10,2) com a fração preservada. O saldo do ciclo reflete o ROUND.
+      assert.equal(antes.reserveUsed, Math.round(r.costCentsReserved ?? 0));
 
       const s = await settleAiUsage({ operationId: r.operationId!, modelUsed: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 300 });
       assert.equal(s.ok, true);

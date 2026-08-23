@@ -68,6 +68,8 @@ export const AutomationConfig = z.object({
     requireDiff: z.boolean(),
     blockOnHigh: z.boolean(),
     blockOnBlocker: z.boolean(),
+    /** Limite de caracteres do texto de entrada de requisitos (linguagem natural). */
+    maxRequirementChars: z.number().int().positive().default(20000).optional(),
   }),
   preflight: z.object({
     mode: PreflightMode,

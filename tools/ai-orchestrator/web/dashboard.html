@@ -107,8 +107,8 @@
   <div class="last-runs" id="lastRuns"></div>
 
   <h2 class="section-title">Novos requisitos</h2>
-  <p class="sub">Cole os requisitos em linguagem natural. O orquestrador estrutura em fases enumeradas (DeepSeek Flash) para você revisar e aplicar no roadmap.</p>
-  <textarea id="reqTexto" rows="6" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
+  <p class="sub">Cole os requisitos em linguagem natural. O orquestrador estrutura em fases enumeradas (DeepSeek Flash) para você revisar e aplicar no roadmap. Limite: <span id="reqMax"></span> caracteres.</p>
+  <textarea id="reqTexto" rows="6" maxlength="20000" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
   <div class="req-actions">
     <button id="btnEstruturar">1 · Estruturar em fases</button>
     <button id="btnAplicar" class="primary" disabled>2 · Aplicar no roadmap</button>
@@ -203,6 +203,9 @@ setInterval(refresh, 3000);
 
 // --- Entrada de requisitos (estruturação + aplicação) ---
 let fasesEstruturadas = null;
+const REQ_MAX = 20000;
+$('reqMax').textContent = REQ_MAX.toLocaleString('pt-BR');
+$('reqTexto').maxLength = REQ_MAX;
 
 function renderFases(fases) {
   const box = $('reqResultado');

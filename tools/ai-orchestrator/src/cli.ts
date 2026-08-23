@@ -28,7 +28,7 @@ import { runPhase, runAutonomousChain } from './run.js';
 import { reAuditRun } from './auditRun.js';
 import { printStatus, printRelatorio, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
 import { startDashboardServer } from './dashboard.js';
-import { structureRequirements, applyRequirements, readRequirementsInput, renderRequirementsList, existingPhaseIds, buildStructureInput } from './requirements.js';
+import { structureRequirements, applyRequirements, readRequirementsInput, renderRequirementsList, existingPhaseIds, buildStructureInput, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS } from './requirements.js';
 import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
@@ -177,6 +177,8 @@ async function main(): Promise<void> {
         ? (opts.file.startsWith('/') ? opts.file : join(repoRoot, opts.file))
         : join(aiDevDir, 'requirements', 'novos.txt');
       const texto = await readRequirementsInput(file);
+      // Limite de caracteres da entrada de requisitos (configurável no config).
+      assertRequirementTextLength(texto, config.limits.maxRequirementChars ?? DEFAULT_MAX_REQUIREMENT_CHARS);
       const idsExistentes = existingPhaseIds(aiDevDir, config);
       log.info(`Estruturando requisitos de ${file} (ids existentes: ${idsExistentes.join(', ') || 'nenhum'})...`);
       const doc = await structureRequirements(deps().llm, buildStructureInput(texto, idsExistentes));

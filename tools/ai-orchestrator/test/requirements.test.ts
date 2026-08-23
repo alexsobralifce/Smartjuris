@@ -6,7 +6,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseRequirements, structureRequirements, renderRoadmapWithPhases, renderPromptsWithPhases, nextPhaseId, buildStructureInput, renderRequirementsList } from '../src/requirements.js';
+import { parseRequirements, structureRequirements, renderRoadmapWithPhases, renderPromptsWithPhases, nextPhaseId, buildStructureInput, renderRequirementsList, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS } from '../src/requirements.js';
 import { parseRoadmap } from '../src/roadmap.js';
 import { extractPhasePrompts } from '../src/prompts.js';
 import type { LlmClient } from '../src/llm.js';
@@ -180,5 +180,24 @@ describe('nextPhaseId / buildStructureInput / renderRequirementsList', () => {
     const out = renderRequirementsList({ fases: FASES });
     assert.ok(out.includes('1. 5A — Faturamento mensal'));
     assert.ok(out.includes('Critérios de aceite:'));
+  });
+});
+
+describe('assertRequirementTextLength (limite de caracteres)', () => {
+  test('aceita texto dentro do limite', () => {
+    assert.doesNotThrow(() => assertRequirementTextLength('x'.repeat(1000)));
+    assert.doesNotThrow(() => assertRequirementTextLength('x'.repeat(DEFAULT_MAX_REQUIREMENT_CHARS)));
+  });
+
+  test('rejeita texto acima do limite com mensagem clara', () => {
+    assert.throws(
+      () => assertRequirementTextLength('x'.repeat(DEFAULT_MAX_REQUIREMENT_CHARS + 1)),
+      /muito longo|limite|20000/,
+    );
+  });
+
+  test('aceita limite customizado', () => {
+    assert.doesNotThrow(() => assertRequirementTextLength('x'.repeat(500), 1000));
+    assert.throws(() => assertRequirementTextLength('x'.repeat(1500), 1000), /limite: 1000/);
   });
 });

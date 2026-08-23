@@ -26,6 +26,22 @@ import { isValidPhaseId, parsePhaseRow, parseRoadmap } from './roadmap.js';
 
 const REQUIREMENTS_DIR = 'requirements';
 
+/** Limite padrão de caracteres do texto de entrada de requisitos. */
+export const DEFAULT_MAX_REQUIREMENT_CHARS = 20000;
+
+/**
+ * Valida o tamanho do texto de requisitos (linguagem natural). Lança erro claro
+ * com o limite, para o usuário saber por que foi recusado.
+ */
+export function assertRequirementTextLength(texto: string, maxChars: number = DEFAULT_MAX_REQUIREMENT_CHARS): void {
+  if (texto.length > maxChars) {
+    throw new Error(
+      `Texto de requisitos muito longo: ${texto.length} caracteres (limite: ${maxChars}). ` +
+        'Divida em blocos menores ou resuma os requisitos.',
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 1) Estruturação por LLM
 // ---------------------------------------------------------------------------

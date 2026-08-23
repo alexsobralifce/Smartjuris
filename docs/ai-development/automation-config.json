@@ -16,6 +16,7 @@
   },
   "limits": {
     "maxCorrectionAttempts": 4,
+    "maxRequirementChars": 20000,
     "requireTests": true,
     "requireBuild": true,
     "requireDiff": true,

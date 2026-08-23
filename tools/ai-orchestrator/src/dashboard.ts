@@ -12,7 +12,7 @@ import { safeJoin, moduleDir } from './paths.js';
 import { readText } from './io.js';
 import { parseRoadmap } from './roadmap.js';
 import { readLedger, openFindings, type LedgerEntry } from './ledger.js';
-import { structureRequirements, applyRequirements } from './requirements.js';
+import { structureRequirements, applyRequirements, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS } from './requirements.js';
 import type { RequirementPhase } from './contracts.js';
 import type { AutomationConfig } from './contracts.js';
 
@@ -230,6 +230,13 @@ export function startDashboardServer(opts: DashboardServerOptions): string {
         const body = JSON.parse(await readBody(req)) as { texto?: string };
         if (!body.texto?.trim()) {
           sendJson(res, 400, { erro: 'Informe o texto dos requisitos.' });
+          return;
+        }
+        // Limite de caracteres (configurável no automation-config.json).
+        try {
+          assertRequirementTextLength(body.texto, opts.config.limits.maxRequirementChars ?? DEFAULT_MAX_REQUIREMENT_CHARS);
+        } catch (err) {
+          sendJson(res, 400, { erro: err instanceof Error ? err.message : String(err) });
           return;
         }
         const doc = await structureRequirements(opts.llm, body.texto);

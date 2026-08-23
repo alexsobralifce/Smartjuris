@@ -1,0 +1,76 @@
+Instalar e configurar o Playwright para acessar o SmartJuris via navegador automatizado, navegar pelos módulos com dados de demonstração (fakes) e gerar um tutorial visual (markdown com imagens) ensinando a usar o sistema.
+
+NOTA: este requisito é para implementação MANUAL — NÃO deve ser aplicado ao orquestrador nem passar por auditor (conforme solicitado). O documento segue o formato do projeto apenas para consistência e possível reuso futuro.
+
+CONTEXTO ATUAL:
+- O SmartJuris (monorepo pnpm) roda: API Express em http://localhost:3001 (tsx watch) e Web React+Vite em http://localhost:5173 (pnpm dev na raiz sobe ambos).
+- O frontend usa navegação por ESTADO (sidebar, sem react-router): módulos dashboard, agenda, processos, clientes, pecas, validacao, jurimetria, decisoes, financeiro, contratos, crm, base, documentacao, admin — acesso clicando nos itens da sidebar.
+- Já existe seed de demonstração (pnpm db:seed → demoSeed.ts) com dados fakes realistas: admin@smartjuris.com (admin123), user@smartjuris.com (user123) e aline@smartjuris.com; clientes, processos, peças, documentos e usuários de exemplo.
+- Não há hoje nenhuma ferramenta de automação de navegador nem geração de tutorial com imagens no projeto (os testes E2E existentes são via fetch/SSE, sem browser).
+
+OBJETIVO:
+Instalar o Playwright (automação de navegador) em um workspace dedicado do monorepo, acessar o SmartJuris via Chromium automatizado com as credenciais de demonstração, navegar pelos módulos sobre o banco de dados fakes, capturar screenshots de cada tela e gerar um tutorial em markdown (PT-BR) com as imagens embutidas, executável com um único comando.
+
+REQUISITOS FUNCIONAIS:
+
+1. INSTALAÇÃO E CONFIGURAÇÃO DO PLAYWRIGHT
+- Criar um workspace dedicado (ex.: tools/playwright-tutorial) com package.json próprio e dependência dev `playwright`.
+- Instalar o browser Chromium (pnpm exec playwright install chromium) e documentar o comando no README do workspace.
+- Criar playwright.config.ts com: baseURL http://localhost:5173, viewport desktop (ex.: 1440x900), timeout razoável e retries 0 (tutorial, não teste de regressão).
+- Registrar scripts no package.json do workspace (ex.: `capture` e `install:browsers`) e aliases na raiz (ex.: `pnpm tutorial:capture`).
+
+2. ACESSO AO SISTEMA VIA NAVEGADOR
+- O script abre o navegador em http://localhost:5173 (landing) e faz o LOGIN PELA UI (preencher e-mail/senha no formulário real — fiel ao tutorial), com as credenciais de demonstração configuráveis via env (ex.: TUTORIAL_EMAIL/TUTORIAL_SENHA com defaults admin@smartjuris.com/admin123).
+- Após o login, percorre os módulos clicando na SIDEBAR (navegação real do sistema), não por URL.
+- Em cada módulo, aguarda o carregamento (estado estável: textos/elementos-chave visíveis) antes de capturar.
+
+3. DADOS FAKES (DEMONSTRAÇÃO)
+- Garantir que o banco usado pelo tutorial tenha o seed de demonstração aplicado (pnpm db:seed), para que as telas exibam dados realistas (processos, clientes, peças, agenda, financeiro etc.) e não fiquem vazias.
+- Se algum módulo exigir interação para exibir dados (ex.: Gerar Peças), o script deve preencher o formulário com valores fake determinísticos e capturar o resultado.
+- NUNCA usar dados reais de produção (LGPD) — apenas dados fakes do seed.
+
+4. CAPTURA DE SCREENSHOTS
+- Capturar uma imagem por tela/módulo com nome estável e ordenado (ex.: 01-landing.png, 02-login.png, 03-dashboard.png, 04-agenda.png ...) em docs/tutorial/images/.
+- Garantir resolução fixa (viewport 1440x900) e full-page quando fizer sentido (listas/tabelas).
+- Capturar também o login e a landing pública (antes de autenticar).
+- O script deve validar que cada captura foi gerada (arquivo existe e não está vazio).
+
+5. GERAÇÃO DO TUTORIAL
+- Gerar docs/tutorial/README.md (ou TUTORIAL.md) em PT-BR com:
+  - Introdução: o que é o SmartJuris e como acessar (pnpm dev → http://localhost:5173).
+  - Credenciais de demonstração (admin/user) e aviso de dados fakes.
+  - Passo a passo por módulo: instruções curtas de uso + screenshot embutido (link relativo à imagem).
+  - Dicas finais (criar processo, gerar peça, exportar, etc.).
+- As imagens devem ser referenciadas por caminho relativo (ex.: ./images/03-dashboard.png) para funcionar no GitHub/VS Code.
+- O tutorial deve refletir as capturas realmente geradas (o gerador usa a lista de screenshots capturados).
+
+6. EXECUÇÃO REPRODUTÍVEL
+- Comando único (ex.: `pnpm tutorial:capture`) que: (1) verifica/sobe API+Web (ou instrui a subir com pnpm dev), (2) aplica o seed de demonstração, (3) roda o Playwright capturando tudo, (4) gera o tutorial markdown, (5) reporta o caminho e a contagem de imagens.
+- Idempotente: reexecutar sobrescreve as imagens e o tutorial sem duplicar.
+- Documentar no README do workspace: pré-requisitos (Node, pnpm, Postgres, banco seedado), como instalar browsers e como executar.
+
+FORA DO ESCOPO:
+- Não alterar o código de produção do sistema (nenhuma mudança em apps/api ou apps/web além de nada — o tutorial é uma ferramenta externa de captura).
+- Não substituir os testes E2E existentes (fluxoCompleto, gerarSse etc.).
+- Não conectar em ambientes de produção (Railway) nem usar dados reais.
+- Não criar um site/HTML do tutorial — apenas markdown com imagens (pode ser estendido depois).
+
+REQUISITOS DE TESTE (verificação da ferramenta):
+- Teste de que o login com credenciais de demonstração entra no dashboard (elemento do dashboard visível).
+- Teste de que TODOS os módulos da sidebar são visitados e capturados (contagem de screenshots >= nº de módulos + landing + login).
+- Teste de que cada imagem gerada é válida (arquivo > 0 bytes).
+- Teste de que o tutorial markdown referencia apenas imagens existentes (sem links quebrados).
+- Teste de que reexecutar o comando não duplica nem falha (idempotência).
+
+CRITÉRIOS DE ACEITE:
+- `pnpm tutorial:capture` executa de ponta a ponta (com API/Web/banco locais) e gera N screenshots em docs/tutorial/images/ cobrindo: landing, login, dashboard e TODOS os módulos da sidebar com dados fakes visíveis.
+- docs/tutorial/README.md é gerado em PT-BR com passo a passo por módulo e imagens embutidas funcionando (links relativos corretos).
+- As credenciais de demonstração são usadas pelo login automatizado e documentadas no tutorial.
+- Nenhum código de produção é alterado pela ferramenta; nenhum dado real é capturado.
+- O README do workspace documenta instalação (playwright install chromium) e execução.
+
+ANEXO — ROTEIRO DE MÓDULOS (screenshots esperados):
+- 00-landing (pública), 01-login, 02-dashboard, 03-agenda, 04-processos, 05-clientes,
+  06-gerar-pecas (formulário), 07-validacao, 08-jurimetria, 09-decisoes-tribunais,
+  10-financeiro, 11-contratos, 12-crm, 13-base-rag, 14-documentacao, 15-admin-escritorio.
+- (Opcional) 16-operacoes-root (login root) e 17-trocar-senha — se fizer sentido no tutorial.

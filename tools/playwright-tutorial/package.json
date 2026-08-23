@@ -1,0 +1,15 @@
+{
+  "name": "@lexia/playwright-tutorial",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Automação de navegador (Playwright) para capturar screenshots e gerar o tutorial visual do SmartJuris com dados de demonstração.",
+  "scripts": {
+    "capture": "tsx src/capture.ts",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0",
+    "tsx": "^4.19.0"
+  }
+}

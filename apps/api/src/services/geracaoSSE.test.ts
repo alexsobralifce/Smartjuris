@@ -342,3 +342,42 @@ describe('3C — integração SSE', { skip: !dbDisponivel }, () => {
     assert.notEqual(cA.operationId, cB.operationId, 'operações independentes por escritório');
   });
 });
+
+// ===========================================================================
+// Fase 5B — prompt final com jurisprudência ao vivo (bloco rastreável) e
+// fallback best-effort (RAG local) validados no contexto enviado ao modelo.
+// ===========================================================================
+
+describe('5B — prompt final com jurisprudência ao vivo', () => {
+  test('montarPrompt inclui o bloco rastreável com tribunal, relator e processo', async () => {
+    const { montarPrompt } = await import('../services/geracaoSSE.js');
+    const contextoComJurisprudencia = [
+      'chunk do RAG local: tese sobre atraso de entrega',
+      '--- JURISPRUDÊNCIA AO VIVO (separada do RAG local) ---',
+      'JURISPRUDÊNCIAS RELEVANTES (fontes rastreáveis):',
+      '- Atraso na entrega gera dano moral. (Tribunal: stj · Relator: Min. Fulano · Processo: 123 · Data: 2026-01-10)',
+    ].join('\n\n');
+    const payload = { operation: 'STANDARD_PETITION', classification: 'STANDARD' } as any;
+    const prompt = montarPrompt(payload, 'consumidor sofreu atraso', contextoComJurisprudencia, 'STANDARD');
+    assert.ok(prompt.includes('Tribunal: stj'), 'fonte rastreável: tribunal no prompt');
+    assert.ok(prompt.includes('Relator: Min. Fulano'), 'fonte rastreável: relator no prompt');
+    assert.ok(prompt.includes('Processo: 123'), 'fonte rastreável: número do processo no prompt');
+    assert.ok(prompt.includes('exclusivamente nas leis'), 'instrução de fundamentação exclusiva ao contexto');
+    assert.ok(prompt.includes('Não invente precedentes'), 'regra de não inventar jurisprudência');
+  });
+
+  test('geração com stub e includeJurisprudence=false continua só com RAG (sem bloco)', async () => {
+    const req = Object.assign(new EventEmitter(), { user: { id: adminA.id, role: 'admin', escritorioId: adminA.escritorioId } }) as any;
+    const r = respostaSSEFake();
+    await gerarPecaComSSE(req, r.res, {
+      pieceType: 'Contestação', area: 'Cível', dadosCaso: 'caso sem jurisprudência', idempotencyKey: `sse-5b-${suffix}`,
+    }, geradorStub(r.res, r.eventos));
+    const c = r.eventos.find((e) => e.type === 'concluido');
+    assert.ok(c, 'geração concluiu');
+    if (c?.operationId) opIds.push(c.operationId);
+    // includeJurisprudence não informado → busca ao vivo não aciona (bloco vazio),
+    // mas a geração não falha (best-effort): o evento concluido existe.
+    assert.ok(c.modeloUsado, 'modelo usado registrado');
+    assert.ok(!r.eventos.some((e) => e.type === 'erro'), 'sem evento de erro');
+  });
+});

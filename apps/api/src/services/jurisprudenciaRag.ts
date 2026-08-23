@@ -179,40 +179,204 @@ export interface BuscarJurisprudenciaInput {
   log?: (msg: string) => void;
 }
 
+export interface ResultadoJurisprudencia {
+  /** Bloco formatado para anexar ao contexto ('' se não houver jurisprudência). */
+  bloco: string;
+  /** Quantidade de decisões ao vivo usadas (0 se fallback/cache). */
+  decisoesUsadas: number;
+  /** Tribunais de origem das decisões usadas. */
+  tribunais: string[];
+  /** true se veio do cache (sem chamada à API). */
+  fromCache: boolean;
+}
+
+// --- Rate limit por escritório (fase 5C) ---
+
+interface RateLimitEstado {
+  pausadoAte: number;
+  restantes: number | null;
+}
+
+const rateLimitPorEscritorio = new Map<string, RateLimitEstado>();
+
+/** Limiar mínimo de requisições restantes: abaixo disso, pausa buscas ao vivo. */
+const RATE_LIMIT_MIN_REMAINING = 2;
+/** Janela de pausa quando o rate limit está baixo (ms). */
+const RATE_LIMIT_PAUSA_MS = 60 * 1000;
+
+/**
+ * Normaliza o campo `reset` do rate limit para a DURAÇÃO da pausa em ms.
+ * O header X-RateLimit-Reset pode vir em formatos diferentes:
+ *  - relativo em SEGUNDOS (ex.: "60" = pausar 60s) ou MILISSEGUNDOS ("60000");
+ *  - timestamp epoch em segundos (ex.: "1728000000") ou ms;
+ *  - data ISO (ex.: "2026-08-23T12:00:00Z").
+ * Retorna a duração em ms (não o instante absoluto). null se indeterminado.
+ */
+export function normalizarResetMs(reset: string | number | null | undefined): number | null {
+  if (reset == null || String(reset).trim() === '') return null;
+  const raw = String(reset).trim();
+
+  // NÚMERO primeiro: `Date.parse` aceita strings numéricas como datas (ex.:
+  // '60' → 1960-01-01), o que confundiria reset relativo com timestamp.
+  //  - número "pequeno" (< 100k) → RELATIVO em segundos (padrão de headers).
+  //  - 10 dígitos → timestamp epoch em SEGUNDOS → duração até o instante.
+  //  - grande (≥ 11 dígitos) → milissegundos (absoluto) → duração até o instante.
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const num = Number(raw);
+    if (!Number.isNaN(num) && num > 0) {
+      if (num < 100_000) return num * 1000; // relativo em segundos
+      if (num < 100_000_000_000) return Math.max(num * 1000 - Date.now(), 1_000); // epoch seg
+      return Math.max(num - Date.now(), 1_000); // ms absoluto
+    }
+    return null;
+  }
+
+  // Data ISO (ex.: "2026-08-23T12:00:00Z") → duração até o instante.
+  const iso = Date.parse(raw);
+  if (!Number.isNaN(iso)) {
+    return Math.max(iso - Date.now(), 1_000);
+  }
+  return null;
+}
+
+/**
+ * Extrai o status HTTP de um erro, aceitando mensagem com "429" OU objeto com
+ * `status`/`statusCode` (ex.: erro do fetch/axios). Retorna null se não houver.
+ */
+function statusDoErro(err: unknown): number | null {
+  if (err && typeof err === 'object') {
+    const e = err as { status?: unknown; statusCode?: unknown };
+    for (const campo of ['status', 'statusCode'] as const) {
+      const v = e[campo];
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string' && !Number.isNaN(Number(v))) return Number(v);
+    }
+  }
+  return null;
+}
+
+/** true se o erro representa rate limit do provedor (429). */
+export function ehRateLimit(err: unknown): boolean {
+  const status = statusDoErro(err);
+  if (status !== null) return status === 429;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /429|too many requests|rate limit/i.test(msg);
+}
+
+/** Interpreta os headers de rate limit e atualiza o estado do escritório. */
+export function registrarRateLimit(escritorioId: string, rateLimit: { remaining?: string | null; reset?: string | null } | undefined): void {
+  if (!rateLimit) return;
+  const remaining = rateLimit.remaining != null ? Number(rateLimit.remaining) : null;
+  if (remaining != null && !Number.isNaN(remaining) && remaining <= RATE_LIMIT_MIN_REMAINING) {
+    const resetMs = normalizarResetMs(rateLimit.reset);
+    const pausa = resetMs != null
+      ? Math.max(resetMs - Date.now(), 1_000) // até o reset; mínimo 1s
+      : RATE_LIMIT_PAUSA_MS;
+    rateLimitPorEscritorio.set(escritorioId, { pausadoAte: Date.now() + pausa, restantes: remaining });
+  } else {
+    rateLimitPorEscritorio.delete(escritorioId);
+  }
+}
+
+/** true se o escritório está em pausa de rate limit (não chama a API ao vivo). */
+export function rateLimitPausado(escritorioId: string): boolean {
+  const estado = rateLimitPorEscritorio.get(escritorioId);
+  if (!estado) return false;
+  if (Date.now() > estado.pausadoAte) {
+    rateLimitPorEscritorio.delete(escritorioId);
+    return false;
+  }
+  return true;
+}
+
+/** Limpa o estado de rate limit (testes). */
+export function limparRateLimit(): void {
+  rateLimitPorEscritorio.clear();
+}
+
+/** Instrução de fundamentação (fase 5B): vale para RAG local E bloco injetado. */
+export const INSTRUCAO_FUNDAMENTACAO = [
+  'Fundamente todos os pedidos e alegações EXCLUSIVAMENTE nas leis, doutrinas e',
+  'jurisprudências fornecidas no contexto abaixo. NÃO invente precedentes, números',
+  'de processo ou artigos de lei fora do contexto fornecido.',
+].join('\n');
+
+/** Anexa o bloco de jurisprudência ao contexto RAG com separação clara (5B). */
+export function anexarBlocoAoContexto(ragContexto: string, blocoJurisprudencia: string): string {
+  if (!blocoJurisprudencia.trim()) return ragContexto;
+  const rag = ragContexto.trim();
+  return [
+    rag ? rag : '(sem contexto RAG local)',
+    '--- JURISPRUDÊNCIA AO VIVO (separada do RAG local) ---',
+    blocoJurisprudencia.trim(),
+    INSTRUCAO_FUNDAMENTACAO,
+  ].join('\n\n');
+}
+
 /**
  * Busca jurisprudência AO VIVO quando includeJurisprudence=true (e não
- * SECTION_REVIEW). Retorna o bloco formatado, ou '' em qualquer falha
- * (best-effort — a geração continua só com RAG). Nunca lança para fora.
+ * SECTION_REVIEW). Retorna o bloco formatado + rastreabilidade, ou bloco vazio
+ * em qualquer falha (best-effort — a geração continua só com RAG). Nunca lança
+ * para fora e nunca expõe detalhes internos do provedor no retorno.
  */
-export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenciaInput): Promise<string> {
+export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenciaInput): Promise<ResultadoJurisprudencia> {
+  const vazio: ResultadoJurisprudencia = { bloco: '', decisoesUsadas: 0, tribunais: [], fromCache: false };
   if (input.includeJurisprudence !== true || input.sectionReview === true) {
-    return '';
+    return vazio;
   }
   const tribunal = tribunalParaArea(input.area);
   const termos = extrairTermosDeBusca(input.fatos);
-  if (termos.length === 0) return '';
+  if (termos.length === 0) return vazio;
 
-  // 1) Cache por escritório: evita chamada paga repetida dentro do TTL.
+  // 1) CACHE PRIMEIRO: mesmo durante pausa de rate limit, reutiliza resultados
+  //    já disponíveis por escritório (não desperdiça cache válido).
   const cached = cacheGet(input.escritorioId, tribunal, termos);
   if (cached) {
     input.log?.('[jurisprudenciaRag] cache hit — sem chamada à API');
-    return montarBlocoJurisprudencia(cached);
+    return {
+      bloco: montarBlocoJurisprudencia(cached),
+      decisoesUsadas: cached.length,
+      tribunais: [tribunal],
+      fromCache: true,
+    };
   }
 
-  // 2) Busca ao vivo (com fallback best-effort).
+  // Rate limit: SÓ pausa NOVAS buscas ao vivo (cache já foi consultado acima).
+  if (rateLimitPausado(input.escritorioId)) {
+    input.log?.('[jurisprudenciaRag] rate limit baixo — busca ao vivo pausada (fallback RAG)');
+    return vazio;
+  }
+
+  // 2) Busca ao vivo (com fallback best-effort). Erros viram mensagem GENÉRICA
+  //    no log — o retorno nunca carrega detalhes internos do provedor (5D).
   try {
     const buscar = input.searchOverride ?? searchDecisions;
     const query = termos.slice(0, 6).join(' ');
     const resultado = await buscar(tribunal, query, {});
+    // 5C: interpreta headers de rate limit (pausa futuras buscas se baixo).
+    registrarRateLimit(input.escritorioId, resultado.rateLimit);
     const decisoes = resultado.data ?? [];
-    if (decisoes.length === 0) return '';
+    if (decisoes.length === 0) return vazio;
     cacheSet(input.escritorioId, tribunal, termos, decisoes);
     input.log?.(`[jurisprudenciaRag] ${decisoes.length} decisão(ões) de ${tribunal} usada(s) na geração`);
-    return montarBlocoJurisprudencia(decisoes);
+    return {
+      bloco: montarBlocoJurisprudencia(decisoes),
+      decisoesUsadas: decisoes.length,
+      tribunais: [tribunal],
+      fromCache: false,
+    };
   } catch (err) {
-    // Best-effort: sem chave, indisponível, rate limit... segue só com RAG.
-    input.log?.(`[jurisprudenciaRag] busca ao vivo indisponível (fallback RAG): ${err instanceof Error ? err.message : String(err)}`);
-    return '';
+    // 5C: provedor retornou rate limit (429) → registra pausa para as próximas
+    //    buscas ao vivo, mas segue com RAG local (best-effort, nunca falha).
+    if (ehRateLimit(err)) {
+      registrarRateLimit(input.escritorioId, { remaining: '0', reset: undefined });
+      input.log?.('[jurisprudenciaRag] rate limit (429) do provedor — pausa novas buscas ao vivo');
+    } else {
+      // Best-effort: sem chave, indisponível... segue só com RAG.
+      // Mensagem GENÉRICA no log; detalhes internos NÃO são repassados (5D).
+      input.log?.('[jurisprudenciaRag] busca ao vivo indisponível — fallback para RAG local');
+    }
+    return vazio;
   }
 }
 

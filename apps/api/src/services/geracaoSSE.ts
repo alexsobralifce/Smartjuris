@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import type { ClassifierOutput } from './classifier.js';
 import { ErroGeracaoIA } from './analiseDocumental.js';
-import { buscarJurisprudenciaSeNecessario } from './jurisprudenciaRag.js';
+import { buscarJurisprudenciaSeNecessario, anexarBlocoAoContexto } from './jurisprudenciaRag.js';
 
 // ---------------------------------------------------------------------------
 // Eventos SSE (tipados e estáveis)
@@ -67,8 +67,9 @@ function modeloPorTier(tier: 'FLASH' | 'PRO'): string {
  *  de saída solicitado (outputSize): SHORT = resumo/requerimento objetivo,
  *  STANDARD = peça completa, COMPLETE = peça extensa. Mantém coerência com a
  *  estimativa/reserva da operação (o orquestrador reserva créditos pelo volume
- *  classificado; o max_tokens da chamada reflete o outputSize). */
-function montarPrompt(payload: ClassifierOutput, dadosCaso: string, contexto: string, outputSize?: 'SHORT' | 'STANDARD' | 'COMPLETE'): string {
+ *  classificado; o max_tokens da chamada reflete o outputSize). Exportado para
+ *  testes validarem o prompt final (inclui o bloco de jurisprudência). */
+export function montarPrompt(payload: ClassifierOutput, dadosCaso: string, contexto: string, outputSize?: 'SHORT' | 'STANDARD' | 'COMPLETE'): string {
   const diretrizExtensao = outputSize === 'SHORT'
     ? 'Redija uma peça CURTA e objetiva (resumo + requerimento), sem alongar fundamentos.'
     : outputSize === 'COMPLETE'
@@ -259,10 +260,11 @@ export async function gerarPecaComSSE(
       // validados; incluído apenas se includeJurisprudence !== false).
       const contexto = await buscarContextoRag(req, escritorioId, payload, input.dadosCaso ?? '', input.processoId ?? null, input.area, input.includeJurisprudence, res);
 
-      // Fase 5A — jurisprudência AO VIVO (best-effort): quando includeJurisprudence
-      // está ativo e não é SECTION_REVIEW, consulta a Jurisprudências.ai e anexa
-      // o bloco formatado (fonte rastreável) ao contexto que fundamenta a redação.
-      // Falhas (sem chave/indisponível/rate limit) NUNCA derrubam a geração.
+      // Fases 5A/5B/5C/5D — jurisprudência AO VIVO (best-effort): quando
+      // includeJurisprudence está ativo e não é SECTION_REVIEW, consulta a
+      // Jurisprudências.ai, respeita cache/rate limit por escritório, e anexa o
+      // bloco formatado (fonte rastreável) ao contexto com separação clara do
+      // RAG local. Falhas NUNCA derrubam a geração nem expõem detalhes internos.
       const jurisprudenciaAoVivo = await buscarJurisprudenciaSeNecessario({
         includeJurisprudence: input.includeJurisprudence,
         sectionReview: payload.operation === 'SECTION_REVIEW',
@@ -271,9 +273,10 @@ export async function gerarPecaComSSE(
         escritorioId,
         log: (msg: string) => console.log(msg),
       });
-      const contextoFinal = jurisprudenciaAoVivo
-        ? `${contexto}\n\n${jurisprudenciaAoVivo}`.trim()
-        : contexto;
+      if (jurisprudenciaAoVivo.decisoesUsadas > 0) {
+        console.log(`[jurisprudenciaRag] rastreabilidade: ${jurisprudenciaAoVivo.decisoesUsadas} decisão(ões) de ${jurisprudenciaAoVivo.tribunais.join(', ')} usadas na geração (${jurisprudenciaAoVivo.fromCache ? 'cache' : 'ao vivo'})`);
+      }
+      const contextoFinal = anexarBlocoAoContexto(contexto, jurisprudenciaAoVivo.bloco);
 
       emitir(res, { type: 'progresso', progresso: 50, label: `Enviando para o modelo ${modeloPorTier(modelTier)}...` });
 

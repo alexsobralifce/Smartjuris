@@ -66,6 +66,14 @@ pnpm ai:req --file docs/ai-development/requirements/novos.txt
 pnpm ai:req --file docs/ai-development/requirements/novos.txt --apply
 ```
 
+**Formatos de entrada suportados** (o orquestrador escolhe o loader pela extensão,
+no estilo do LangChain — todos viram o mesmo contrato de fases):
+
+| Extensão | Formato | Como é tratado |
+|---|---|---|
+| `.txt` / `.md` | Linguagem natural | Estruturado em fases via DeepSeek Flash |
+| `.json` | Já estruturado (`{"fases": [...]}` ou array direto) | Validado pelo contrato Zod |
+
 **Pela interface (recomendado):** abra `pnpm ai:dashboard`, seção **"Novos
 requisitos"** → cole o texto → "1 · Estruturar em fases" → revise → "2 · Aplicar
 no roadmap". Depois é só rodar `pnpm ai:run --phase <ID>`.

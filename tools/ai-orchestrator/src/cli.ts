@@ -28,7 +28,8 @@ import { runPhase, runAutonomousChain } from './run.js';
 import { reAuditRun } from './auditRun.js';
 import { printStatus, printRelatorio, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
 import { startDashboardServer } from './dashboard.js';
-import { structureRequirements, applyRequirements, readRequirementsInput, renderRequirementsList, existingPhaseIds, buildStructureInput, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS } from './requirements.js';
+import { applyRequirements, renderRequirementsList, existingPhaseIds, DEFAULT_MAX_REQUIREMENT_CHARS } from './requirements.js';
+import { loadRequirementsFromFile } from './loaders.js';
 import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
@@ -170,18 +171,18 @@ async function main(): Promise<void> {
       break;
     }
     case 'req': {
-      // Estrutura requisitos em linguagem natural → fases enumeradas (DeepSeek Flash).
-      // Resolve o caminho do arquivo contra a RAÍZ do repositório (não o cwd do pacote),
-      // mantendo compatibilidade com o caminho default dentro do aiDevDir.
+      // Entrada de requisitos via LOADERS (estilo LangChain): o loader é
+      // escolhido pela extensão do arquivo e todos retornam o mesmo contrato.
       const file = opts.file
         ? (opts.file.startsWith('/') ? opts.file : join(repoRoot, opts.file))
         : join(aiDevDir, 'requirements', 'novos.txt');
-      const texto = await readRequirementsInput(file);
-      // Limite de caracteres da entrada de requisitos (configurável no config).
-      assertRequirementTextLength(texto, config.limits.maxRequirementChars ?? DEFAULT_MAX_REQUIREMENT_CHARS);
       const idsExistentes = existingPhaseIds(aiDevDir, config);
-      log.info(`Estruturando requisitos de ${file} (ids existentes: ${idsExistentes.join(', ') || 'nenhum'})...`);
-      const doc = await structureRequirements(deps().llm, buildStructureInput(texto, idsExistentes));
+      log.info(`Carregando requisitos de ${file} (loader por extensão; ids existentes: ${idsExistentes.join(', ') || 'nenhum'})...`);
+      const doc = await loadRequirementsFromFile(file, {
+        llm: deps().llm,
+        existingIds: idsExistentes,
+        maxChars: config.limits.maxRequirementChars ?? DEFAULT_MAX_REQUIREMENT_CHARS,
+      });
       console.log(renderRequirementsList(doc));
       if (!flags.includes('apply')) {
         log.info('Requisitos estruturados (não aplicados). Use --apply para gravar no roadmap e prompts.');

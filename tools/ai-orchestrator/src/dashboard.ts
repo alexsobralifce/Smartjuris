@@ -53,6 +53,7 @@ export interface Snapshot {
     revisor: string;
     tetoCorrecoes: number;
     preflight: string;
+    maxRequirementChars: number;
   };
   totais: {
     custoUsd: number;
@@ -155,6 +156,7 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
       revisor: config.reviewer.model,
       tetoCorrecoes: config.limits.maxCorrectionAttempts,
       preflight: config.preflight?.mode ?? 'collect-all',
+      maxRequirementChars: config.limits.maxRequirementChars ?? 20000,
     },
     totais: {
       custoUsd: custoTotal,

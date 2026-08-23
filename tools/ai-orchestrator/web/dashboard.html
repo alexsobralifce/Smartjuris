@@ -108,7 +108,8 @@
 
   <h2 class="section-title">Novos requisitos</h2>
   <p class="sub">Cole os requisitos em linguagem natural. O orquestrador estrutura em fases enumeradas (DeepSeek Flash) para você revisar e aplicar no roadmap. Limite: <span id="reqMax"></span> caracteres.</p>
-  <textarea id="reqTexto" rows="6" maxlength="20000" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
+  <textarea id="reqTexto" rows="6" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
+  <div class="sub" id="reqCounter" style="text-align:right; margin-top:-6px;"></div>
   <div class="req-actions">
     <button id="btnEstruturar">1 · Estruturar em fases</button>
     <button id="btnAplicar" class="primary" disabled>2 · Aplicar no roadmap</button>
@@ -153,6 +154,11 @@ function render(s) {
   $('cfgReviewer').textContent = s.config.revisor;
   $('cfgTeto').textContent = s.config.tetoCorrecoes;
   $('cfgPreflight').textContent = s.config.preflight;
+  // Limite de caracteres vem do backend (configurável no automation-config.json).
+  const reqMax = s.config.maxRequirementChars || 20000;
+  $('reqMax').textContent = reqMax.toLocaleString('pt-BR');
+  $('reqTexto').maxLength = reqMax;
+  updateReqCounter();
 
   const t = s.totais;
   $('cards').innerHTML = `
@@ -203,9 +209,13 @@ setInterval(refresh, 3000);
 
 // --- Entrada de requisitos (estruturação + aplicação) ---
 let fasesEstruturadas = null;
-const REQ_MAX = 20000;
-$('reqMax').textContent = REQ_MAX.toLocaleString('pt-BR');
-$('reqTexto').maxLength = REQ_MAX;
+let REQ_MAX = 20000;
+
+function updateReqCounter() {
+  const usado = $('reqTexto').value.length;
+  $('reqCounter').textContent = `${usado.toLocaleString('pt-BR')} / ${REQ_MAX.toLocaleString('pt-BR')}`;
+}
+$('reqTexto').addEventListener('input', updateReqCounter);
 
 function renderFases(fases) {
   const box = $('reqResultado');

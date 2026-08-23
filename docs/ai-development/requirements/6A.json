@@ -1,0 +1,19 @@
+{
+  "id": "6A",
+  "titulo": "Rastreabilidade persistida da busca ao vivo de jurisprudência",
+  "descricao": "Persistir, para cada geração de peça que aciona (ou ignora) a busca de jurisprudência ao vivo, um registro de auditoria com metadados — escritório, usuário, operação, tribunal(ais), termos de busca, número de decisões usadas, origem (ao-vivo/cache/pausa/falha/sem-chave), rate limit restante observado e timestamp — em app_logs ou tabela dedicada, sem persistir conteúdo de decisões nem dados sensíveis.",
+  "dependencias": [
+    "5D"
+  ],
+  "escopo": "Criar função de registro persistente de rastreabilidade chamada no fluxo de geração (geracaoSSE) após buscarJurisprudenciaSeNecessario, capturando os metadados do ResultadoJurisprudencia (decisoesUsadas, tribunais, fromCache) e do estado (pausa de rate limit, falha, sem chave, sem termos, zero resultados). Gravar apenas metadados (tenancy e LGPD).",
+  "foraDoEscopo": "Não alterar regras de negócio de cobrança nem o fluxo best-effort; não persistir o conteúdo das decisões nem os fatos do caso; não mudar o formato do log [jurisprudenciaRag] existente.",
+  "testesObrigatorios": [
+    "Teste de que a rastreabilidade é persistida com metadados corretos (origem ao-vivo/cache, número de decisões, tribunal, termos) após geração com includeJurisprudence=true",
+    "Teste de que nenhum conteúdo de decisão nem dado sensível é persistido"
+  ],
+  "criteriosAceite": [
+    "Após gerar peça com includeJurisprudence=true, existe registro persistente de auditoria com origem (ao-vivo/cache), número de decisões usadas e tribunal consultado",
+    "O registro não contém conteúdo de decisões nem dados sensíveis do caso"
+  ],
+  "_hash": "cefbb08b7a69"
+}

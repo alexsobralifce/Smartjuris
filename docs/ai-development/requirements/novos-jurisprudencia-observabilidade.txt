@@ -1,0 +1,61 @@
+Rastreabilidade, observabilidade e robustez da busca de jurisprudência ao vivo na geração de peças.
+
+CONTEXTO ATUAL:
+- A geração de peças já integra a Jurisprudências.ai Live API ao vivo (fases 5A-5D): quando includeJurisprudence=true (padrão do frontend) e a operação não é SECTION_REVIEW, o orquestrador chama searchDecisions com tribunal mapeado da área canônica e termos extraídos dos fatos, cacheia por escritório em memória (TTL 1h), respeita rate limit por escritório (pausa novas buscas ao vivo quando restam <= 2 requisições) e injeta um bloco formatado com fonte rastreável no prompt de fundamentação.
+- Verificação real confirmou o fluxo funcionando (listCourts retornou 16 tribunais; searchDecisions retornou decisões; o bloco entra no montarPrompt), mas expôs lacunas de operação:
+  (a) a rastreabilidade é logada apenas no stdout ([jurisprudenciaRag] rastreabilidade: ...) e NÃO é persistida — não há como auditar depois quais peças usaram jurisprudência ao vivo, de quais tribunais, e se veio de cache ou ao vivo;
+  (b) a política de rate limit (limiar mínimo de requisições restantes e duração da pausa) é fixa no código — não é configurável por ambiente nem observável (não se sabe quando e até quando um escritório está pausado);
+  (c) o fallback é silencioso — quando a busca ao vivo falha, está pausada ou sem chave, a peça sai apenas com RAG local sem qualquer aviso ao usuário nem metadado na operação;
+  (d) o cache de decisões é um Map em memória do processo — é perdido a cada restart da API e não é compartilhado entre instâncias, mesmo havendo Redis disponível no ambiente (docker-compose);
+  (e) não há endpoint nem métricas que indiquem a saúde da integração (chamadas feitas, restantes no rate limit, cache hits, pausas ativas, falhas recentes).
+
+OBJETIVO:
+Tornar a integração de jurisprudência ao vivo observável e auditável: persistir a rastreabilidade de cada geração, expor telemetria e estado da integração no dashboard/admin, tornar a política de rate limit configurável por ambiente, avisar o usuário (e registrar na operação) quando a peça sair sem jurisprudência ao vivo, e migrar o cache para o Redis com TTL por escritório — sem mudar regras de negócio de cobrança nem o comportamento best-effort (a geração nunca falha por causa da integração).
+
+REQUISITOS FUNCIONAIS:
+
+1. RASTREABILIDADE PERSISTIDA
+- Registrar, para cada geração de peça que aciona a busca ao vivo (ou a ignora por condição), um registro persistente de auditoria (app_logs ou tabela dedicada) com metadados: escritório, usuário, operação, tribunal(ais) consultado(s), termos de busca, número de decisões usadas, origem (ao-vivo/cache/pausa/falha/sem-chave), rate limit restante observado e timestamp.
+- Não persistir o conteúdo das decisões nem dados sensíveis do caso — apenas metadados (tenancy e LGPD).
+
+2. VISIBILIDADE DO FALLBACK NA PEÇA
+- Quando includeJurisprudence=true mas a busca não produz bloco (falha do provedor, pausa de rate limit, sem chave, sem termos extraídos ou zero resultados), retornar aviso estruturado no resultado da operação (ex.: campo jurisprudenciaStatus/jurisprudenciaAvisos no fluxo SSE e/ou metadados da peça) para o frontend exibir (ex.: "peça gerada sem jurisprudência ao vivo — somente RAG local", com o motivo).
+- Quando o bloco vier do cache, informar a origem 'cache' na rastreabilidade e nos avisos.
+
+3. POLÍTICA DE RATE LIMIT CONFIGURÁVEL E OBSERVÁVEL
+- Tornar configuráveis via env (ex.: JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING e JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS) o limiar mínimo de requisições restantes e a duração da pausa, com os valores atuais como default.
+- Expor o estado observável por escritório: pausado ou não, até quando, e motivo (header de rate limit baixo ou resposta 429 do provedor), para consulta por admin/dashboard.
+- Manter o comportamento best-effort: pausa nunca bloqueia a geração (fallback para RAG local).
+
+4. CACHE PERSISTENTE (REDIS)
+- Migrar o cache de decisões por escritório de memória (Map) para Redis com TTL de 1 hora e chave escopada por (escritório + tribunal + termos normalizados), com fallback para o cache em memória quando o Redis estiver indisponível (a geração nunca quebra).
+- Garantir isolamento por escritório nas chaves e expiração natural via TTL.
+
+5. TELEMETRIA E SAÚDE DA INTEGRAÇÃO
+- Endpoint de telemetria/status (acesso admin/root ou consumido pelo dashboard do orquestrador) que informe: total de chamadas ao vivo, cache hits, pausas ativas por escritório, rate limit restante da última chamada e falhas recentes — sem expor dados sensíveis.
+- Registrar métrica de latência da busca ao vivo (para monitorar degradação do provedor).
+
+6. ACESSO AO PORTAL JURISPRUDÊNCIAS.AI
+- Disponibilizar na interface (módulo Decisões & Tribunais e/ou painel admin do escritório) um link/atalho "Acessar Jurisprudências.ai" que abra https://jurisprudencias.ai/ em nova aba — onde o escritório gerencia a conta, chave, planos e rate limit do provedor.
+- Tornar a URL base da API configurável por ambiente (ex.: JURISPRUDENCIAS_API_URL) com default https://jurisprudencias.ai/api/v1, usada por listCourts/searchDecisions/lookupDecision — sem alterar o contrato dos endpoints nem expor a chave na interface.
+
+REQUISITOS DE TESTE:
+
+- Teste de que a rastreabilidade é persistida com metadados corretos (origem ao-vivo/cache, número de decisões, tribunal, termos) após geração com includeJurisprudence=true.
+- Teste de que o fallback (API indisponível / pausa de rate limit / sem chave / zero resultados) produz aviso estruturado na operação e NÃO quebra a geração.
+- Teste de que a política de rate limit respeita os novos envs configuráveis (limiar e duração da pausa).
+- Teste de cache via Redis: segunda geração idêntica usa cache (zero chamadas à API), com isolamento por escritório; fallback para memória quando o Redis está indisponível.
+- Teste do endpoint de telemetria: contadores e estado de pausa corretos, sem vazamento de dados sensíveis.
+- Teste de que a URL base da API é lida do env com default correto e usada pelas funções de consulta.
+- Teste de que o link do portal é exposto sem vazar a chave de API.
+- Suíte existente de jurisprudência/geração (jurisprudenciaRag.test.ts, geracaoSSE) permanece verde, sem regressão.
+
+CRITÉRIOS DE ACEITE:
+
+- Após gerar peça com includeJurisprudence=true, existe registro persistente de auditoria com origem (ao-vivo/cache), número de decisões usadas e tribunal consultado.
+- Quando a busca ao vivo não produz bloco, a operação/peça carrega aviso visível ao usuário com o motivo; a geração nunca falha.
+- Limiar e duração da pausa de rate limit são alteráveis via env, sem mudança de código.
+- O cache sobrevive a restart da API (Redis) e é isolado por escritório.
+- Endpoint de telemetria reporta chamadas ao vivo, cache hits, pausas ativas e rate limit restante, sem dados sensíveis.
+- O usuário consegue acessar o portal Jurisprudências.ai a partir do SmartJuris (link em nova aba); a URL base da API é configurável via env e a chave nunca aparece na interface.
+- Suíte de custo/jurisprudência/geração permanece verde.

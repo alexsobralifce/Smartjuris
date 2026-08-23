@@ -784,6 +784,228 @@ Critérios de aceite (avaliar APENAS estes, sem criar novos):
 
 Responda somente no formato JSON do contrato de auditoria.
 ```
+
+# 6A — Rastreabilidade persistida da busca ao vivo de jurisprudência
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 6A — Rastreabilidade persistida da busca ao vivo de jurisprudência.
+
+Persistir, para cada geração de peça que aciona (ou ignora) a busca de jurisprudência ao vivo, um registro de auditoria com metadados — escritório, usuário, operação, tribunal(ais), termos de busca, número de decisões usadas, origem (ao-vivo/cache/pausa/falha/sem-chave), rate limit restante observado e timestamp — em app_logs ou tabela dedicada, sem persistir conteúdo de decisões nem dados sensíveis.
+
+Escopo:
+Criar função de registro persistente de rastreabilidade chamada no fluxo de geração (geracaoSSE) após buscarJurisprudenciaSeNecessario, capturando os metadados do ResultadoJurisprudencia (decisoesUsadas, tribunais, fromCache) e do estado (pausa de rate limit, falha, sem chave, sem termos, zero resultados). Gravar apenas metadados (tenancy e LGPD).
+
+Fora do escopo:
+Não alterar regras de negócio de cobrança nem o fluxo best-effort; não persistir o conteúdo das decisões nem os fatos do caso; não mudar o formato do log [jurisprudenciaRag] existente.
+
+Testes obrigatórios:
+- Teste de que a rastreabilidade é persistida com metadados corretos (origem ao-vivo/cache, número de decisões, tribunal, termos) após geração com includeJurisprudence=true
+- Teste de que nenhum conteúdo de decisão nem dado sensível é persistido
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 6A — Rastreabilidade persistida da busca ao vivo de jurisprudência.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Após gerar peça com includeJurisprudence=true, existe registro persistente de auditoria com origem (ao-vivo/cache), número de decisões usadas e tribunal consultado
+- O registro não contém conteúdo de decisões nem dados sensíveis do caso
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+# 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo.
+
+Retornar aviso estruturado no resultado da operação quando includeJurisprudence=true mas a busca ao vivo não produz bloco (falha do provedor, pausa de rate limit, sem chave, sem termos ou zero resultados), com o motivo, para o frontend exibir via SSE e para os metadados da peça registrarem o estado; quando o bloco vier do cache, informar origem 'cache'.
+
+Escopo:
+Criar campo estruturado (ex.: jurisprudenciaStatus/jurisprudenciaAvisos) no fluxo SSE e/ou metadados da peça com o motivo (falha do provedor, pausa de rate limit, sem chave, sem termos, zero resultados, cache). Transmitir o aviso nos eventos SSE da geração e persistir/expor nos metadados da peça sem quebrar o contrato de geração existente.
+
+Fora do escopo:
+Não alterar o frontend (apenas preparar o contrato de resposta); não mudar a formatação do bloco de fundamentação quando a busca tem sucesso; não alterar os eventos SSE já existentes (apenas adicionar campos).
+
+Testes obrigatórios:
+- Teste que fallback por API indisponível produz aviso estruturado na operação e não quebra a geração
+- Teste que fallback por pausa de rate limit produz aviso com motivo 'rate limit'
+- Teste que fallback por sem chave / zero resultados / sem termos produz aviso correspondente
+- Teste que quando o bloco vem do cache o aviso/rastreabilidade indica origem 'cache'
+- Teste que a suíte geracaoSSE existente permanece verde
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Quando a busca ao vivo não produz bloco, a operação/peça carrega aviso visível ao usuário com o motivo
+- A geração nunca falha por ausência de jurisprudência ao vivo
+- Não há regressão no fluxo SSE existente
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+# 6C — Política de rate limit configurável e observável
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 6C — Política de rate limit configurável e observável.
+
+Tornar configuráveis via env (ex.: JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING e JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS) o limiar mínimo de requisições restantes e a duração da pausa da busca ao vivo, com os valores atuais como default, e expor o estado observável por escritório (pausado ou não, até quando, motivo: header baixo ou resposta 429), mantendo o comportamento best-effort.
+
+Escopo:
+Ler limiar e duração da pausa de envs com default (2 e 60000ms). Expor função/estado observável de pausa por escritório (motivo e expiração) para consumo por admin/dashboard. Registrar motivo da pausa na rastreabilidade.
+
+Fora do escopo:
+Não alterar regras de negócio de cobrança; não bloquear a geração por causa do rate limit (best-effort permanece).
+
+Testes obrigatórios:
+- Teste de que a política respeita os novos envs configuráveis (limiar e duração da pausa)
+- Teste de que o estado observável da pausa expõe motivo e expiração
+- Teste de que a pausa não bloqueia a geração (fallback RAG)
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 6C — Política de rate limit configurável e observável.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Limiar e duração da pausa de rate limit são alteráveis via env, sem mudança de código
+- O estado de pausa por escritório é consultável (até quando e motivo)
+- A geração nunca falha por causa do rate limit
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+# 6D — Cache persistente de decisões via Redis com fallback em memória
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 6D — Cache persistente de decisões via Redis com fallback em memória.
+
+Migrar o cache de decisões de jurisprudência por escritório de memória (Map) para Redis com TTL de 1 hora e chave escopada por (escritório + tribunal + termos normalizados), com fallback para o cache em memória quando o Redis estiver indisponível, garantindo isolamento por escritório e que a geração nunca quebra.
+
+Escopo:
+Implementar leitura/escrita do cache via Redis (cliente existente no ambiente) com chaves escopadas por escritório e TTL 1h; fallback transparente para o Map em memória quando o Redis falha ou não está configurado; manter as funções cacheGet/cacheSet/cacheSize com a mesma semântica.
+
+Fora do escopo:
+Não alterar a lógica de negócio da geração; não mudar o TTL default; não persistir conteúdo de decisões em banco relacional.
+
+Testes obrigatórios:
+- Teste de que segunda geração idêntica usa cache Redis (zero chamadas à API)
+- Teste de que o cache Redis é isolado por escritório (mesmos termos/tribunal para escritórios diferentes geram chaves diferentes)
+- Teste de que quando Redis está indisponível o fallback para memória funciona e a geração não quebra
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 6D — Cache persistente de decisões via Redis com fallback em memória.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- O cache sobrevive a restart da API (Redis) e é isolado por escritório
+- A geração nunca falha por indisponibilidade do Redis
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+# 6E — Endpoint de telemetria e saúde da integração de jurisprudência
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 6E — Endpoint de telemetria e saúde da integração de jurisprudência.
+
+Criar endpoint de telemetria/status (acesso admin/root ou consumido pelo dashboard) que reporte total de chamadas ao vivo, cache hits (Redis/memória), pausas ativas por escritório, rate limit restante da última chamada, falhas recentes e métrica de latência da busca ao vivo, sem expor dados sensíveis.
+
+Escopo:
+Manter contadores em memória (chamadas ao vivo, cache hits por origem, falhas, latência média/última) e expor endpoint JSON que agregue estado de pausa (6C) e cache (6D). Garantir que o endpoint não exponha termos, decisões, chaves de API nem dados sensíveis do escritório.
+
+Fora do escopo:
+Não alterar a lógica de negócio da geração; não implementar autenticação/roles do dashboard (consumir as existentes); não persistir telemetria em banco (apenas expor estado em memória/contadores).
+
+Testes obrigatórios:
+- Teste que o endpoint retorna total de chamadas ao vivo, cache hits, pausas ativas e rate limit restante
+- Teste que o endpoint não vaza dados sensíveis (termos, decisões, chaves, dados do escritório)
+- Teste que a latência da busca ao vivo é registrada e exposta
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 6E — Endpoint de telemetria e saúde da integração de jurisprudência.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Endpoint de telemetria reporta chamadas ao vivo, cache hits, pausas ativas e rate limit restante, sem dados sensíveis
+- A métrica de latência permite monitorar degradação do provedor
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 6F — Acesso ao portal Jurisprudências.ai e URL da API configurável
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 6F — Acesso ao portal Jurisprudências.ai e URL da API configurável.
+
+Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/) a partir do SmartJuris — onde o escritório gerencia a conta, chave, planos e rate limit — e tornar a URL base da API configurável por ambiente (ex.: staging/sandbox do provedor), mantendo o default atual.
+
+Escopo:
+Adicionar link/atalho 'Acessar Jurisprudências.ai' na interface (módulo Decisões & Tribunais e/ou painel admin do escritório) abrindo https://jurisprudencias.ai/ em nova aba, junto à área de consulta de jurisprudência. Tornar a URL base da API lida de env (ex.: JURISPRUDENCIAS_API_URL) com default https://jurisprudencias.ai/api/v1, usada por listCourts/searchDecisions/lookupDecision. Manter a chave JURISPRUDENCIAS_API_KEY como hoje.
+
+Fora do escopo:
+Não implementar autenticação/SSO com o portal; não alterar o contrato dos endpoints da API existentes; não mudar regras de negócio de cobrança; não expor a chave de API na interface.
+
+Testes obrigatórios:
+- Teste de que a URL base da API é lida do env com default correto e usada pelas funções de consulta
+- Teste de que a função que expõe o link do portal retorna https://jurisprudencias.ai/ sem vazar a chave
+- Teste de que a suíte existente de jurisprudência (jurisprudencias/jurisprudenciaRag) permanece verde com o default
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 6F — Acesso ao portal Jurisprudências.ai e URL da API configurável.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- O usuário consegue acessar o portal Jurisprudências.ai a partir do SmartJuris (link em nova aba)
+- A URL base da API é configurável via env sem mudança de código
+- A chave de API não é exposta na interface
+
+Responda somente no formato JSON do contrato de auditoria.
+```
 # Formato de passagem para o Terra
 
 ```text

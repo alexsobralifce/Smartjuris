@@ -72,6 +72,12 @@ migrations validadas, quando aplicável
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 6A | Rastreabilidade persistida da busca ao vivo de jurisprudência | 5D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6B | Aviso estruturado quando a peça sai sem jurisprudência ao vivo | 5A, 5D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6C | Política de rate limit configurável e observável | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6D | Cache persistente de decisões via Redis com fallback em memória | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6E | Endpoint de telemetria e saúde da integração de jurisprudência | 6C, 6D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6F | Acesso ao portal Jurisprudências.ai e URL da API configurável | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -647,10 +653,99 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 
 - Telemetria do run/operação registra cost_cents_reserved com valores fracionários
 - O formato permanece compatível com leitores que esperam número (inteiro ou decimal)
+
+### 6A — Rastreabilidade persistida da busca ao vivo de jurisprudência
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5D aprovada(s).
+
+**Objetivo:**
+
+Persistir, para cada geração de peça que aciona (ou ignora) a busca de jurisprudência ao vivo, um registro de auditoria com metadados — escritório, usuário, operação, tribunal(ais), termos de busca, número de decisões usadas, origem (ao-vivo/cache/pausa/falha/sem-chave), rate limit restante observado e timestamp — em app_logs ou tabela dedicada, sem persistir conteúdo de decisões nem dados sensíveis.
+
+**Critérios de aceite:**
+
+- Após gerar peça com includeJurisprudence=true, existe registro persistente de auditoria com origem (ao-vivo/cache), número de decisões usadas e tribunal consultado
+- O registro não contém conteúdo de decisões nem dados sensíveis do caso
+### 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5A, 5D aprovada(s).
+
+**Objetivo:**
+
+Retornar aviso estruturado no resultado da operação quando includeJurisprudence=true mas a busca ao vivo não produz bloco (falha do provedor, pausa de rate limit, sem chave, sem termos ou zero resultados), com o motivo, para o frontend exibir via SSE e para os metadados da peça registrarem o estado; quando o bloco vier do cache, informar origem 'cache'.
+
+**Critérios de aceite:**
+
+- Quando a busca ao vivo não produz bloco, a operação/peça carrega aviso visível ao usuário com o motivo
+- A geração nunca falha por ausência de jurisprudência ao vivo
+- Não há regressão no fluxo SSE existente
+### 6C — Política de rate limit configurável e observável
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5C aprovada(s).
+
+**Objetivo:**
+
+Tornar configuráveis via env (ex.: JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING e JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS) o limiar mínimo de requisições restantes e a duração da pausa da busca ao vivo, com os valores atuais como default, e expor o estado observável por escritório (pausado ou não, até quando, motivo: header baixo ou resposta 429), mantendo o comportamento best-effort.
+
+**Critérios de aceite:**
+
+- Limiar e duração da pausa de rate limit são alteráveis via env, sem mudança de código
+- O estado de pausa por escritório é consultável (até quando e motivo)
+- A geração nunca falha por causa do rate limit
+### 6D — Cache persistente de decisões via Redis com fallback em memória
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5C aprovada(s).
+
+**Objetivo:**
+
+Migrar o cache de decisões de jurisprudência por escritório de memória (Map) para Redis com TTL de 1 hora e chave escopada por (escritório + tribunal + termos normalizados), com fallback para o cache em memória quando o Redis estiver indisponível, garantindo isolamento por escritório e que a geração nunca quebra.
+
+**Critérios de aceite:**
+
+- O cache sobrevive a restart da API (Redis) e é isolado por escritório
+- A geração nunca falha por indisponibilidade do Redis
+### 6E — Endpoint de telemetria e saúde da integração de jurisprudência
+
+**Estado:** `PLANNED`
+
+**Dependência:** 6C, 6D aprovada(s).
+
+**Objetivo:**
+
+Criar endpoint de telemetria/status (acesso admin/root ou consumido pelo dashboard) que reporte total de chamadas ao vivo, cache hits (Redis/memória), pausas ativas por escritório, rate limit restante da última chamada, falhas recentes e métrica de latência da busca ao vivo, sem expor dados sensíveis.
+
+**Critérios de aceite:**
+
+- Endpoint de telemetria reporta chamadas ao vivo, cache hits, pausas ativas e rate limit restante, sem dados sensíveis
+- A métrica de latência permite monitorar degradação do provedor
 - Resultados de busca não ficam persistidos como dados sensíveis
 - Correções exigidas:
 - Observações:
 ```
+
+### 6F — Acesso ao portal Jurisprudências.ai e URL da API configurável
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5A aprovada(s).
+
+**Objetivo:**
+
+Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/) a partir do SmartJuris — onde o escritório gerencia a conta, chave, planos e rate limit — e tornar a URL base da API configurável por ambiente (ex.: staging/sandbox do provedor), mantendo o default atual.
+
+**Critérios de aceite:**
+
+- O usuário consegue acessar o portal Jurisprudências.ai a partir do SmartJuris (link em nova aba)
+- A URL base da API é configurável via env sem mudança de código
+- A chave de API não é exposta na interface
 
 ## Histórico de auditoria
 

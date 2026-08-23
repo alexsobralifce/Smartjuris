@@ -1,0 +1,21 @@
+{
+  "id": "6F",
+  "titulo": "Acesso ao portal Jurisprudências.ai e URL da API configurável",
+  "descricao": "Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/) a partir do SmartJuris — onde o escritório gerencia a conta, chave, planos e rate limit — e tornar a URL base da API configurável por ambiente (ex.: staging/sandbox do provedor), mantendo o default atual.",
+  "dependencias": [
+    "5A"
+  ],
+  "escopo": "Adicionar link/atalho 'Acessar Jurisprudências.ai' na interface (módulo Decisões & Tribunais e/ou painel admin do escritório) abrindo https://jurisprudencias.ai/ em nova aba, junto à área de consulta de jurisprudência. Tornar a URL base da API lida de env (ex.: JURISPRUDENCIAS_API_URL) com default https://jurisprudencias.ai/api/v1, usada por listCourts/searchDecisions/lookupDecision. Manter a chave JURISPRUDENCIAS_API_KEY como hoje.",
+  "foraDoEscopo": "Não implementar autenticação/SSO com o portal; não alterar o contrato dos endpoints da API existentes; não mudar regras de negócio de cobrança; não expor a chave de API na interface.",
+  "testesObrigatorios": [
+    "Teste de que a URL base da API é lida do env com default correto e usada pelas funções de consulta",
+    "Teste de que a função que expõe o link do portal retorna https://jurisprudencias.ai/ sem vazar a chave",
+    "Teste de que a suíte existente de jurisprudência (jurisprudencias/jurisprudenciaRag) permanece verde com o default"
+  ],
+  "criteriosAceite": [
+    "O usuário consegue acessar o portal Jurisprudências.ai a partir do SmartJuris (link em nova aba)",
+    "A URL base da API é configurável via env sem mudança de código",
+    "A chave de API não é exposta na interface"
+  ],
+  "_hash": "32fd7560bb9c"
+}

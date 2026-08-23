@@ -1,0 +1,21 @@
+{
+  "id": "6E",
+  "titulo": "Endpoint de telemetria e saúde da integração de jurisprudência",
+  "descricao": "Criar endpoint de telemetria/status (acesso admin/root ou consumido pelo dashboard) que reporte total de chamadas ao vivo, cache hits (Redis/memória), pausas ativas por escritório, rate limit restante da última chamada, falhas recentes e métrica de latência da busca ao vivo, sem expor dados sensíveis.",
+  "dependencias": [
+    "6C",
+    "6D"
+  ],
+  "escopo": "Manter contadores em memória (chamadas ao vivo, cache hits por origem, falhas, latência média/última) e expor endpoint JSON que agregue estado de pausa (6C) e cache (6D). Garantir que o endpoint não exponha termos, decisões, chaves de API nem dados sensíveis do escritório.",
+  "foraDoEscopo": "Não alterar a lógica de negócio da geração; não implementar autenticação/roles do dashboard (consumir as existentes); não persistir telemetria em banco (apenas expor estado em memória/contadores).",
+  "testesObrigatorios": [
+    "Teste que o endpoint retorna total de chamadas ao vivo, cache hits, pausas ativas e rate limit restante",
+    "Teste que o endpoint não vaza dados sensíveis (termos, decisões, chaves, dados do escritório)",
+    "Teste que a latência da busca ao vivo é registrada e exposta"
+  ],
+  "criteriosAceite": [
+    "Endpoint de telemetria reporta chamadas ao vivo, cache hits, pausas ativas e rate limit restante, sem dados sensíveis",
+    "A métrica de latência permite monitorar degradação do provedor"
+  ],
+  "_hash": "cfc9db1f25ce"
+}

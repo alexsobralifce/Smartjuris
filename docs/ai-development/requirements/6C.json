@@ -1,0 +1,21 @@
+{
+  "id": "6C",
+  "titulo": "Política de rate limit configurável e observável",
+  "descricao": "Tornar configuráveis via env (ex.: JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING e JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS) o limiar mínimo de requisições restantes e a duração da pausa da busca ao vivo, com os valores atuais como default, e expor o estado observável por escritório (pausado ou não, até quando, motivo: header baixo ou resposta 429), mantendo o comportamento best-effort.",
+  "dependencias": [
+    "5C"
+  ],
+  "escopo": "Ler limiar e duração da pausa de envs com default (2 e 60000ms). Expor função/estado observável de pausa por escritório (motivo e expiração) para consumo por admin/dashboard. Registrar motivo da pausa na rastreabilidade.",
+  "foraDoEscopo": "Não alterar regras de negócio de cobrança; não bloquear a geração por causa do rate limit (best-effort permanece).",
+  "testesObrigatorios": [
+    "Teste de que a política respeita os novos envs configuráveis (limiar e duração da pausa)",
+    "Teste de que o estado observável da pausa expõe motivo e expiração",
+    "Teste de que a pausa não bloqueia a geração (fallback RAG)"
+  ],
+  "criteriosAceite": [
+    "Limiar e duração da pausa de rate limit são alteráveis via env, sem mudança de código",
+    "O estado de pausa por escritório é consultável (até quando e motivo)",
+    "A geração nunca falha por causa do rate limit"
+  ],
+  "_hash": "0f35abe69a8c"
+}

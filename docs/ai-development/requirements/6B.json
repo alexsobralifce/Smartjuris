@@ -1,0 +1,24 @@
+{
+  "id": "6B",
+  "titulo": "Aviso estruturado quando a peça sai sem jurisprudência ao vivo",
+  "descricao": "Retornar aviso estruturado no resultado da operação quando includeJurisprudence=true mas a busca ao vivo não produz bloco (falha do provedor, pausa de rate limit, sem chave, sem termos ou zero resultados), com o motivo, para o frontend exibir via SSE e para os metadados da peça registrarem o estado; quando o bloco vier do cache, informar origem 'cache'.",
+  "dependencias": [
+    "5A",
+    "5D"
+  ],
+  "escopo": "Criar campo estruturado (ex.: jurisprudenciaStatus/jurisprudenciaAvisos) no fluxo SSE e/ou metadados da peça com o motivo (falha do provedor, pausa de rate limit, sem chave, sem termos, zero resultados, cache). Transmitir o aviso nos eventos SSE da geração e persistir/expor nos metadados da peça sem quebrar o contrato de geração existente.",
+  "foraDoEscopo": "Não alterar o frontend (apenas preparar o contrato de resposta); não mudar a formatação do bloco de fundamentação quando a busca tem sucesso; não alterar os eventos SSE já existentes (apenas adicionar campos).",
+  "testesObrigatorios": [
+    "Teste que fallback por API indisponível produz aviso estruturado na operação e não quebra a geração",
+    "Teste que fallback por pausa de rate limit produz aviso com motivo 'rate limit'",
+    "Teste que fallback por sem chave / zero resultados / sem termos produz aviso correspondente",
+    "Teste que quando o bloco vem do cache o aviso/rastreabilidade indica origem 'cache'",
+    "Teste que a suíte geracaoSSE existente permanece verde"
+  ],
+  "criteriosAceite": [
+    "Quando a busca ao vivo não produz bloco, a operação/peça carrega aviso visível ao usuário com o motivo",
+    "A geração nunca falha por ausência de jurisprudência ao vivo",
+    "Não há regressão no fluxo SSE existente"
+  ],
+  "_hash": "ad190b0b812f"
+}

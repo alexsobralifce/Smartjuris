@@ -1,0 +1,20 @@
+{
+  "id": "6D",
+  "titulo": "Cache persistente de decisões via Redis com fallback em memória",
+  "descricao": "Migrar o cache de decisões de jurisprudência por escritório de memória (Map) para Redis com TTL de 1 hora e chave escopada por (escritório + tribunal + termos normalizados), com fallback para o cache em memória quando o Redis estiver indisponível, garantindo isolamento por escritório e que a geração nunca quebra.",
+  "dependencias": [
+    "5C"
+  ],
+  "escopo": "Implementar leitura/escrita do cache via Redis (cliente existente no ambiente) com chaves escopadas por escritório e TTL 1h; fallback transparente para o Map em memória quando o Redis falha ou não está configurado; manter as funções cacheGet/cacheSet/cacheSize com a mesma semântica.",
+  "foraDoEscopo": "Não alterar a lógica de negócio da geração; não mudar o TTL default; não persistir conteúdo de decisões em banco relacional.",
+  "testesObrigatorios": [
+    "Teste de que segunda geração idêntica usa cache Redis (zero chamadas à API)",
+    "Teste de que o cache Redis é isolado por escritório (mesmos termos/tribunal para escritórios diferentes geram chaves diferentes)",
+    "Teste de que quando Redis está indisponível o fallback para memória funciona e a geração não quebra"
+  ],
+  "criteriosAceite": [
+    "O cache sobrevive a restart da API (Redis) e é isolado por escritório",
+    "A geração nunca falha por indisponibilidade do Redis"
+  ],
+  "_hash": "0c0ae6363604"
+}

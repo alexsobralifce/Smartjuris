@@ -72,6 +72,14 @@
   .fase-card ul { margin: 6px 0 0 18px; font-size: 13px; color: var(--fg); }
   .fase-card .sub { font-size: 12px; }
   footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
+  /* Lista de requisitos — "o que cada um fez" */
+  .req-lista { display: grid; gap: 10px; }
+  .req-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .req-item .req-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .req-item .req-id { font-weight: 700; color: var(--accent); background: #e8eaf0; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+  .req-item .req-titulo { font-size: 15px; font-weight: 600; }
+  .req-item .req-desc { font-size: 13px; color: var(--muted); line-height: 1.45; }
+  .req-item .req-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
   @media (max-width: 640px) { table { font-size: 12px; } th, td { padding: 7px 8px; } }
 </style>
 </head>
@@ -85,6 +93,10 @@
   </header>
 
   <div class="cards" id="cards"></div>
+
+  <h2 class="section-title">Requisitos — o que cada um fez</h2>
+  <p class="sub">Descrição simples de cada requisito aplicado ao roadmap, com a situação atual (concluído / planejado / em análise).</p>
+  <div class="req-lista" id="reqLista"><div class="empty">carregando…</div></div>
 
   <h2 class="section-title">Fases</h2>
   <table>
@@ -149,6 +161,30 @@ function k(v) {
   return String(n);
 }
 
+// Rótulo SIMPLES da situação de um requisito (para leitura rápida).
+function situacao(estado) {
+  const mapa = {
+    AUDIT_APPROVED: ['Concluído', 'st-ok'],
+    PLANNED: ['Planejado (aguardando)', 'st-warn'],
+    IMPLEMENTING: ['Em implementação', 'st-warn'],
+    IMPLEMENTED: ['Implementado (em auditoria)', 'st-warn'],
+    AUDIT_PENDING: ['Em auditoria', 'st-warn'],
+    CORRECTION_PENDING: ['Aguardando correção', 'st-bad'],
+    AUDIT_FAILED: ['Falhou na auditoria', 'st-bad'],
+    BLOCKED: ['Bloqueado', 'st-bad'],
+  };
+  const [label, cls] = mapa[String(estado)] || [String(estado), 'st-neutral'];
+  return `<span class="status ${cls}">${label}</span>`;
+}
+
+function escapeHtml(t) {
+  return String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function truncar(t, n) {
+  const s = String(t ?? '');
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
 function render(s) {
   $('updatedAt').textContent = 'atualizado às ' + new Date(s.geradoEm).toLocaleTimeString('pt-BR');
   $('liveDot').classList.add('live');
@@ -188,6 +224,22 @@ function render(s) {
       <td class="num">${f.ledgerAbertos || '—'}</td>
     </tr>
   `).join('');
+
+  // Requisitos — "o que cada um fez": situação simples + título + descrição.
+  const reqs = s.requisitos || [];
+  $('reqLista').innerHTML = reqs.length
+    ? reqs.map((r) => `
+        <div class="req-item">
+          <div class="req-head">
+            <span class="req-id">${escapeHtml(r.id)}</span>
+            <span class="req-titulo">${escapeHtml(r.titulo)}</span>
+            ${situacao(r.estado)}
+          </div>
+          <div class="req-desc" title="${escapeHtml(r.descricao)}">${escapeHtml(truncar(r.descricao, 220))}</div>
+          ${r.rounds > 0 ? `<div class="req-meta">${r.rounds} rodada(s) de auditoria${r.ultimoVeredito ? ' · último veredito: ' + escapeHtml(r.ultimoVeredito) : ''}</div>` : ''}
+        </div>
+      `).join('')
+    : '<div class="empty">Nenhum requisito aplicado ainda — use a seção "Novos requisitos" abaixo.</div>';
 
   $('lastRuns').innerHTML = s.ultimosRuns.length
     ? s.ultimosRuns.map((r) => `

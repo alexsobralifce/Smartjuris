@@ -47,6 +47,16 @@ interface PhaseRow {
   ledgerAbertos: number;
 }
 
+/** Requisito (fase gerada de requirements/<id>.json) com descrição simples do que faz/fez. */
+export interface RequisitoInfo {
+  id: string;
+  titulo: string;
+  descricao: string;
+  estado: string;
+  ultimoVeredito: string | null;
+  rounds: number;
+}
+
 export interface Snapshot {
   geradoEm: string;
   config: {
@@ -72,6 +82,8 @@ export interface Snapshot {
   ultimosRuns: RunItem[];
   /** Ids das fases geradas por requisitos (requirements/<id>.json). */
   requisitoIds: string[];
+  /** Requisitos com título + descrição simples (o que cada um faz/fez). */
+  requisitos: RequisitoInfo[];
 }
 
 function readJsonLoose<T>(file: string): T | null {
@@ -168,6 +180,22 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
   ).length;
   const fasesPlanejadas = fasesDeRequisitos.filter((p) => p.status === 'PLANNED').length;
 
+  // Requisitos com descrição simples (o que cada um faz/fez), cruzando o
+  // requirements/<id>.json (titulo/descricao) com o estado atual no roadmap.
+  const requisitos: RequisitoInfo[] = listRequirementPhases(aiDevDir)
+    .map((f) => {
+      const row = fases.find((p) => p.id === f.id);
+      return {
+        id: f.id,
+        titulo: f.titulo,
+        descricao: f.descricao,
+        estado: row?.estado ?? 'PLANNED',
+        ultimoVeredito: row?.ultimoVeredito ?? null,
+        rounds: row?.rounds ?? 0,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
   return {
     geradoEm: new Date().toISOString(),
     config: {
@@ -191,6 +219,7 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
     fases,
     ultimosRuns: runs.slice(-12).reverse(),
     requisitoIds: [...idsRequisitos],
+    requisitos,
   };
 }
 

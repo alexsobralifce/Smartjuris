@@ -1,9 +1,16 @@
 import { Router } from 'express';
-import { listCourts, searchDecisions, lookupDecision } from '../services/jurisprudencias.js';
+import { listCourts, searchDecisions, lookupDecision, portalUrlJurisprudencias } from '../services/jurisprudencias.js';
 import { getTelemetriaJurisprudencia } from '../services/jurisprudenciaRag.js';
 import { requireAdmin } from '../middlewares/roleGuard.js';
 
 const router = Router();
+
+// GET /api/jurisprudencias/portal — link público do portal do provedor
+// (fase 6F): onde o escritório gerencia conta/planos/rate limit. NUNCA
+// inclui a chave de API.
+router.get('/portal', (_req, res) => {
+  res.json({ nome: 'Jurisprudências.ai', url: portalUrlJurisprudencias() });
+});
 
 // GET /api/jurisprudencias/telemetria — saúde da integração (fase 6E).
 // Acesso admin (a rota é montada com authMiddleware; rejectRoot bloqueia root).

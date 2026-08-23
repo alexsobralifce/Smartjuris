@@ -36,6 +36,7 @@ const DEFAULT_COURTS: Court[] = [
 export default function Decisoes({ onSelectForPeca }: { onSelectForPeca?: (d: Decision) => void }) {
   const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<'search' | 'lookup'>('search')
+  const [portalUrl, setPortalUrl] = useState<string>('https://jurisprudencias.ai/')
   const [courts, setCourts] = useState<Court[]>(DEFAULT_COURTS)
   const [selectedCourt, setSelectedCourt] = useState<string>('stj')
   const [query, setQuery] = useState<string>('')
@@ -84,6 +85,15 @@ export default function Decisoes({ onSelectForPeca }: { onSelectForPeca?: (d: De
       .catch(err => {
         console.warn('Usando lista padrão de tribunais:', err)
       })
+  }, [])
+
+  // Fase 6F — link do portal do provedor (fallback para a URL pública fixa).
+  useEffect(() => {
+    api.jurisprudencias.portal()
+      .then((res: { url?: string }) => {
+        if (res?.url) setPortalUrl(res.url)
+      })
+      .catch(() => { /* fallback: mantém https://jurisprudencias.ai/ */ })
   }, [])
 
   const handleSearch = async (targetPage = 0) => {
@@ -190,6 +200,15 @@ export default function Decisoes({ onSelectForPeca }: { onSelectForPeca?: (d: De
           description="Consulta direta em tempo real a 16 tribunais e conselhos federais via Jurisprudências.ai Live API."
           action={(
             <div style={{ display: 'flex', gap: SPACE.sm, flexWrap: 'wrap' }}>
+              {/* Fase 6F — acesso ao portal do provedor (gestão de conta/planos/rate limit). */}
+              <a
+                href={portalUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: FONT.sm, textDecoration: 'none', alignSelf: 'center', fontWeight: 600 }}
+              >
+                Acessar Jurisprudências.ai ↗
+              </a>
               <Button
                 size="sm"
                 variant={activeTab === 'search' ? 'primary' : 'secondary'}

@@ -313,6 +313,9 @@ export const api = {
   jurisprudencias: {
     listCourts: (): Promise<{ data: Court[] }> =>
       authFetch('/api/jurisprudencias/courts').then(r => r.json()),
+    // Fase 6F — link público do portal do provedor (sem chave de API).
+    portal: (): Promise<{ nome: string; url: string }> =>
+      authFetch('/api/jurisprudencias/portal').then(r => r.json()),
     search: (params: {
       court?: string;
       q: string;

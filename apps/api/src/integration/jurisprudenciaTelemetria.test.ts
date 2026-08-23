@@ -148,4 +148,18 @@ describe('6E — endpoint de telemetria da jurisprudência (HTTP)', { skip: !dbD
     const res = await fetch(`${url}/api/jurisprudencias/telemetria`);
     assert.equal(res.status, 401, `status ${res.status} (esperado 401)`);
   });
+
+  test('6F — GET /portal retorna o link do provedor sem expor a chave', async () => {
+    const res = await fetch(`${url}/api/jurisprudencias/portal`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    assert.equal(res.status, 200, `status ${res.status}`);
+    const body = await res.json();
+    assert.equal(body.url, 'https://jurisprudencias.ai/');
+    assert.equal(body.nome, 'Jurisprudências.ai');
+    const texto = JSON.stringify(body);
+    assert.ok(!/key|Bearer|token|JURISPRUDENCIAS_API/.test(texto), 'chave não exposta no endpoint do portal');
+
+    // Sem autenticação → 401 (roteada com authMiddleware).
+    const anon = await fetch(`${url}/api/jurisprudencias/portal`);
+    assert.equal(anon.status, 401, `sem token no /portal → 401 (veio ${anon.status})`);
+  });
 });

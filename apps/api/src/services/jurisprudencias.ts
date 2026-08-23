@@ -39,6 +39,55 @@ interface SearchResponse {
 
 const BASE_URL = 'https://jurisprudencias.ai/api/v1';
 
+/** Hosts aprovados para a URL da API (fase 6F) — evita exfiltração da chave
+ *  para destinos arbitrários (SSRF de credenciais). */
+export function hostJurisprudenciasPermitido(host: string): boolean {
+  const h = host.toLowerCase();
+  return h === 'jurisprudencias.ai' || h.endsWith('.jurisprudencias.ai');
+}
+
+/**
+ * Fase 6F — valida a URL configurada em JURISPRUDENCIAS_API_URL antes de usá-la
+ * em chamadas AUTENTICADAS (Bearer). Exige:
+ *   - URL parseável (new URL());
+ *   - protocolo HTTPS (a chave nunca trafega em texto puro);
+ *   - host na allowlist (jurisprudencias.ai ou subdomínio);
+ *   - sem userinfo (usuário/senha embutidos na URL).
+ * Retorna a URL normalizada (sem barra final) ou null se inválida.
+ */
+export function validarUrlJurisprudencias(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return null;
+    if (!hostJurisprudenciasPermitido(u.hostname)) return null;
+    if (u.username || u.password) return null;
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fase 6F — URL base da API configurável via env. Default:
+ * https://jurisprudencias.ai/api/v1. Se a env estiver presente mas INVÁLIDA,
+ * LANÇA erro (a chave nunca é enviada a um destino não aprovado; a geração é
+ * best-effort e trata a falha com fallback RAG).
+ */
+export function apiUrlJurisprudencias(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = env.JURISPRUDENCIAS_API_URL;
+  if (raw == null || String(raw).trim() === '') return BASE_URL;
+  const valida = validarUrlJurisprudencias(String(raw).trim());
+  if (!valida) {
+    throw new Error('JURISPRUDENCIAS_API_URL inválida: use HTTPS em host aprovado (jurisprudencias.ai ou subdomínio).');
+  }
+  return valida;
+}
+
+/** Fase 6F — URL pública do portal do provedor (gestão de conta/planos). */
+export function portalUrlJurisprudencias(): string {
+  return 'https://jurisprudencias.ai/';
+}
+
 let courtsCache: { data: Court[]; timestamp: number } | null = null;
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
 
@@ -56,7 +105,7 @@ export async function listCourts(): Promise<{ data: Court[]; rateLimit?: any }> 
   }
 
   const apiKey = getApiKey();
-  const res = await fetch(`${BASE_URL}/courts`, {
+  const res = await fetch(`${apiUrlJurisprudencias()}/courts`, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: 'application/json',
@@ -105,7 +154,7 @@ export async function searchDecisions(
   if (options.trial_from) params.set('trial_from', options.trial_from);
   if (options.trial_to) params.set('trial_to', options.trial_to);
 
-  const url = `${BASE_URL}/courts/${encodeURIComponent(courtId)}/decisions?${params.toString()}`;
+  const url = `${apiUrlJurisprudencias()}/courts/${encodeURIComponent(courtId)}/decisions?${params.toString()}`;
 
   const res = await fetch(url, {
     headers: {
@@ -147,7 +196,7 @@ export async function lookupDecision(
 ): Promise<{ data: Decision; rateLimit?: any }> {
   const apiKey = getApiKey();
   const params = new URLSearchParams({ n: processNumber });
-  const url = `${BASE_URL}/courts/${encodeURIComponent(courtId)}/decisions/lookup?${params.toString()}`;
+  const url = `${apiUrlJurisprudencias()}/courts/${encodeURIComponent(courtId)}/decisions/lookup?${params.toString()}`;
 
   const res = await fetch(url, {
     headers: {

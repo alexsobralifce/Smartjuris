@@ -64,7 +64,7 @@ migrations validadas, quando aplicável
 | 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 4B | Piloto controlado | 4A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5A | Integrar busca ao vivo de jurisprudência no orquestrador de geração | 4B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 | 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -524,7 +524,7 @@ Criar o orquestrador que, quando includeJurisprudence=true e não for SECTION_RE
 - A quantidade de decisões injetadas não excede 5
 ### 5B — Injetar bloco de jurisprudência rastreável no prompt de fundamentação
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 5A aprovada(s).
 
@@ -697,6 +697,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5A | DeepSeek | PRE-FLIGHT (determinístico) | REJECT | Não | Nenhuma alteração detectada; pre-flight e auditoria foram poupados. |
 | 2026-08-23 | 5A | DeepSeek | PRE-FLIGHT (determinístico) | APPROVE_WITH_CONDITIONS | Não | Pré-condições locais falharam (testes/build). Auditor poupado para economizar tokens. |
 | 2026-08-23 | 5A | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Implementação validada: 13 testes novos (jurisprudenciaRag) + geracaoSSE 10/10 + build verdes. CORRECTION_PENDING veio de fallbackPro.test.ts (falha pré-existente de estado de banco, não relacionada à 5A — confirmado que falha sem as mudanças da fase). |
+| 2026-08-23 | 5B | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

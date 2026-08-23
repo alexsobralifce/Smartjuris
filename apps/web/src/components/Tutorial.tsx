@@ -177,6 +177,29 @@ export default function Tutorial() {
 
   const voltarParaLista = () => setModuloIdx(null)
 
+  // Navegação "encadeada": os botões Anterior/Próximo percorrem primeiro os
+  // passos do módulo e, ao chegar no fim/início, passam para o próximo/anterior
+  // módulo — nunca "travam" nos extremos (a menos que seja o início/fim de tudo).
+  const avancar = () => {
+    if (moduloIdx === null) return
+    const m = modulos[moduloIdx]
+    if (passoIdx < m.passos.length - 1) {
+      setPassoIdx((p) => p + 1)
+    } else if (moduloIdx < modulos.length - 1) {
+      abrir(moduloIdx + 1)
+    }
+  }
+  const voltar = () => {
+    if (moduloIdx === null) return
+    if (passoIdx > 0) {
+      setPassoIdx((p) => p - 1)
+    } else if (moduloIdx > 0) {
+      abrir(moduloIdx - 1)
+    }
+  }
+  const noInicio = moduloIdx === 0 && passoIdx === 0
+  const noFim = moduloIdx === modulos.length - 1 && modulo !== null && passoIdx === modulo.passos.length - 1
+
   return (
     <PageContainer>
       <PageHeader
@@ -208,11 +231,11 @@ export default function Tutorial() {
             <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm }}>
               <Button size="sm" variant="secondary" onClick={voltarParaLista}>← Todos os módulos</Button>
               <strong style={{ fontSize: FONT.md, color: 'var(--color-foreground)' }}>{modulo.label}</strong>
-              <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>Passo {passoIdx + 1} de {modulo.passos.length}</span>
+              <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>Módulo {moduloIdx! + 1} de {modulos.length} · Passo {passoIdx + 1} de {modulo.passos.length}</span>
             </div>
             <div style={{ display: 'flex', gap: SPACE.sm }}>
-              <Button size="sm" variant="secondary" disabled={passoIdx === 0} onClick={() => setPassoIdx((p) => Math.max(0, p - 1))}>← Anterior</Button>
-              <Button size="sm" onClick={() => setPassoIdx((p) => Math.min(modulo.passos.length - 1, p + 1))}>Próximo →</Button>
+              <Button size="sm" variant="secondary" disabled={noInicio} onClick={voltar}>← Anterior</Button>
+              <Button size="sm" disabled={noFim} onClick={avancar}>Próximo →</Button>
             </div>
           </div>
 
@@ -227,13 +250,6 @@ export default function Tutorial() {
                 </div>
               </div>
             ))}
-          </div>
-
-          {/* Navegação entre módulos */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.sm, borderTop: '1px solid var(--color-border)', paddingTop: SPACE.md }}>
-            <Button size="sm" variant="secondary" disabled={moduloIdx === 0} onClick={() => abrir(moduloIdx! - 1)}>← Módulo anterior</Button>
-            <span style={{ fontSize: FONT.xs, color: 'var(--color-muted)' }}>Módulo {moduloIdx! + 1} de {modulos.length}</span>
-            <Button size="sm" disabled={moduloIdx === modulos.length - 1} onClick={() => abrir(moduloIdx! + 1)}>Próximo módulo →</Button>
           </div>
         </div>
       )}

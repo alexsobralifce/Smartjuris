@@ -68,7 +68,7 @@ migrations validadas, quando aplicável
 | 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
+| 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -587,7 +587,7 @@ Criar migração que altera a coluna cost_cents_reserved da tabela ai_operations
 - Rollback retorna a coluna para integer e preserva os valores
 ### 5F — Calcular custo reservado com precisão de centésimos de centavo
 
-**Estado:** `AUDIT_FAILED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 5E aprovada(s).
 
@@ -710,6 +710,8 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5E | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Migration 0025 validada em PostgreSQL REAL: evidencia em docs/ai-development/runs/5E-migration-evidence.txt (coluna numeric(10,2) OK, valor 10.55 preservado). migrationCostCents.test.ts (7 testes: banco limpo, upgrade com dados, idempotencia, rollback, fracoes, overflow) na suite oficial. serializarCents baseado em string (1.005->1.01, sem flutuacao). Suite API 317/317 verde. |
 | 2026-08-23 | 5F | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 5F | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-23 | 5F | DeepSeek | PRE-FLIGHT (determinístico) | REJECT | Não | Nenhuma alteração detectada; pre-flight e auditoria foram poupados. |
+| 2026-08-23 | 5F | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Implementacao validada: calculateAiCostCents arredonda o TOTAL uma unica vez no centesimo (deterministico, sem componentes contraditorios); fatias com o dobro de tokens reservam custo diferente (28750->3.25 vs 14375->1.67). reserve/settle/release usam a MESMA regra ROUND (sem retencao nem tolerancia generica); expectativas calculadas com isPeak real. 319 testes API verdes (61 custo/reserva/fallback). |
 
 ## Critério final
 

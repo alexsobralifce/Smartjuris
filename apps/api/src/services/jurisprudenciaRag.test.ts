@@ -26,6 +26,8 @@ import {
   duracaoPausaRateLimitMs,
   estadoRateLimit,
   desconectarRedis,
+  getTelemetriaJurisprudencia,
+  resetTelemetriaJurisprudencia,
   type RastreabilidadeJurisprudencia,
 } from '../services/jurisprudenciaRag.js';
 
@@ -668,5 +670,82 @@ describe('cache Redis com fallback (fase 6D)', () => {
     await buscarJurisprudenciaSeNecessario(input);
     await buscarJurisprudenciaSeNecessario(input);
     assert.equal(chamadas, 1, 'cache em memória sem Redis');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 6E — Telemetria e saúde da integração
+// ---------------------------------------------------------------------------
+
+describe('telemetria da integração (fase 6E)', () => {
+  before(async () => {
+    limparCache();
+    limparRateLimit();
+    resetTelemetriaJurisprudencia();
+  });
+  after(async () => {
+    limparRateLimit();
+    resetTelemetriaJurisprudencia();
+  });
+
+  test('contadores: chamada ao vivo registra latência e rate limit; cache registra hit', async () => {
+    resetTelemetriaJurisprudencia();
+    let chamadas = 0;
+    const mock = async () => {
+      chamadas += 1;
+      return { data: [decisao('51', 'Ementa telemetria.')], meta: { page: 0, per_page: 10, has_next_page: false }, rateLimit: { limit: '5', remaining: '3', reset: '60' } };
+    };
+    const input = {
+      includeJurisprudence: true,
+      area: 'Cível',
+      fatos: 'telemetria mede chamada ao vivo cache e falha',
+      escritorioId: 'esc-6e',
+      searchOverride: mock as never,
+      rastreabilidade: noop,
+    };
+    // 1ª: ao vivo → chamadasAoVivo 1, rate limit restante 3, latência > 0.
+    await buscarJurisprudenciaSeNecessario(input);
+    let t = getTelemetriaJurisprudencia();
+    assert.equal(t.chamadasAoVivo, 1, 'chamada ao vivo contabilizada');
+    assert.equal(t.ultimoRateLimitRestante, 3, 'rate limit restante da última chamada');
+    assert.ok(t.ultimaLatenciaMs != null && t.ultimaLatenciaMs >= 0, 'latência registrada');
+    assert.ok(t.latenciaMediaMs != null && t.latenciaMediaMs >= 0, 'latência média');
+    // 2ª: cache → cacheHits 1, sem nova chamada ao vivo.
+    await buscarJurisprudenciaSeNecessario(input);
+    t = getTelemetriaJurisprudencia();
+    assert.equal(t.cacheHits, 1, 'cache hit contabilizado');
+    assert.equal(t.chamadasAoVivo, 1, 'cache não conta como chamada ao vivo');
+    assert.equal(chamadas, 1);
+  });
+
+  test('falha registra contador de falhas; reset zera tudo', async () => {
+    resetTelemetriaJurisprudencia();
+    const mock = async () => { throw new Error('boom'); };
+    await buscarJurisprudenciaSeNecessario({
+      includeJurisprudence: true,
+      fatos: 'falha contabilizada na telemetria de saúde',
+      escritorioId: 'esc-6e-falha',
+      searchOverride: mock as never,
+      rastreabilidade: noop,
+    });
+    const t = getTelemetriaJurisprudencia();
+    assert.equal(t.falhas, 1, 'falha contabilizada');
+    assert.equal(t.chamadasAoVivo, 0, 'falha não conta como chamada ao vivo');
+    resetTelemetriaJurisprudencia();
+    const z = getTelemetriaJurisprudencia();
+    assert.equal(z.falhas, 0);
+    assert.equal(z.chamadasAoVivo, 0);
+    assert.equal(z.cacheHits, 0);
+    assert.equal(z.ultimoRateLimitRestante, null);
+  });
+
+  test('escritoriosPausados é agregado (número, nunca os ids)', async () => {
+    limparRateLimit();
+    registrarRateLimit('esc-p1', { remaining: '1', reset: '60' }, 'header');
+    registrarRateLimit('esc-p2', { remaining: '0', reset: '60' }, '429');
+    const t = getTelemetriaJurisprudencia();
+    assert.equal(t.escritoriosPausados, 2, 'dois escritórios pausados contabilizados');
+    assert.ok(!JSON.stringify(t).includes('esc-p1'), 'não expõe quais escritórios');
+    assert.ok(!JSON.stringify(t).includes('esc-p2'), 'não expõe ids de escritório');
   });
 });

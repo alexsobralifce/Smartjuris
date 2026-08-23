@@ -191,6 +191,82 @@ async function cacheSet(escritorioId: string, tribunal: string, termos: string[]
 }
 
 // ---------------------------------------------------------------------------
+// Fase 6E — Telemetria e saúde da integração (contadores em memória)
+// ---------------------------------------------------------------------------
+
+interface TelemetriaJurisprudencia {
+  chamadasAoVivo: number;
+  cacheHits: number;
+  falhas: number;
+  latenciaTotalMs: number;
+  latenciaN: number;
+  ultimaLatenciaMs: number | null;
+  ultimoRateLimitRestante: number | null;
+}
+
+const telemetria: TelemetriaJurisprudencia = {
+  chamadasAoVivo: 0,
+  cacheHits: 0,
+  falhas: 0,
+  latenciaTotalMs: 0,
+  latenciaN: 0,
+  ultimaLatenciaMs: null,
+  ultimoRateLimitRestante: null,
+};
+
+/** Registra métricas da busca ao vivo (6E): latência e rate limit restante. */
+function registrarTelemetria(duracaoMs: number, rateLimitRestante: number | null): void {
+  telemetria.chamadasAoVivo += 1;
+  telemetria.latenciaTotalMs += duracaoMs;
+  telemetria.latenciaN += 1;
+  telemetria.ultimaLatenciaMs = Math.round(duracaoMs);
+  telemetria.ultimoRateLimitRestante = rateLimitRestante;
+}
+
+/**
+ * Fase 6E — snapshot da telemetria da integração (sem dados sensíveis):
+ * chamadas ao vivo, cache hits, falhas, latência média/última, rate limit
+ * restante da última chamada e NÚMERO de escritórios pausados (agregado —
+ * nunca expõe quais escritórios).
+ */
+export function getTelemetriaJurisprudencia(): {
+  chamadasAoVivo: number;
+  cacheHits: number;
+  falhas: number;
+  latenciaMediaMs: number | null;
+  ultimaLatenciaMs: number | null;
+  ultimoRateLimitRestante: number | null;
+  escritoriosPausados: number;
+} {
+  let escritoriosPausados = 0;
+  const agora = Date.now();
+  for (const [id, e] of rateLimitPorEscritorio) {
+    if (agora > e.pausadoAte) rateLimitPorEscritorio.delete(id);
+    else escritoriosPausados += 1;
+  }
+  return {
+    chamadasAoVivo: telemetria.chamadasAoVivo,
+    cacheHits: telemetria.cacheHits,
+    falhas: telemetria.falhas,
+    latenciaMediaMs: telemetria.latenciaN > 0 ? Math.round(telemetria.latenciaTotalMs / telemetria.latenciaN) : null,
+    ultimaLatenciaMs: telemetria.ultimaLatenciaMs,
+    ultimoRateLimitRestante: telemetria.ultimoRateLimitRestante,
+    escritoriosPausados,
+  };
+}
+
+/** Zera os contadores de telemetria (testes). */
+export function resetTelemetriaJurisprudencia(): void {
+  telemetria.chamadasAoVivo = 0;
+  telemetria.cacheHits = 0;
+  telemetria.falhas = 0;
+  telemetria.latenciaTotalMs = 0;
+  telemetria.latenciaN = 0;
+  telemetria.ultimaLatenciaMs = null;
+  telemetria.ultimoRateLimitRestante = null;
+}
+
+// ---------------------------------------------------------------------------
 // Formatação do bloco de jurisprudência (fonte rastreável)
 // ---------------------------------------------------------------------------
 
@@ -611,6 +687,7 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
   const cached = await cacheGet(input.escritorioId, tribunal, termos);
   if (cached) {
     input.log?.('[jurisprudenciaRag] cache hit — sem chamada à API');
+    telemetria.cacheHits += 1; // 6E
     const r: ResultadoJurisprudencia = {
       bloco: montarBlocoJurisprudencia(cached),
       decisoesUsadas: cached.length,
@@ -642,6 +719,8 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
     // 5C: interpreta headers de rate limit (pausa futuras buscas se baixo).
     registrarRateLimit(input.escritorioId, resultado.rateLimit);
     const rateLimitRestante = resultado.rateLimit?.remaining != null ? Number(resultado.rateLimit.remaining) : null;
+    const duracaoMs = Date.now() - inicio;
+    registrarTelemetria(duracaoMs, rateLimitRestante); // 6E
     const decisoes = resultado.data ?? [];
     if (decisoes.length === 0) {
       const r = vazio('zero-resultados', { termos, rateLimitRestante });
@@ -664,6 +743,7 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
   } catch (err) {
     // 5C: provedor retornou rate limit (429) → registra pausa para as próximas
     //    buscas ao vivo, mas segue com RAG local (best-effort, nunca falha).
+    telemetria.falhas += 1; // 6E
     if (ehRateLimit(err)) {
       registrarRateLimit(input.escritorioId, { remaining: '0', reset: undefined }, '429');
       input.log?.('[jurisprudenciaRag] rate limit (429) do provedor — pausa novas buscas ao vivo');

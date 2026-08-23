@@ -1,7 +1,17 @@
 import { Router } from 'express';
 import { listCourts, searchDecisions, lookupDecision } from '../services/jurisprudencias.js';
+import { getTelemetriaJurisprudencia } from '../services/jurisprudenciaRag.js';
+import { requireAdmin } from '../middlewares/roleGuard.js';
 
 const router = Router();
+
+// GET /api/jurisprudencias/telemetria — saúde da integração (fase 6E).
+// Acesso admin (a rota é montada com authMiddleware; rejectRoot bloqueia root).
+// Só agrega contadores e estado de pausa (número de escritórios), sem expor
+// dados sensíveis nem quais escritórios estão pausados.
+router.get('/telemetria', requireAdmin, (_req, res) => {
+  res.json(getTelemetriaJurisprudencia());
+});
 
 // GET /api/jurisprudencias/courts
 router.get('/courts', async (_req, res) => {

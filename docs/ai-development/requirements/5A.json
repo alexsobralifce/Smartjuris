@@ -1,0 +1,23 @@
+{
+  "id": "5A",
+  "titulo": "Integrar busca ao vivo de jurisprudência no orquestrador de geração",
+  "descricao": "Criar o orquestrador que, quando includeJurisprudence=true e não for SECTION_REVIEW, aciona a Jurisprudências.ai Live API em paralelo ao RAG local, com fallback best-effort.",
+  "dependencias": [
+    "4B"
+  ],
+  "escopo": "Implementar o serviço de orquestração em services/geracaoSSE.ts que: (1) verifica includeJurisprudence e SECTION_REVIEW; (2) se ativo, chama searchDecisions do services/jurisprudencias.ts; (3) mapeia a área canônica para tribunal padrão; (4) extrai termos de busca a partir da área e dos fatos; (5) limita a 5 decisões e ao tamanho máximo de contexto; (6) se falhar ou não houver chave, continua somente com RAG local e registra aviso. Não alterar o módulo de Decisões do frontend.",
+  "foraDoEscopo": "Alterar o frontend de Decisões, modificar a busca manual, ou mudar o RAG local.",
+  "testesObrigatorios": [
+    "Teste de que includeJurisprudence=true chama searchDecisions com o tribunal mapeado e termos extraídos",
+    "Teste de que includeJurisprudence=false não chama a API ao vivo",
+    "Teste de fallback quando a API está indisponível ou sem chave: geração continua com RAG local e loga aviso",
+    "Teste de limitação de decisões (máximo 5) e tamanho do bloco"
+  ],
+  "criteriosAceite": [
+    "O orquestrador chama a busca ao vivo apenas quando includeJurisprudence=true e operação != SECTION_REVIEW",
+    "Tribunal padrão é STJ quando a área não tem mapeamento",
+    "Falhas na API ou ausência de chave não interrompem a geração",
+    "A quantidade de decisões injetadas não excede 5"
+  ],
+  "_hash": "84288cbcb968"
+}

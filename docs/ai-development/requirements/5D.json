@@ -1,0 +1,22 @@
+{
+  "id": "5D",
+  "titulo": "Registrar rastreabilidade e tratar erros de forma segura",
+  "descricao": "Adicionar logs estruturados e informações de auditoria sobre decisões usadas na geração, sem expor detalhes internos do provedor ao cliente.",
+  "dependencias": [
+    "5B",
+    "5C"
+  ],
+  "escopo": "No resultado da operação ou log, registrar quantidade de decisões ao vivo usadas e tribunais de origem; para falhas da API, exibir mensagem genérica ao usuário e logar detalhes internos; não persistir os resultados como dados sensíveis; garantir que nenhum detalhe interno vaze em erros.",
+  "foraDoEscopo": "Criar dashboard de auditoria, persistir logs fora do padrão existente, ou alterar mensagens de outras operações.",
+  "testesObrigatorios": [
+    "Teste de que o log/resultado contém contagem de decisões usadas e tribunais",
+    "Teste de que erro da API retorna mensagem genérica ao cliente",
+    "Teste de que detalhes internos aparecem somente no log da aplicação"
+  ],
+  "criteriosAceite": [
+    "Toda geração com includeJurisprudence=true registra de forma auditável as decisões ao vivo utilizadas",
+    "Usuário final nunca vê stack trace ou detalhes do provedor",
+    "Resultados de busca não ficam persistidos como dados sensíveis"
+  ],
+  "_hash": "9d509b33811a"
+}

@@ -171,7 +171,11 @@ async function main(): Promise<void> {
     }
     case 'req': {
       // Estrutura requisitos em linguagem natural → fases enumeradas (DeepSeek Flash).
-      const file = opts.file ?? join(aiDevDir, 'requirements', 'novos.txt');
+      // Resolve o caminho do arquivo contra a RAÍZ do repositório (não o cwd do pacote),
+      // mantendo compatibilidade com o caminho default dentro do aiDevDir.
+      const file = opts.file
+        ? (opts.file.startsWith('/') ? opts.file : join(repoRoot, opts.file))
+        : join(aiDevDir, 'requirements', 'novos.txt');
       const texto = await readRequirementsInput(file);
       const idsExistentes = existingPhaseIds(aiDevDir, config);
       log.info(`Estruturando requisitos de ${file} (ids existentes: ${idsExistentes.join(', ') || 'nenhum'})...`);

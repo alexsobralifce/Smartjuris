@@ -1,0 +1,21 @@
+{
+  "id": "5B",
+  "titulo": "Injetar bloco de jurisprudência rastreável no prompt de fundamentação",
+  "descricao": "Formatar as decisões ao vivo como um bloco com fonte rastreável e anexá-lo ao contexto do LLM junto com os chunks do RAG, mantendo a instrução de fundamentar exclusivamente no contexto.",
+  "dependencias": [
+    "5A"
+  ],
+  "escopo": "Implementar a formatação do bloco de jurisprudências com tribunal, relator, órgão julgador, número do processo e data; incluir excerpt e summary; anexar o bloco ao contexto enviado ao prompt em services/ai.ts; ajustar a instrução de fundamentação para valer também para o bloco injetado. O bloco deve ser colocado como parte do contexto, com separação clara do RAG local.",
+  "foraDoEscopo": "Alterar a lógica de geração do texto final ou os parâmetros do LLM.",
+  "testesObrigatorios": [
+    "Teste de que o prompt final contém tribunal, relator, número do processo e trecho da decisão",
+    "Teste de que a instrução de fundamentação continua exigindo uso exclusivo do contexto",
+    "Teste de que o bloco injetado é claramente separado do RAG local"
+  ],
+  "criteriosAceite": [
+    "LLM recebe identificação completa da fonte para cada decisão",
+    "Prompt mantém a regra de não inventar jurisprudência fora do contexto",
+    "Bloco de jurisprudência é rastreável"
+  ],
+  "_hash": "2736141fa6fa"
+}

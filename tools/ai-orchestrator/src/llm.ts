@@ -258,7 +258,9 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
         system: STRUCTURE_SYSTEM_PROMPT,
         user: prompt,
         temperature: 0.3,
-        maxTokens: 4000,
+        // Modelos de raciocínio gastam tokens no reasoning_content antes do
+        // JSON; 4000 truncava o contrato em requisitos grandes.
+        maxTokens: 12000,
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },

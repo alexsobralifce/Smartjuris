@@ -63,6 +63,10 @@ migrations validadas, quando aplicável
 | 3D | Integração frontend | 3C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 4A | Testes end-to-end | 3D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 4B | Piloto controlado | 4A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 5A | Integrar busca ao vivo de jurisprudência no orquestrador de geração | 4B | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -496,6 +500,69 @@ Use este modelo ao concluir cada fase:
 - Limitações:
 - Veredito:
 - Advance allowed:
+
+### 5A — Integrar busca ao vivo de jurisprudência no orquestrador de geração
+
+**Estado:** `PLANNED`
+
+**Dependência:** 4B aprovada(s).
+
+**Objetivo:**
+
+Criar o orquestrador que, quando includeJurisprudence=true e não for SECTION_REVIEW, aciona a Jurisprudências.ai Live API em paralelo ao RAG local, com fallback best-effort.
+
+**Critérios de aceite:**
+
+- O orquestrador chama a busca ao vivo apenas quando includeJurisprudence=true e operação != SECTION_REVIEW
+- Tribunal padrão é STJ quando a área não tem mapeamento
+- Falhas na API ou ausência de chave não interrompem a geração
+- A quantidade de decisões injetadas não excede 5
+### 5B — Injetar bloco de jurisprudência rastreável no prompt de fundamentação
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5A aprovada(s).
+
+**Objetivo:**
+
+Formatar as decisões ao vivo como um bloco com fonte rastreável e anexá-lo ao contexto do LLM junto com os chunks do RAG, mantendo a instrução de fundamentar exclusivamente no contexto.
+
+**Critérios de aceite:**
+
+- LLM recebe identificação completa da fonte para cada decisão
+- Prompt mantém a regra de não inventar jurisprudência fora do contexto
+- Bloco de jurisprudência é rastreável
+### 5C — Adicionar cache por escritório e controle de rate limit na busca ao vivo
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5A aprovada(s).
+
+**Objetivo:**
+
+Criar cache em memória ou Redis com TTL configurável e chave estável por combinação de tribunal e termos normalizados, escopado por escritório (tenant), e respeitar os headers de rate limit.
+
+**Critérios de aceite:**
+
+- Segunda geração com mesma tese e área não repete chamada paga
+- Cache é isolado por escritório ou tenant
+- Rate limit nunca causa falha na geração; fallback para RAG local é usado
+- TTL configurável com padrão de 1 hora
+### 5D — Registrar rastreabilidade e tratar erros de forma segura
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5B, 5C aprovada(s).
+
+**Objetivo:**
+
+Adicionar logs estruturados e informações de auditoria sobre decisões usadas na geração, sem expor detalhes internos do provedor ao cliente.
+
+**Critérios de aceite:**
+
+- Toda geração com includeJurisprudence=true registra de forma auditável as decisões ao vivo utilizadas
+- Usuário final nunca vê stack trace ou detalhes do provedor
+- Resultados de busca não ficam persistidos como dados sensíveis
 - Correções exigidas:
 - Observações:
 ```

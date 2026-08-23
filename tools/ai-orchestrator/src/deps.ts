@@ -78,7 +78,9 @@ export function createRealDeps(opts: {
         system: STRUCTURE_SYSTEM_PROMPT,
         user: prompt,
         temperature: 0.3,
-        maxTokens: 4000,
+        // Modelos de raciocínio (deepseek-v4-flash) gastam tokens no
+        // reasoning_content antes de emitir o JSON; 4000 truncava o contrato.
+        maxTokens: 12000,
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },

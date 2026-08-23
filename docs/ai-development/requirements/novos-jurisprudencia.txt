@@ -1,0 +1,55 @@
+Integrar a API de tribunais (Jurisprudências.ai Live API) à fundamentação automática da geração de peças do SmartJuris.
+
+CONTEXTO ATUAL:
+- Já existe um serviço de consulta a tribunais (services/jurisprudencias.ts) com três funções: listCourts (lista 16 tribunais e conselhos), searchDecisions (busca de decisões por tribunal, termo e filtros de data, com paginação) e lookupDecision (consulta por número de processo). Ela usa a chave JURISPRUDENCIAS_API_KEY e tem rate limit exposto nos headers.
+- Essa API hoje alimenta apenas o módulo de Decisões no frontend (busca manual e botão "Usar na Peça", que apenas cola o texto no campo de fatos).
+- A geração de peças (services/geracaoSSE.ts) usa somente o RAG local (busca vetorial por embeddings em chunks do pgvector, com fallback por palavras-chave), quando includeJurisprudence não é false.
+- As duas coisas estão desconectadas: a API ao vivo NUNCA é chamada durante a geração de peças; a fundamentação vem só do que está indexado na base RAG e do que o usuário cola manualmente.
+- O prompt de geração (services/ai.ts / routes/rag.ts) já obriga fundamentar exclusivamente nas leis, doutrinas e jurisprudências fornecidas no contexto.
+
+OBJETIVO:
+Quando o usuário gerar uma peça com includeJurisprudence ativo, além do contexto RAG local, o orquestrador deve buscar decisões de tribunais AO VIVO na Jurisprudências.ai e injetar os trechos relevantes (excerpt e summary, com identificação do tribunal, relator e número do processo) no contexto que fundamenta a redação do LLM.
+
+REQUISITOS FUNCIONAIS:
+
+1. BUSCA DE JURISPRUDÊNCIA AO VIVO NA GERAÇÃO
+- Quando includeJurisprudence=true (e não for operação SECTION_REVIEW), além do RAG local, chamar searchDecisions com base na área e nos fatos do caso.
+- Mapear área canônica do processo para tribunal padrão (ex.: Trabalhista -> TST, Cível -> STJ, Tributário -> STJ, Previdenciário -> STJ, Penal -> STJ, ou similar). Quando não houver mapeamento, usar STJ como padrão.
+- Extrair termos de busca a partir da área + dados do caso (palavras-chave relevantes), limitado a um máximo de termos.
+- Limitar a quantidade de decisões trazidas por geração (ex.: no máximo 5) e o tamanho total do texto injetado, para não estourar o limite de contexto da operação.
+- Se a busca ao vivo falhar ou estiver sem chave, NÃO falhar a geração: usar apenas o RAG local e registrar aviso (best-effort).
+
+2. INJEÇÃO NO PROMPT DE FUNDAMENTAÇÃO
+- Formatar o resultado como um bloco de jurisprudências com fonte rastreável (tribunal, relator, órgão julgador, número do processo e data), para o LLM poder citar com referência.
+- Anexar esse bloco ao contexto que vai para o prompt, junto com os chunks do RAG local.
+- Garantir que a instrução de fundamentação continue valendo para o bloco injetado (não inventar jurisprudência fora do contexto).
+
+3. CACHE E RATE LIMIT
+- Cachear resultados de busca por chave estável (tribunal + termos de busca normalizados) com TTL configurável (ex.: 1 hora), para não repetir chamadas pagas em gerações próximas.
+- Respeitar o rate limit da API: se os headers indicarem poucas requisições restantes, reduzir ou pausar novas buscas ao vivo naquela janela.
+- Nunca bloquear a geração por causa do rate limit (best-effort, com fallback para RAG local).
+
+4. TENANCY E SEGURANÇA
+- As buscas ao vivo são executadas no contexto do escritório autenticado; resultados não ficam persistidos como dados sensíveis.
+- Não expor detalhes internos do provedor em erros (mensagens genéricas); registrar no log da aplicação.
+
+5. RASTREABILIDADE
+- Registrar no resultado da operação (ou no log) quantas decisões foram usadas e de quais tribunais, para auditoria da fundamentação.
+
+REQUISITOS DE TESTE:
+
+- Teste de que a geração com includeJurisprudence=true chama a busca ao vivo (mock da API) e injeta o bloco de jurisprudência no contexto.
+- Teste de que includeJurisprudence=false NÃO chama a API ao vivo (só RAG local ou nada).
+- Teste de fallback: API indisponível ou sem chave -> geração continua só com RAG local, com aviso.
+- Teste de rate limit: resposta com poucas requisições restantes -> nova geração não repete chamada paga.
+- Teste de cache: mesma tese/área duas vezes -> segunda usa cache, zero chamadas à API.
+- Teste de tenancy: escritórios diferentes não compartilham cache indevidamente (ou cache é por escritório).
+
+CRITÉRIOS DE ACEITE:
+
+- Ao gerar peça com includeJurisprudence=true, o contexto do LLM contém trechos de jurisprudência com tribunal, relator e número do processo.
+- A geração nunca falha por indisponibilidade da API de tribunais (best-effort com fallback RAG).
+- includeJurisprudence=false não faz nenhuma chamada à API de tribunais.
+- A segunda geração com a mesma tese não repete chamada paga (cache).
+- A instrução de fundamentação continua obrigatória para o conteúdo injetado.
+- Testes automatizados cobrem busca ao vivo, fallback, rate limit e cache.

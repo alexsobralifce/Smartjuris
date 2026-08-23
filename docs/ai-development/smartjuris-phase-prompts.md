@@ -432,6 +432,162 @@ Retorne o veredito em JSON.
 
 ---
 
+
+# 5A — Integrar busca ao vivo de jurisprudência no orquestrador de geração
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5A — Integrar busca ao vivo de jurisprudência no orquestrador de geração.
+
+Criar o orquestrador que, quando includeJurisprudence=true e não for SECTION_REVIEW, aciona a Jurisprudências.ai Live API em paralelo ao RAG local, com fallback best-effort.
+
+Escopo:
+Implementar o serviço de orquestração em services/geracaoSSE.ts que: (1) verifica includeJurisprudence e SECTION_REVIEW; (2) se ativo, chama searchDecisions do services/jurisprudencias.ts; (3) mapeia a área canônica para tribunal padrão; (4) extrai termos de busca a partir da área e dos fatos; (5) limita a 5 decisões e ao tamanho máximo de contexto; (6) se falhar ou não houver chave, continua somente com RAG local e registra aviso. Não alterar o módulo de Decisões do frontend.
+
+Fora do escopo:
+Alterar o frontend de Decisões, modificar a busca manual, ou mudar o RAG local.
+
+Testes obrigatórios:
+- Teste de que includeJurisprudence=true chama searchDecisions com o tribunal mapeado e termos extraídos
+- Teste de que includeJurisprudence=false não chama a API ao vivo
+- Teste de fallback quando a API está indisponível ou sem chave: geração continua com RAG local e loga aviso
+- Teste de limitação de decisões (máximo 5) e tamanho do bloco
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5A — Integrar busca ao vivo de jurisprudência no orquestrador de geração.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- O orquestrador chama a busca ao vivo apenas quando includeJurisprudence=true e operação != SECTION_REVIEW
+- Tribunal padrão é STJ quando a área não tem mapeamento
+- Falhas na API ou ausência de chave não interrompem a geração
+- A quantidade de decisões injetadas não excede 5
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5B — Injetar bloco de jurisprudência rastreável no prompt de fundamentação
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5B — Injetar bloco de jurisprudência rastreável no prompt de fundamentação.
+
+Formatar as decisões ao vivo como um bloco com fonte rastreável e anexá-lo ao contexto do LLM junto com os chunks do RAG, mantendo a instrução de fundamentar exclusivamente no contexto.
+
+Escopo:
+Implementar a formatação do bloco de jurisprudências com tribunal, relator, órgão julgador, número do processo e data; incluir excerpt e summary; anexar o bloco ao contexto enviado ao prompt em services/ai.ts; ajustar a instrução de fundamentação para valer também para o bloco injetado. O bloco deve ser colocado como parte do contexto, com separação clara do RAG local.
+
+Fora do escopo:
+Alterar a lógica de geração do texto final ou os parâmetros do LLM.
+
+Testes obrigatórios:
+- Teste de que o prompt final contém tribunal, relator, número do processo e trecho da decisão
+- Teste de que a instrução de fundamentação continua exigindo uso exclusivo do contexto
+- Teste de que o bloco injetado é claramente separado do RAG local
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5B — Injetar bloco de jurisprudência rastreável no prompt de fundamentação.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- LLM recebe identificação completa da fonte para cada decisão
+- Prompt mantém a regra de não inventar jurisprudência fora do contexto
+- Bloco de jurisprudência é rastreável
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5C — Adicionar cache por escritório e controle de rate limit na busca ao vivo
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5C — Adicionar cache por escritório e controle de rate limit na busca ao vivo.
+
+Criar cache em memória ou Redis com TTL configurável e chave estável por combinação de tribunal e termos normalizados, escopado por escritório (tenant), e respeitar os headers de rate limit.
+
+Escopo:
+Implementar cache para resultados de searchDecisions com chave include tenant; extrair e interpretar headers de rate limit do services/jurisprudencias.ts; se restarem poucas requisições, reduzir ou pausar novas buscas ao vivo na janela; cenário de rate limit não bloqueia geração, usa RAG local. O cache deve ser usado antes de chamar a API. TTL configuravel com default 1 hora.
+
+Fora do escopo:
+Implementar autenticação de usuários, alterar a API de tribunais, ou cache de outras fontes.
+
+Testes obrigatórios:
+- Teste de cache: mesma tese e área duas vezes -> segunda usa cache, zero chamadas à API
+- Teste de rate limit: headers com poucas requisições restantes -> nova geração não chama API
+- Teste de tenancy: escritórios diferentes não compartilham cache
+- Teste de TTL: expiração funciona
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5C — Adicionar cache por escritório e controle de rate limit na busca ao vivo.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Segunda geração com mesma tese e área não repete chamada paga
+- Cache é isolado por escritório ou tenant
+- Rate limit nunca causa falha na geração; fallback para RAG local é usado
+- TTL configurável com padrão de 1 hora
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5D — Registrar rastreabilidade e tratar erros de forma segura
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5D — Registrar rastreabilidade e tratar erros de forma segura.
+
+Adicionar logs estruturados e informações de auditoria sobre decisões usadas na geração, sem expor detalhes internos do provedor ao cliente.
+
+Escopo:
+No resultado da operação ou log, registrar quantidade de decisões ao vivo usadas e tribunais de origem; para falhas da API, exibir mensagem genérica ao usuário e logar detalhes internos; não persistir os resultados como dados sensíveis; garantir que nenhum detalhe interno vaze em erros.
+
+Fora do escopo:
+Criar dashboard de auditoria, persistir logs fora do padrão existente, ou alterar mensagens de outras operações.
+
+Testes obrigatórios:
+- Teste de que o log/resultado contém contagem de decisões usadas e tribunais
+- Teste de que erro da API retorna mensagem genérica ao cliente
+- Teste de que detalhes internos aparecem somente no log da aplicação
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5D — Registrar rastreabilidade e tratar erros de forma segura.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Toda geração com includeJurisprudence=true registra de forma auditável as decisões ao vivo utilizadas
+- Usuário final nunca vê stack trace ou detalhes do provedor
+- Resultados de busca não ficam persistidos como dados sensíveis
+
+Responda somente no formato JSON do contrato de auditoria.
+```
 # Formato de passagem para o Terra
 
 ```text

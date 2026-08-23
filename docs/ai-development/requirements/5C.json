@@ -1,0 +1,23 @@
+{
+  "id": "5C",
+  "titulo": "Adicionar cache por escritório e controle de rate limit na busca ao vivo",
+  "descricao": "Criar cache em memória ou Redis com TTL configurável e chave estável por combinação de tribunal e termos normalizados, escopado por escritório (tenant), e respeitar os headers de rate limit.",
+  "dependencias": [
+    "5A"
+  ],
+  "escopo": "Implementar cache para resultados de searchDecisions com chave include tenant; extrair e interpretar headers de rate limit do services/jurisprudencias.ts; se restarem poucas requisições, reduzir ou pausar novas buscas ao vivo na janela; cenário de rate limit não bloqueia geração, usa RAG local. O cache deve ser usado antes de chamar a API. TTL configuravel com default 1 hora.",
+  "foraDoEscopo": "Implementar autenticação de usuários, alterar a API de tribunais, ou cache de outras fontes.",
+  "testesObrigatorios": [
+    "Teste de cache: mesma tese e área duas vezes -> segunda usa cache, zero chamadas à API",
+    "Teste de rate limit: headers com poucas requisições restantes -> nova geração não chama API",
+    "Teste de tenancy: escritórios diferentes não compartilham cache",
+    "Teste de TTL: expiração funciona"
+  ],
+  "criteriosAceite": [
+    "Segunda geração com mesma tese e área não repete chamada paga",
+    "Cache é isolado por escritório ou tenant",
+    "Rate limit nunca causa falha na geração; fallback para RAG local é usado",
+    "TTL configurável com padrão de 1 hora"
+  ],
+  "_hash": "2754b65b63e9"
+}

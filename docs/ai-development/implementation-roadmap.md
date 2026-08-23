@@ -72,7 +72,7 @@ migrations validadas, quando aplicável
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 6A | Rastreabilidade persistida da busca ao vivo de jurisprudência | 5D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6A | Rastreabilidade persistida da busca ao vivo de jurisprudência | 5D | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
 | 6B | Aviso estruturado quando a peça sai sem jurisprudência ao vivo | 5A, 5D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 6C | Política de rate limit configurável e observável | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 6D | Cache persistente de decisões via Redis com fallback em memória | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -656,7 +656,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 
 ### 6A — Rastreabilidade persistida da busca ao vivo de jurisprudência
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_FAILED`
 
 **Dependência:** 5D aprovada(s).
 
@@ -813,6 +813,7 @@ Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/)
 | 2026-08-23 | 5I | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 5I | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 5I | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao manual (condicoes do revisor atendidas com evidencia real-Postgres): (1) HIGH 'migracao validada em banco com schema anterior' — migrationLedgerCents.test.ts ganhou teste de UPGRADE REAL: schema isolado com credit_ledger.cost_cents INTEGER e dados legados [-10, 22, 0], aplicacao da migration 0026 (mesma USING do arquivo oficial) converte para numeric(10,2) preservando os valores; evidencia executada em PostgreSQL real em docs/ai-development/runs/5I-migration-evidence.txt (schema anterior type=integer -> apos migration numeric/10/2 OK, dados [ -10, 0, 22 ] preservados, escrita fracionaria 1.55 OK). (2) MEDIUM 'precisao decimal no caminho de migracao e limites' — teste de fracao 10.55 no INSERT real apos migracao + limites numeric(10,2) rejeitados (overflow capturado). (3) PASS RESERVE/SETTLE/RELEASE persistem custo e deltas com precisao decimal (ledger numeric(10,2): RESERVE 1.55, SETTLE real - reservado, RELEASE -1.55). (4) PASS schema reflete o tipo persistido (numericCents). Suite API 334/334 verde; tsc OK. |
+| 2026-08-23 | 6A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

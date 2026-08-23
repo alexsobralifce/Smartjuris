@@ -142,25 +142,24 @@ describe('structureRequirements (fluxo com LLM fake)', () => {
     async reviewer() {
       return { content: '{}', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
     },
+    async structurer() {
+      return { content: JSON.stringify({ fases: FASES }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
   };
 
-  test('estrutura requisitos e retorna fases do contrato', async () => {
-    const doc = await structureRequirements(fakeLlm, 'Criar faturamento mensal');
-    assert.equal(doc.fases.length, 1);
-    assert.equal(doc.fases[0].id, '5A');
-  });
-
-  test('usa o modelo FLASH (não complexo) para estruturar', async () => {
-    let seen: { complex?: boolean } | undefined;
+  test('estrutura requisitos via structurer e retorna fases do contrato', async () => {
+    let structurerCalls = 0;
     const spy: LlmClient = {
       ...fakeLlm,
-      async implementer(_prompt: string, opts?: { complex?: boolean }) {
-        seen = opts;
-        return { content: JSON.stringify({ fases: FASES }), usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+      async structurer() {
+        structurerCalls += 1;
+        return { content: JSON.stringify({ fases: FASES }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
       },
     };
-    await structureRequirements(spy, 'qualquer coisa');
-    assert.deepEqual(seen, { complex: false }, 'estruturador usa o modelo flash');
+    const doc = await structureRequirements(spy, 'Criar faturamento mensal');
+    assert.equal(doc.fases.length, 1);
+    assert.equal(doc.fases[0].id, '5A');
+    assert.equal(structurerCalls, 1, 'usa o método structurer (uma chamada no sucesso)');
   });
 });
 

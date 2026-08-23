@@ -124,6 +124,9 @@ class FakeLlm implements LlmClient {
       : this.reviewerResponses[0] ?? '{}';
     return { content, usage: { promptTokens: 200, completionTokens: 80, totalTokens: 280 } };
   }
+  async structurer(): Promise<{ content: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }> {
+    return { content: '{}', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
+  }
 }
 
 const silentLog: Logger = { info: () => {}, warn: () => {}, error: () => {}, redact: (s: string) => s };

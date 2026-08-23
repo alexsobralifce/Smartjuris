@@ -225,6 +225,9 @@ function makeFakeLlm(repoRoot?: string): LlmClient {
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       };
     },
+    async structurer() {
+      return { content: '{}', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
+    },
   };
 }
 
@@ -742,6 +745,9 @@ describe('cache de auditoria + loopgain (economia)', () => {
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         };
       },
+      async structurer() {
+        return { content: '{}', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
+      },
     };
     const deps = {
       exec: hybrid,
@@ -810,6 +816,9 @@ describe('cache de auditoria + loopgain (economia)', () => {
           }),
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         };
+      },
+      async structurer() {
+        return { content: '{}', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
       },
     };
     const deps = {
@@ -953,6 +962,9 @@ describe('modo autônomo (--autonomous)', () => {
             }),
             usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           };
+        },
+        async structurer() {
+          return { content: '{}', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } };
         },
       } as LlmClient,
       repoRoot: repo.root,

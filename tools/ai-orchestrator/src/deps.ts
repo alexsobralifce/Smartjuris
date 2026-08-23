@@ -6,7 +6,7 @@
 
 import { SafeExecutor } from './executor.js';
 import { createGitOps } from './git.js';
-import { chatCompletion, type LlmClient } from './llm.js';
+import { chatCompletion, STRUCTURE_SYSTEM_PROMPT, type LlmClient } from './llm.js';
 import { loadEnv, applyRepoDotEnv, applyLegacyAliases } from './config.js';
 import type { AutomationConfig } from './contracts.js';
 import { createLogger, type Logger } from './io.js';
@@ -67,6 +67,19 @@ export function createRealDeps(opts: {
         user,
         maxTokens: 4000,
         completionTokensField: 'max_completion_tokens', // OpenAI (modelos novos)
+      });
+    },
+    async structurer(prompt: string) {
+      const eff = loadEnv(opts.env, opts.config);
+      return chatCompletion({
+        baseUrl: eff.deepseekBaseUrl,
+        apiKey: eff.deepseekApiKey,
+        model: eff.deepseekModel, // DeepSeek Flash
+        system: STRUCTURE_SYSTEM_PROMPT,
+        user: prompt,
+        temperature: 0.3,
+        maxTokens: 4000,
+        completionTokensField: 'max_tokens', // DeepSeek
       });
     },
   };

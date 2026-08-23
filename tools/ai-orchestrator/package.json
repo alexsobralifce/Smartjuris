@@ -9,7 +9,7 @@
     "dev": "pnpm fix-perms && tsx watch --clear-screen=false src/cli.ts -- dashboard",
     "dev:dashboard": "pnpm fix-perms && tsx watch --clear-screen=false src/cli.ts -- dashboard",
     "test": "pnpm fix-perms && tsx --test test/roadmap.test.ts test/gate.test.ts test/contracts.test.ts test/safety.test.ts test/dryRun.test.ts test/worktree.test.ts test/relatorio.test.ts test/ledger.test.ts test/requirements.test.ts",
-    "build": "tsc --noEmit"
+    "build": "pnpm fix-perms && tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

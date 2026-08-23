@@ -19,8 +19,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { z } from 'zod';
 import { RequirementsDoc, type RequirementsDoc as RequirementsDocType, type RequirementPhase, type AutomationConfig } from './contracts.js';
-import type { LlmClient } from './llm.js';
-import { extractJson } from './llm.js';
+import { extractJson, type LlmClient } from './llm.js';
 import { safeJoin } from './paths.js';
 import { writeTextAtomic } from './io.js';
 import { isValidPhaseId, parsePhaseRow, parseRoadmap } from './roadmap.js';
@@ -30,34 +29,6 @@ const REQUIREMENTS_DIR = 'requirements';
 // ---------------------------------------------------------------------------
 // 1) Estruturação por LLM
 // ---------------------------------------------------------------------------
-
-export const STRUCTURE_SYSTEM_PROMPT = [
-  'Você é o analista de requisitos do orquestrador do SmartJuris.',
-  'Receba requisitos em linguagem natural e transforme em fases de implementação',
-  'ENUMERADAS, pequenas, verificáveis e ordenadas por dependência.',
-  '',
-  'REGRAS:',
-  '- Quebre em fases pequenas (cada uma com escopo e critérios de aceite claros).',
-  '- id: use sequência da próxima faixa livre (ex.: 5A, 5B, 5C) — nunca repita existente.',
-  '- dependencias: liste os ids de fases anteriores que esta fase exige aprovadas.',
-  '- escopo: o que DEVE ser implementado nesta fase.',
-  '- foraDoEscopo: o que NÃO deve ser tocado (para evitar alterações fora do escopo).',
-  '- testesObrigatorios: testes que o implementador deve entregar (migration, concorrência, etc.).',
-  '- criteriosAceite: itens objetivos que o revisor usará para aprovar (verificáveis, não vagos).',
-  '- Não invente requisitos: use apenas o que o usuário pediu, desdobrando em etapas.',
-  '',
-  'Responda SOMENTE com um objeto JSON válido, sem texto fora e sem cercas de código,',
-  'neste formato EXATO (sem campos extras):',
-  '{',
-  '  "fases": [',
-  '    { "id": "5A", "titulo": "...", "descricao": "...",',
-  '      "dependencias": ["4B"],',
-  '      "escopo": "...", "foraDoEscopo": "...",',
-  '      "testesObrigatorios": ["..."],',
-  '      "criteriosAceite": ["..."] }',
-  '  ]',
-  '}',
-].join('\n');
 
 /** Estrutura requisitos em linguagem natural → fases enumeradas (contrato Zod). */
 export async function structureRequirements(
@@ -69,21 +40,26 @@ export async function structureRequirements(
     '',
     texto.trim(),
     '',
-    'Estruture em fases conforme o contrato. Retorne SOMENTE o JSON.',
+    'Estruture em fases conforme o contrato. Retorne SOMENTE o JSON, sem renomear campos.',
   ].join('\n');
 
-  // Uma tentativa + uma correção guiada pelo erro de validação (como na auditoria).
-  const raw1 = await llm.implementer(user, { complex: false });
-  try {
-    return parseRequirements(raw1.content);
-  } catch (err) {
-    const hint = err instanceof Error ? err.message : String(err);
-    const raw2 = await llm.implementer(
-      `${user}\n\nA resposta anterior não seguiu o contrato. Erro: ${hint}\nResponda novamente somente com o JSON válido.`,
-      { complex: false },
-    );
-    return parseRequirements(raw2.content);
+  // Até 3 tentativas (a 1ª + correções guiadas pelo erro de validação).
+  let hint: string | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const prompt = hint
+      ? `${user}\n\nA resposta anterior não seguiu o contrato. Corrija seguindo o formato EXATO.\nErro: ${hint}\nResponda somente com o JSON válido.`
+      : user;
+    const raw = await llm.structurer(prompt);
+    try {
+      return parseRequirements(raw.content);
+    } catch (err) {
+      hint = err instanceof Error ? err.message : String(err);
+    }
   }
+  throw new Error(
+    `Não foi possível estruturar os requisitos no formato esperado após 3 tentativas do modelo. ` +
+      `Último erro: ${hint}. Verifique o texto ou tente novamente.`,
+  );
 }
 
 export function parseRequirements(jsonText: string): RequirementsDocType {

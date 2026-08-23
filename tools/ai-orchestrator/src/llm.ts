@@ -22,7 +22,42 @@ export interface LlmClient {
   /** `complex=true` usa o modelo pro (escada flash→pro em rodadas de correção avançadas). */
   implementer(prompt: string, opts?: { complex?: boolean }): Promise<LlmCompletion>;
   reviewer(context: string, correctionHint?: string): Promise<LlmCompletion>;
+  /** Estruturador de requisitos (DeepSeek Flash) — SYSTEM de estruturação estrito. */
+  structurer(prompt: string): Promise<LlmCompletion>;
 }
+
+export const STRUCTURE_SYSTEM_PROMPT = [
+  'Você é o analista de requisitos do orquestrador de implementação por fases.',
+  'Receba requisitos em linguagem natural e transforme em fases de implementação',
+  'ENUMERADAS, pequenas, verificáveis e ordenadas por dependência.',
+  '',
+  'REGRAS:',
+  '- Quebre em fases pequenas (cada uma com escopo e critérios de aceite claros).',
+  '- USE EXATAMENTE os nomes de campo do contrato abaixo: id, titulo, descricao,',
+  '  dependencias, escopo, foraDoEscopo, testesObrigatorios, criteriosAceite.',
+  '- NÃO renomeie os campos: nada de nome, tarefas, criterios_aceite ou testes.',
+  '- id: String (use aspas), sequência da próxima faixa livre (ex.: 5A, 5B, 5C)',
+  '  — nunca repita o existente.',
+  '- titulo: String curto com aspas.',
+  '- dependencias: array de Strings com os ids de fases anteriores que esta fase exige.',
+  '- escopo: o que DEVE ser implementado nesta fase (String).',
+  '- foraDoEscopo: o que NÃO deve ser tocado (String).',
+  '- testesObrigatorios: array de Strings com os testes a entregar.',
+  '- criteriosAceite: array de Strings com itens objetivos que o revisor usará.',
+  '- Não invente requisitos: use apenas o que o usuário pediu, desdobrando em etapas.',
+  '',
+  'Responda SOMENTE com um objeto JSON válido, sem texto fora e sem cercas de código,',
+  'neste formato EXATO (campos e tipos idênticos):',
+  '{',
+  '  "fases": [',
+  '    { "id": "5A", "titulo": "Título da fase", "descricao": "Descrição.",',
+  '      "dependencias": ["4B"],',
+  '      "escopo": "Implementar ...", "foraDoEscopo": "Não alterar ...",',
+  '      "testesObrigatorios": ["Teste de ..."],',
+  '      "criteriosAceite": ["A funcionalidade funciona ...", "..."] }',
+  '  ]',
+  '}',
+].join('\n');
 
 export async function chatCompletion(opts: {
   baseUrl: string;
@@ -213,6 +248,18 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
         user,
         maxTokens: 4000,
         completionTokensField: 'max_completion_tokens', // OpenAI (modelos novos)
+      });
+    },
+    async structurer(prompt: string): Promise<LlmCompletion> {
+      return chatCompletion({
+        baseUrl: env.deepseekBaseUrl,
+        apiKey: env.deepseekApiKey,
+        model: env.deepseekModel, // DeepSeek Flash (nunca pro)
+        system: STRUCTURE_SYSTEM_PROMPT,
+        user: prompt,
+        temperature: 0.3,
+        maxTokens: 4000,
+        completionTokensField: 'max_tokens', // DeepSeek
       });
     },
   };

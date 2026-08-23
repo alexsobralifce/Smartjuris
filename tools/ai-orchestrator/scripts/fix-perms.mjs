@@ -17,7 +17,7 @@ const hasGetuid = typeof process.getuid === 'function';
 const uid = hasGetuid ? process.getuid() : -1;
 const gid = hasGetuid ? process.getgid() : -1;
 
-const DIRS = ['src', 'web', 'test'];
+const DIRS = ['src', 'web', 'test', 'scripts'];
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {

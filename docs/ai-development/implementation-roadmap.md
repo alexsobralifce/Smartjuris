@@ -73,7 +73,7 @@ migrations validadas, quando aplicável
 | 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6A | Rastreabilidade persistida da busca ao vivo de jurisprudência | 5D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 6B | Aviso estruturado quando a peça sai sem jurisprudência ao vivo | 5A, 5D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6B | Aviso estruturado quando a peça sai sem jurisprudência ao vivo | 5A, 5D | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 | 6C | Política de rate limit configurável e observável | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 6D | Cache persistente de decisões via Redis com fallback em memória | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 6E | Endpoint de telemetria e saúde da integração de jurisprudência | 6C, 6D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -670,7 +670,7 @@ Persistir, para cada geração de peça que aciona (ou ignora) a busca de jurisp
 - O registro não contém conteúdo de decisões nem dados sensíveis do caso
 ### 6B — Aviso estruturado quando a peça sai sem jurisprudência ao vivo
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 5A, 5D aprovada(s).
 
@@ -816,6 +816,7 @@ Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/)
 | 2026-08-23 | 6A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 6A | DeepSeek | LOOPGAIN (determinístico) | REJECT | Não | Sem convergência entre rodadas (achados graves não reduziram). Decisão humana requerida. |
 | 2026-08-23 | 6A | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-23 | 6B | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

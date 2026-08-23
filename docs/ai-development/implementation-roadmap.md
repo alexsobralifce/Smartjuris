@@ -65,7 +65,7 @@ migrations validadas, quando aplicável
 | 4B | Piloto controlado | 4A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5A | Integrar busca ao vivo de jurisprudência no orquestrador de geração | 4B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
+| 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -539,7 +539,7 @@ Formatar as decisões ao vivo como um bloco com fonte rastreável e anexá-lo ao
 - Bloco de jurisprudência é rastreável
 ### 5C — Adicionar cache por escritório e controle de rate limit na busca ao vivo
 
-**Estado:** `AUDIT_FAILED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 5A aprovada(s).
 
@@ -700,6 +700,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5B | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 5B | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-23 | 5C | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-23 | 5C | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

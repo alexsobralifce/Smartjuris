@@ -75,7 +75,7 @@ migrations validadas, quando aplicável
 | 6A | Rastreabilidade persistida da busca ao vivo de jurisprudência | 5D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6B | Aviso estruturado quando a peça sai sem jurisprudência ao vivo | 5A, 5D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6C | Política de rate limit configurável e observável | 5C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 6D | Cache persistente de decisões via Redis com fallback em memória | 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 6D | Cache persistente de decisões via Redis com fallback em memória | 5C | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 | 6E | Endpoint de telemetria e saúde da integração de jurisprudência | 6C, 6D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 6F | Acesso ao portal Jurisprudências.ai e URL da API configurável | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
@@ -700,7 +700,7 @@ Tornar configuráveis via env (ex.: JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING e JU
 - A geração nunca falha por causa do rate limit
 ### 6D — Cache persistente de decisões via Redis com fallback em memória
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 5C aprovada(s).
 
@@ -820,6 +820,7 @@ Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/)
 | 2026-08-23 | 6B | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-23 | 6C | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6C | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-23 | 6D | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

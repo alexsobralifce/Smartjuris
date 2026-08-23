@@ -802,7 +802,12 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       operationType: op.operation_type,
       kind: 'SETTLE',
       creditsDelta: 0,
-      costCents: Math.round(custoReal.brlCents - op.cost_cents_reserved),
+      // Fase 5H: o ledger integer espelha EXATAMENTE o movimento aplicado ao
+      // reserve_cents_used (ROUND(custoReal) - ROUND(reservado)). Arredondar a
+      // DIFERENÇA (custoReal - reservado fracionário) antes divergia do valor
+      // persistido — ex.: reservado 1.55 + real 2.40 => movimento 0, mas
+      // Math.round(2.40 - 1.55)=1 registrava um delta inexistente.
+      costCents: Math.round(custoReal.brlCents) - Math.round(op.cost_cents_reserved),
       model: input.modelUsed,
       idempotencyKey: `${op.idempotency_key}:settle`,
       status: 'committed',

@@ -70,7 +70,7 @@ migrations validadas, quando aplicável
 | 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
@@ -618,7 +618,7 @@ Atualizar o controle de orçamento interno (maxReserveCents, aviso de 80%, bloqu
 - O bloqueio e o aviso de 80% disparam nos limites corretos com precisão
 ### 5H — Garantir compatibilidade com fluxos e dados legados
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 5F, 5G aprovada(s).
 
@@ -714,6 +714,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5F | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Implementacao validada: calculateAiCostCents arredonda o TOTAL uma unica vez no centesimo (deterministico, sem componentes contraditorios); fatias com o dobro de tokens reservam custo diferente (28750->3.25 vs 14375->1.67). reserve/settle/release usam a MESMA regra ROUND (sem retencao nem tolerancia generica); expectativas calculadas com isPeak real. 319 testes API verdes (61 custo/reserva/fallback). |
 | 2026-08-23 | 5G | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 5G | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao manual (regressao formal, ramo alternativo do achado HIGH do revisor): a implementacao de producao do orcamento com precisao de reserva foi entregue na 5F (ed07b8f): calculateAiCostCents arredonda o TOTAL uma unica vez no centesimo (deterministico); reserve/settle/release usam a MESMA regra ROUND; cost_cents_reserved numeric(10,2) preserva fracao. Esta fase adiciona a cobertura de regressao formalmente aprovada exigida pelo revisor: (1) efetivacao da reserva com custo fracionario 1.55 — reserve_cents_used arredonda (ROUND) e cost_cents_reserved preserva a fracao no banco; (2) fluxo REAL de calculo FLASH/PRO (estimativa -> elegibilidade -> reserveAiUsage) com consistencia entre custo avaliado, reservado e persistido; (3) limite exato de 4500 centavos inclusivo e casos fracionarios imediatamente abaixo (0.5 cabe) e acima (1.5 estoura). Suite API 322/322 verde (63 custo/reserva/fallback/analise). |
+| 2026-08-23 | 5H | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

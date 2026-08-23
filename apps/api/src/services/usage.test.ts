@@ -13,6 +13,7 @@ import {
   settleAiUsage,
   releaseAiUsageReservation,
   cicloAtual,
+  isHorarioPico,
   PLANS,
   OPERATION_LIMITS,
   type AiEstimateResult,
@@ -370,6 +371,35 @@ describe('reserveAiUsage (banco)', { skip: !dbDisponivel }, () => {
       await limparEscritorioTeste(escId);
     }
   });
+
+  test('Fase 5H: reserva idempotente com valor fracionário não duplica nem arredonda incorretamente', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      const estimativa: AiEstimateResult = { ...estimativaSimples('SIMPLE_PETITION'), estimatedCostCents: 1.55 };
+      const chave = randomUUID();
+
+      const r1 = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: chave, operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r1.ok, true);
+      assert.equal(r1.costCentsReserved, 1.55, 'primeira reserva preserva a fração');
+      const apos1 = await saldoEscritorio(escId);
+      assert.equal(apos1.reserveUsed, Math.round(1.55), 'reserve_cents_used arredonda UMA vez');
+
+      // Mesma chave → mesma operação; NADA é debitado de novo.
+      const r2 = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: chave, operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r2.alreadyReserved, true);
+      assert.equal(r2.operationId, r1.operationId);
+      assert.equal(r2.costCentsReserved, 1.55, 'repetição devolve o valor fracionário persistido');
+
+      const apos2 = await saldoEscritorio(escId);
+      assert.equal(apos2.reserveUsed, apos1.reserveUsed, 'sem duplicar o débito de reserva');
+      assert.equal(apos2.credits, apos1.credits, 'sem duplicar o débito de créditos');
+
+      const ops = await db.execute(sql`SELECT COUNT(*)::int AS n FROM ai_operations WHERE escritorio_id = ${escId} AND idempotency_key = ${chave}`) as any[];
+      assert.equal(ops[0].n, 1, 'uma única operação por chave');
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
 });
 
 describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
@@ -401,6 +431,75 @@ describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
       // Dupla liquidação é no-op.
       const s2 = await settleAiUsage({ operationId: r.operationId!, modelUsed: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 300 });
       assert.equal(s2.alreadySettled, true);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Fase 5H: settle com reserva fracionária NÃO cobra a mais e o ledger espelha o movimento real', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      // Reserva FRACIONÁRIA (1.55 centavos) — precisão 5E/5F.
+      const estimativa: AiEstimateResult = { ...estimativaSimples('SIMPLE_PETITION'), estimatedCostCents: 1.55 };
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativa });
+      assert.equal(r.ok, true);
+      assert.equal(r.costCentsReserved, 1.55);
+      const antes = await saldoEscritorio(escId);
+      assert.equal(antes.reserveUsed, Math.round(1.55), 'reserva aplica ROUND(1.55)=2');
+
+      // Custo REAL do provedor (independente da precisão da reserva) MENOR que
+      // a reserva: o excedente da reserva fracionária é devolvido (não cobra a mais).
+      const real = calculateAiSettlementCents({ model: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 0, isPeak: isHorarioPico() });
+      const s = await settleAiUsage({ operationId: r.operationId!, modelUsed: 'deepseek-v4-flash', inputTokens: 1_000, outputTokens: 0 });
+      assert.equal(s.ok, true);
+
+      // Movimento aplicado ao reserve_cents_used: ROUND(real) - ROUND(reservado).
+      const esperadoMovimento = Math.round(real.brlCents) - Math.round(1.55);
+      const depois = await saldoEscritorio(escId);
+      assert.equal(depois.reserveUsed, antes.reserveUsed + esperadoMovimento, `movimento exato (${esperadoMovimento})`);
+      assert.ok(depois.reserveUsed <= antes.reserveUsed, 'não cobra a mais com a nova precisão');
+
+      const ops = await db.execute(sql`SELECT cost_cents_actual FROM ai_operations WHERE id = ${r.operationId}`) as any[];
+      assert.equal(Number(ops[0]?.cost_cents_actual), Math.round(real.brlCents), 'cost_cents_actual = ROUND(custo real)');
+
+      // O ledger SETTLE registra EXATAMENTE o delta aplicado (5H) — não um
+      // Math.round(real - reservado) que divergia (ex.: 0 vs 1 no exemplo 2.40-1.55).
+      const ledger = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${r.operationId} AND kind = 'SETTLE'`) as any[];
+      assert.equal(Number(ledger[0]?.cost_cents), esperadoMovimento, 'ledger SETTLE == movimento real do reserve_cents_used');
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Fase 5H: dados legados integer em cost_cents_reserved são liquidados corretamente', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      // Operação legada (pré-5E): cost_cents_reserved INTEGER (22), sem fração.
+      const op = await db.execute(sql`
+        INSERT INTO ai_operations (idempotency_key, escritorio_id, usuario_id, operation_type, status, model, credits_reserved, cost_cents_reserved)
+        VALUES (${randomUUID()}, ${escId}, ${userId}, 'SIMPLE_PETITION', 'reserved', 'deepseek-v4-flash', 1, 22)
+        RETURNING id
+      `) as any[];
+      // Estado do ciclo como se a reserva legada tivesse sido aplicada.
+      await db.execute(sql`
+        UPDATE escritorios SET credits_available = 19, reserve_cents_used = 22 WHERE id = ${escId}
+      `);
+
+      const real = calculateAiSettlementCents({ model: 'deepseek-v4-flash', inputTokens: 100_000, outputTokens: 0, isPeak: isHorarioPico() });
+      const s = await settleAiUsage({ operationId: op[0].id, modelUsed: 'deepseek-v4-flash', inputTokens: 100_000, outputTokens: 0 });
+      assert.equal(s.ok, true);
+      assert.equal(s.status, 'succeeded');
+
+      const saldo = await saldoEscritorio(escId);
+      // Movimento: ROUND(real) - ROUND(22) aplicado sobre a reserva legada (22).
+      assert.equal(saldo.reserveUsed, 22 + Math.round(real.brlCents) - 22, 'reserva legada integer tratada no settle');
+
+      const ops = await db.execute(sql`SELECT status, cost_cents_actual FROM ai_operations WHERE id = ${op[0].id}`) as any[];
+      assert.equal(ops[0].status, 'succeeded');
+      assert.equal(Number(ops[0].cost_cents_actual), Math.round(real.brlCents));
+
+      const ledger = await db.execute(sql`SELECT cost_cents FROM credit_ledger WHERE operation_id = ${op[0].id} AND kind = 'SETTLE'`) as any[];
+      assert.equal(Number(ledger[0]?.cost_cents), Math.round(real.brlCents) - 22, 'ledger espelha o movimento da operação legada');
     } finally {
       await limparEscritorioTeste(escId);
     }
@@ -450,6 +549,35 @@ describe('releaseAiUsageReservation (banco)', { skip: !dbDisponivel }, () => {
       const kinds = (ledger as any[]).map((x) => x.kind);
       assert.ok(kinds.includes('ADJUST'));
       assert.ok(kinds.includes('RELEASE'));
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('Fase 5H: liberação de dados legados integer devolve exatamente o reservado', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      // Operação legada (pré-5E): cost_cents_reserved INTEGER (22).
+      const op = await db.execute(sql`
+        INSERT INTO ai_operations (idempotency_key, escritorio_id, usuario_id, operation_type, status, model, credits_reserved, cost_cents_reserved)
+        VALUES (${randomUUID()}, ${escId}, ${userId}, 'SIMPLE_PETITION', 'reserved', 'deepseek-v4-flash', 1, 22)
+        RETURNING id
+      `) as any[];
+      await db.execute(sql`
+        UPDATE escritorios SET credits_available = 19, reserve_cents_used = 22 WHERE id = ${escId}
+      `);
+
+      const l = await releaseAiUsageReservation({ operationId: op[0].id, reason: 'timeout-legado' });
+      assert.equal(l.ok, true);
+      assert.equal(l.creditsReleased, 1);
+      assert.equal(l.costCentsReleased, 22, 'release libera o valor reservado legado com precisão');
+
+      const saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 20, 'créditos restaurados');
+      assert.equal(saldo.reserveUsed, 0, 'reserve_cents_used zerado exatamente (ROUND(22))');
+
+      const ops = await db.execute(sql`SELECT status FROM ai_operations WHERE id = ${op[0].id}`) as any[];
+      assert.equal(ops[0].status, 'failed');
     } finally {
       await limparEscritorioTeste(escId);
     }

@@ -37,7 +37,10 @@ export function createRealDeps(opts: {
           'Você é o implementador do SmartJuris. Implemente apenas a fase solicitada, execute testes e build e reporte evidências. Não invente dados nem altere arquivos fora do escopo.',
         user: prompt,
         temperature: 0.3,
-        maxTokens: 8000,
+        // Modelos de raciocínio gastam tokens no reasoning_content antes de
+        // produzir o diff; 8000 truncava → implementador só "pensava" sem
+        // escrever arquivos. 12000 garante raciocínio + código real.
+        maxTokens: 12000,
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },

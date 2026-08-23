@@ -232,7 +232,7 @@ export function createLlmClient(env: EffectiveEnv, modelForReview: string): LlmC
         system: 'Você é o implementador do SmartJuris. Implemente apenas a fase solicitada, execute testes e build e reporte evidências. Não invente dados nem altere arquivos fora do escopo.',
         user: prompt,
         temperature: 0.3,
-        maxTokens: 8000,
+        maxTokens: 12000,
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },

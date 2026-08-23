@@ -310,19 +310,65 @@ export function montarEventoJurisprudencia(resultado: ResultadoJurisprudencia): 
   };
 }
 
-// --- Rate limit por escritório (fase 5C) ---
+// --- Rate limit por escritório (fase 5C + 6C configurável/observável) ---
 
 interface RateLimitEstado {
   pausadoAte: number;
   restantes: number | null;
+  /** Motivo da pausa (6C): header de rate limit baixo ou resposta 429. */
+  motivo: 'header' | '429';
 }
 
 const rateLimitPorEscritorio = new Map<string, RateLimitEstado>();
 
-/** Limiar mínimo de requisições restantes: abaixo disso, pausa buscas ao vivo. */
-const RATE_LIMIT_MIN_REMAINING = 2;
-/** Janela de pausa quando o rate limit está baixo (ms). */
-const RATE_LIMIT_PAUSA_MS = 60 * 1000;
+/**
+ * Fase 6C — limiar mínimo de requisições restantes (env configurável).
+ * Default: 2 (comportamento atual). Ausente/vazio/não-inteiro/negativo → default.
+ */
+export function limiarRateLimitMin(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING;
+  if (raw == null || String(raw).trim() === '') return 2;
+  const v = Number(raw);
+  return Number.isInteger(v) && v >= 0 ? v : 2;
+}
+
+/**
+ * Fase 6C — duração da pausa configurada via env (ms). Retorna null quando a
+ * env NÃO está configurada (ou é inválida) — nesse caso a precedência é:
+ *   1) env JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS (quando configurada);
+ *   2) reset informado pelo provedor (headers);
+ *   3) 60s (default histórico).
+ */
+export function duracaoPausaRateLimitMs(env: NodeJS.ProcessEnv = process.env): number | null {
+  const raw = env.JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS;
+  if (raw == null || String(raw).trim() === '') return null;
+  const v = Number(raw);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/**
+ * Fase 6C — estado observável do rate limit por escritório (para admin/dashboard).
+ * Retorna null se não há pausa ativa (ou se já expirou).
+ */
+export function estadoRateLimit(escritorioId: string): {
+  pausado: boolean;
+  ate: string | null;
+  motivo: 'header' | '429' | null;
+  restantes: number | null;
+} | null {
+  const estado = rateLimitPorEscritorio.get(escritorioId);
+  if (!estado) return null;
+  if (Date.now() > estado.pausadoAte) {
+    rateLimitPorEscritorio.delete(escritorioId);
+    return null;
+  }
+  return {
+    pausado: true,
+    ate: new Date(estado.pausadoAte).toISOString(),
+    motivo: estado.motivo,
+    restantes: estado.restantes,
+  };
+}
 
 /**
  * Normaliza o campo `reset` do rate limit para a DURAÇÃO da pausa em ms.
@@ -383,16 +429,28 @@ export function ehRateLimit(err: unknown): boolean {
   return /429|too many requests|rate limit/i.test(msg);
 }
 
-/** Interpreta os headers de rate limit e atualiza o estado do escritório. */
-export function registrarRateLimit(escritorioId: string, rateLimit: { remaining?: string | null; reset?: string | null } | undefined): void {
+/** Interpreta os headers de rate limit e atualiza o estado do escritório
+ *  (fase 6C): `motivo` registra se a pausa veio de header baixo ou de 429. */
+export function registrarRateLimit(
+  escritorioId: string,
+  rateLimit: { remaining?: string | null; reset?: string | null } | undefined,
+  motivo: 'header' | '429' = 'header',
+): void {
   if (!rateLimit) return;
   const remaining = rateLimit.remaining != null ? Number(rateLimit.remaining) : null;
-  if (remaining != null && !Number.isNaN(remaining) && remaining <= RATE_LIMIT_MIN_REMAINING) {
+  if (remaining != null && !Number.isNaN(remaining) && remaining <= limiarRateLimitMin()) {
+    // Precedência da duração da pausa (6C, documentada):
+    //  1) env JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS (quando configurada);
+    //  2) reset informado pelo provedor (headers);
+    //  3) 60s default.
+    const duracaoConfigurada = duracaoPausaRateLimitMs();
     const resetMs = normalizarResetMs(rateLimit.reset);
-    const pausa = resetMs != null
-      ? Math.max(resetMs - Date.now(), 1_000) // até o reset; mínimo 1s
-      : RATE_LIMIT_PAUSA_MS;
-    rateLimitPorEscritorio.set(escritorioId, { pausadoAte: Date.now() + pausa, restantes: remaining });
+    const pausa = duracaoConfigurada != null
+      ? duracaoConfigurada
+      : resetMs != null
+        ? Math.max(resetMs - Date.now(), 1_000) // até o reset; mínimo 1s
+        : 60_000;
+    rateLimitPorEscritorio.set(escritorioId, { pausadoAte: Date.now() + pausa, restantes: remaining, motivo });
   } else {
     rateLimitPorEscritorio.delete(escritorioId);
   }
@@ -531,7 +589,7 @@ export async function buscarJurisprudenciaSeNecessario(input: BuscarJurisprudenc
     // 5C: provedor retornou rate limit (429) → registra pausa para as próximas
     //    buscas ao vivo, mas segue com RAG local (best-effort, nunca falha).
     if (ehRateLimit(err)) {
-      registrarRateLimit(input.escritorioId, { remaining: '0', reset: undefined });
+      registrarRateLimit(input.escritorioId, { remaining: '0', reset: undefined }, '429');
       input.log?.('[jurisprudenciaRag] rate limit (429) do provedor — pausa novas buscas ao vivo');
     } else {
       // Best-effort: sem chave, indisponível... segue só com RAG.

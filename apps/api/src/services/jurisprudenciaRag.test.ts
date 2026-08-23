@@ -22,6 +22,9 @@ import {
   cacheSize,
   avisoJurisprudencia,
   montarEventoJurisprudencia,
+  limiarRateLimitMin,
+  duracaoPausaRateLimitMs,
+  estadoRateLimit,
   type RastreabilidadeJurisprudencia,
 } from '../services/jurisprudenciaRag.js';
 
@@ -510,5 +513,92 @@ describe('aviso estruturado de jurisprudência (fase 6B)', () => {
     assert.equal(ok.aviso, '');
     assert.equal(ok.decisoesUsadas, 3);
     assert.deepEqual(ok.tribunais, ['stj']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 6C — Política de rate limit configurável e observável
+// ---------------------------------------------------------------------------
+
+describe('rate limit configurável e observável (fase 6C)', () => {
+  after(() => {
+    limparRateLimit();
+  });
+
+  test('limiar e duração vêm de envs configuráveis com defaults corretos', () => {
+    assert.equal(limiarRateLimitMin({} as NodeJS.ProcessEnv), 2, 'default do limiar = 2');
+    assert.equal(limiarRateLimitMin({ JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING: '5' } as NodeJS.ProcessEnv), 5, 'limiar configurado via env');
+    assert.equal(limiarRateLimitMin({ JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING: 'abc' } as NodeJS.ProcessEnv), 2, 'não-inteiro → default');
+    assert.equal(limiarRateLimitMin({ JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING: '1.5' } as NodeJS.ProcessEnv), 2, 'não-inteiro (1.5) → default');
+    assert.equal(limiarRateLimitMin({ JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING: '' } as NodeJS.ProcessEnv), 2, 'vazio → default');
+    assert.equal(limiarRateLimitMin({ JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING: '-1' } as NodeJS.ProcessEnv), 2, 'negativo → default');
+    // Duração: null quando NÃO configurada (precedência: env > reset do provedor > 60s).
+    assert.equal(duracaoPausaRateLimitMs({} as NodeJS.ProcessEnv), null, 'ausente → null (não configurada)');
+    assert.equal(duracaoPausaRateLimitMs({ JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS: '' } as NodeJS.ProcessEnv), null, 'vazio → null');
+    assert.equal(duracaoPausaRateLimitMs({ JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS: '150000' } as NodeJS.ProcessEnv), 150_000, 'duração configurada via env');
+    assert.equal(duracaoPausaRateLimitMs({ JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS: '-10' } as NodeJS.ProcessEnv), null, 'inválido → null');
+  });
+
+  test('env de duração prevalece sobre o reset do provedor (precedência documentada)', () => {
+    limparRateLimit();
+    const antes = process.env.JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS;
+    process.env.JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS = '150000';
+    try {
+      // Reset de 10s do provedor, mas env de 150s → pausa ~150s (env prevalece).
+      registrarRateLimit('esc-6c-dur', { remaining: '1', reset: '10' }, 'header');
+      const estado = estadoRateLimit('esc-6c-dur');
+      assert.ok(estado, 'pausa registrada');
+      const restanteMs = Date.parse(estado!.ate!) - Date.now();
+      assert.ok(restanteMs > 120_000 && restanteMs <= 160_000, `env prevalece sobre reset (veio ${restanteMs}ms)`);
+    } finally {
+      if (antes === undefined) delete process.env.JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS;
+      else process.env.JURISPRUDENCIA_RATE_LIMIT_PAUSA_MS = antes;
+    }
+  });
+
+  test('registrarRateLimit usa o limiar configurado (header baixo pausa mais cedo)', () => {
+    limparRateLimit();
+    const antes = process.env.JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING;
+    process.env.JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING = '5';
+    try {
+      // Limiar = 5: remaining 4 já pausa (com o default 2 não pausaria).
+      registrarRateLimit('esc-6c-a', { remaining: '4', reset: '60' }, 'header');
+      assert.equal(rateLimitPausado('esc-6c-a'), true, 'pausado com limiar 5 (remaining 4)');
+    } finally {
+      if (antes === undefined) delete process.env.JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING;
+      else process.env.JURISPRUDENCIA_RATE_LIMIT_MIN_REMAINING = antes;
+    }
+  });
+
+  test('estadoRateLimit expõe pausado, até quando, motivo e restantes', () => {
+    limparRateLimit();
+    registrarRateLimit('esc-6c-b', { remaining: '1', reset: '120' }, 'header');
+    const estado = estadoRateLimit('esc-6c-b');
+    assert.ok(estado, 'estado existe');
+    assert.equal(estado!.pausado, true);
+    assert.ok(estado!.ate && Date.parse(estado!.ate) > Date.now(), 'expiração futura');
+    assert.equal(estado!.motivo, 'header');
+    assert.equal(estado!.restantes, 1);
+    // Sem pausa → null.
+    assert.equal(estadoRateLimit('esc-6c-ok'), null);
+  });
+
+  test('pausa por 429 registra motivo 429 no estado observável', async () => {
+    limparRateLimit();
+    let chamadas = 0;
+    const mock = async () => {
+      chamadas += 1;
+      throw new Error('HTTP 429 too many requests');
+    };
+    await buscarJurisprudenciaSeNecessario({
+      includeJurisprudence: true,
+      fatos: 'cenario 429 observa motivo da pausa',
+      escritorioId: 'esc-6c-429',
+      searchOverride: mock as never,
+    });
+    const estado = estadoRateLimit('esc-6c-429');
+    assert.ok(estado, 'pausa registrada após 429');
+    assert.equal(estado!.motivo, '429', 'motivo = 429');
+    assert.equal(estado!.restantes, 0);
   });
 });

@@ -555,11 +555,22 @@ interface AiOperationRow {
   error: string | null;
 }
 
+/** Normaliza a linha da ai_operations lida via SQL bruto: colunas numeric do
+ *  driver vêm como STRING (ex.: "10.00") — converte cost_cents_reserved para
+ *  number para não quebrar cálculos nem SQL de colunas integer. */
+function normalizarOperacao(row: Record<string, unknown> | undefined): AiOperationRow | null {
+  if (!row) return null;
+  return {
+    ...(row as unknown as AiOperationRow),
+    cost_cents_reserved: Number(row.cost_cents_reserved ?? 0),
+  };
+}
+
 async function buscarOperacao(operationId: string): Promise<AiOperationRow | null> {
   const rows = await db.execute(sql`
     SELECT * FROM ai_operations WHERE id = ${operationId} LIMIT 1
   `) as any[];
-  return (rows[0] as AiOperationRow) ?? null;
+  return normalizarOperacao(rows[0] as Record<string, unknown> | undefined);
 }
 
 /** Lê a operação com lock de linha (FOR UPDATE) — serializa settle/release
@@ -568,7 +579,7 @@ async function buscarOperacaoParaUpdate(tx: any, operationId: string): Promise<A
   const rows = await tx.execute(sql`
     SELECT * FROM ai_operations WHERE id = ${operationId} FOR UPDATE
   `) as any[];
-  return (rows[0] as AiOperationRow) ?? null;
+  return normalizarOperacao(rows[0] as Record<string, unknown> | undefined);
 }
 
 /**
@@ -742,9 +753,11 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
     });
 
     // Libera a diferença: reserva - custo real (pode ser negativo → consome mais reserva).
+    // cost_cents_reserved agora é numeric(10,2) (fase 5E); reserve_cents_used é
+    // integer — arredonda o resultado para evitar erro de cast.
     await tx.execute(sql`
       UPDATE escritorios
-      SET reserve_cents_used = GREATEST(0, reserve_cents_used - ${op.cost_cents_reserved} + ${custoReal.brlCents})
+      SET reserve_cents_used = GREATEST(0, ROUND(reserve_cents_used - ${op.cost_cents_reserved} + ${custoReal.brlCents})::int)
       WHERE id = ${op.escritorio_id}
     `);
 

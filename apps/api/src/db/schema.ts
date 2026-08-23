@@ -2,6 +2,68 @@ import { pgTable, text, timestamp, date, uuid, integer, jsonb, index, numeric, b
 import { sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
 
+/**
+ * Serializa um custo em centavos para numeric(10,2) com arredondamento decimal
+ * correto, SEM depender de `Math.round(value * 100)` (que sofre ruído binário —
+ * ex.: 0.1+0.2 = 0.30000000000000004 e 1.005*100 = 100.49999999999999).
+ * Estratégia: converte o valor para string decimal (toPrecision), separa
+ * parte inteira e 3+ casas decimais, e arredonda no terceiro decimal (half-up)
+ * manipulando STRINGS — sem multiplicação de ponto flutuante. Rejeita valores
+ * inválidos ou que excedam numeric(10,2) — nunca aceita silenciosamente.
+ */
+export function serializarCents(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new Error(`cost_cents_reserved inválido (não-finito): ${value}`);
+  }
+  if (value > 99_999_999.99 || value < -99_999_999.99) {
+    throw new Error(`cost_cents_reserved fora do limite numeric(10,2): ${value}`);
+  }
+
+  // Converte para string decimal com precisão suficiente (sem notação científica).
+  const s = value.toPrecision(16);
+  const neg = s.startsWith('-');
+  const semSinal = neg ? s.slice(1) : s;
+  const [intPart, fracPart = ''] = semSinal.split('.');
+  // Arredonda no 3º decimal (half-up) sobre a string: se o dígito >= 5, sobe.
+  const terceiro = fracPart[2];
+  const dois = (fracPart[0] ?? '0') + (fracPart[1] ?? '0');
+  let centesimos: string;
+  if (terceiro !== undefined && Number(terceiro) >= 5) {
+    const valorInt = BigInt((intPart === '' ? '0' : intPart) + dois) + 1n;
+    centesimos = String(valorInt);
+  } else {
+    centesimos = (intPart === '' ? '0' : intPart) + dois;
+  }
+  // Normaliza a parte inteira (remove zeros à esquerda).
+  const inteiro = centesimos.slice(0, -2).replace(/^0+(?=\d)/, '') || '0';
+  // Padroniza os centésimos com 2 dígitos (ex.: 1 → "01").
+  const decimal = centesimos.slice(-2).padStart(2, '0');
+  const out = decimal === '00' ? inteiro : `${inteiro}.${decimal}`;
+  const resultado = (neg ? '-' : '') + out;
+
+  // O resultado arredondado deve caber em numeric(10,2).
+  const numResult = Number(resultado);
+  if (numResult > 99_999_999.99 || numResult < -99_999_999.99) {
+    throw new Error(`cost_cents_reserved arredondado fora do limite numeric(10,2): ${value}`);
+  }
+  return resultado;
+}
+
+// Custo reservado com centésimos de centavo (numeric(10,2), fase 5E): o banco
+// devolve string ('10.00'); o tipo expõe `number` no código e serializa para
+// o banco com arredondamento decimal EXPLÍCITO (sem erro de ponto flutuante).
+export const numericCents = customType<{ data: number; driverData: string }>({
+  dataType() {
+    return 'numeric(10,2)';
+  },
+  fromDriver(value: string): number {
+    return Number(value);
+  },
+  toDriver(value: number): string {
+    return serializarCents(value);
+  },
+});
+
 // Vector type for pgvector
 const vector = customType<{ data: number[] }>({
   dataType() {
@@ -332,7 +394,7 @@ export const aiOperations = pgTable('ai_operations', {
   leaseToken: text('lease_token'),
   creditsReserved: integer('credits_reserved').notNull().default(0),
   creditsSettled: integer('credits_settled').notNull().default(0),
-  costCentsReserved: integer('cost_cents_reserved').notNull().default(0),
+  costCentsReserved: numericCents('cost_cents_reserved').notNull().default(0),
   costCentsActual: integer('cost_cents_actual').notNull().default(0),
   tokensIn: integer('tokens_in').notNull().default(0),
   tokensOut: integer('tokens_out').notNull().default(0),

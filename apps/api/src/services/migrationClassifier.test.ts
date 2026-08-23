@@ -205,7 +205,7 @@ describe('2E — migration metadados do classificador', () => {
     assert.equal(dados.op.classification, 'STANDARD');
     assert.equal(dados.op.prompt_version, 'analise-documental-v1');
     assert.equal(dados.op.credits_reserved, 1, 'financeiro intacto');
-    assert.equal(dados.op.cost_cents_reserved, 5, 'financeiro intacto');
+    assert.equal(Number(dados.op.cost_cents_reserved), 5, 'financeiro intacto');
     assert.equal(dados.child.parent_operation_id, ids.opId, 'hierarquia pai→filha');
 
     // Nada vazou para o schema public (search_path padrão do pool).
@@ -397,7 +397,7 @@ describe('2E — migration metadados do classificador', () => {
         return rows[0];
       });
       assert.equal(op.credits_reserved, 3, 'crédito preservado');
-      assert.equal(op.cost_cents_reserved, 20, 'custo preservado');
+      assert.equal(Number(op.cost_cents_reserved), 20, 'custo preservado');
       assert.equal(op.status, 'succeeded');
 
       // 7. Reexecução é idempotente (registros já com hash; flag não é mais
@@ -569,7 +569,7 @@ describe('2E — migration metadados do classificador', () => {
         return op[0];
       });
       assert.equal(pos.credits_reserved, 2, 'crédito preservado no upgrade');
-      assert.equal(pos.cost_cents_reserved, 15, 'custo preservado no upgrade');
+      assert.equal(Number(pos.cost_cents_reserved), 15, 'custo preservado no upgrade');
       assert.equal(pos.status, 'succeeded');
       assert.equal(pos.classification, null, 'metadado novo começa nulo');
 

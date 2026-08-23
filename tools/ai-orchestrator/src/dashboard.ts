@@ -12,6 +12,8 @@ import { safeJoin, moduleDir } from './paths.js';
 import { readText } from './io.js';
 import { parseRoadmap } from './roadmap.js';
 import { readLedger, openFindings, type LedgerEntry } from './ledger.js';
+import { structureRequirements, applyRequirements } from './requirements.js';
+import type { RequirementPhase } from './contracts.js';
 import type { AutomationConfig } from './contracts.js';
 
 interface RunItem {
@@ -195,32 +197,71 @@ export interface DashboardServerOptions {
   config: AutomationConfig;
   port: number;
   log: { info: (msg: string) => void };
+  /** Cliente LLM usado para estruturar requisitos (DeepSeek Flash). */
+  llm: import('./llm.js').LlmClient;
+}
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk: Buffer) => {
+      data += chunk.toString('utf8');
+      if (data.length > 1_000_000) {
+        reject(new Error('corpo da requisição muito grande'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
 }
 
 /** Sobe o servidor do painel. Retorna a URL base. */
 export function startDashboardServer(opts: DashboardServerOptions): string {
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = (req.url ?? '/').split('?')[0];
-    if (url === '/api/snapshot') {
-      try {
+    try {
+      if (url === '/api/snapshot') {
         sendJson(res, 200, buildSnapshot(opts.aiDevDir, opts.config));
-      } catch (err) {
-        sendJson(res, 500, { erro: err instanceof Error ? err.message : String(err) });
-      }
-      return;
-    }
-    if (url === '/' || url === '/index.html') {
-      let html = '';
-      try {
-        html = readFileSync(HTML_PATH, 'utf8');
-      } catch {
-        sendHtml(res, 500, '<h1>dashboard.html não encontrado</h1><p>Verifique tools/ai-orchestrator/web/dashboard.html</p>');
         return;
       }
-      sendHtml(res, 200, html);
-      return;
+      if (url === '/api/requisitos' && req.method === 'POST') {
+        // Entrada de requisitos: texto livre → estruturação por LLM (DeepSeek Flash).
+        const body = JSON.parse(await readBody(req)) as { texto?: string };
+        if (!body.texto?.trim()) {
+          sendJson(res, 400, { erro: 'Informe o texto dos requisitos.' });
+          return;
+        }
+        const doc = await structureRequirements(opts.llm, body.texto);
+        sendJson(res, 200, { fases: doc.fases });
+        return;
+      }
+      if (url === '/api/requisitos' && req.method === 'PUT') {
+        // Aplica os requisitos (já estruturados) no roadmap + prompts + requirements/.
+        const body = JSON.parse(await readBody(req)) as { fases?: RequirementPhase[] };
+        if (!Array.isArray(body.fases) || body.fases.length === 0) {
+          sendJson(res, 400, { erro: 'Envie o array de fases estruturadas.' });
+          return;
+        }
+        const result = await applyRequirements(opts.aiDevDir, opts.config, body.fases);
+        sendJson(res, 200, result);
+        return;
+      }
+      if (url === '/' || url === '/index.html') {
+        let html = '';
+        try {
+          html = readFileSync(HTML_PATH, 'utf8');
+        } catch {
+          sendHtml(res, 500, '<h1>dashboard.html não encontrado</h1><p>Verifique tools/ai-orchestrator/web/dashboard.html</p>');
+          return;
+        }
+        sendHtml(res, 200, html);
+        return;
+      }
+      sendJson(res, 404, { erro: 'rota não encontrada. Use / para o painel e /api/snapshot para o JSON.' });
+    } catch (err) {
+      sendJson(res, 500, { erro: err instanceof Error ? err.message : String(err) });
     }
-    sendJson(res, 404, { erro: 'rota não encontrada. Use / para o painel e /api/snapshot para o JSON.' });
   });
 
   server.listen(opts.port, () => {

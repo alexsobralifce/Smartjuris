@@ -212,3 +212,26 @@ export const RunSummary = z.object({
   costEstimateUsd: z.number().nonnegative().nullable().optional(),
 }).strict();
 export type RunSummary = z.infer<typeof RunSummary>;
+
+// --- Requisitos estruturados (entrada do orquestrador) ---
+//
+// O usuário entrega o requisito em linguagem natural; o orquestrador (via LLM
+// estruturador) o converte neste contrato — enumerado, validável e consumível
+// pelas fases (roadmap + prompts gerados a partir dele).
+
+export const RequirementPhase = z.object({
+  id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'id de fase inválido'),
+  titulo: z.string().min(1),
+  descricao: z.string().min(1),
+  dependencias: z.array(z.string()).default([]),
+  escopo: z.string().min(1),
+  foraDoEscopo: z.string().default(''),
+  testesObrigatorios: z.array(z.string()).default([]),
+  criteriosAceite: z.array(z.string()).min(1, 'defina ao menos 1 critério de aceite'),
+}).strict();
+export type RequirementPhase = z.infer<typeof RequirementPhase>;
+
+export const RequirementsDoc = z.object({
+  fases: z.array(RequirementPhase).min(1, 'nenhuma fase extraída'),
+}).strict();
+export type RequirementsDoc = z.infer<typeof RequirementsDoc>;

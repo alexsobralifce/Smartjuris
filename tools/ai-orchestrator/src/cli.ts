@@ -20,6 +20,7 @@
 // ===========================================================================
 
 import { moduleDir, resolveRepoRoot, resolveAiDevDir, type Env } from './paths.js';
+import { join } from 'node:path';
 import { loadAutomationConfig } from './config.js';
 import { createLogger, withLock } from './io.js';
 import { createRealDeps } from './deps.js';
@@ -27,6 +28,7 @@ import { runPhase, runAutonomousChain } from './run.js';
 import { reAuditRun } from './auditRun.js';
 import { printStatus, printRelatorio, findNextEligible, approvePhase, planDryRun, resolveRunMode } from './commands.js';
 import { startDashboardServer } from './dashboard.js';
+import { structureRequirements, applyRequirements, readRequirementsInput, renderRequirementsList, existingPhaseIds, buildStructureInput } from './requirements.js';
 import type { RunMode } from './contracts.js';
 
 const USAGE = `Uso:
@@ -39,6 +41,8 @@ const USAGE = `Uso:
   ai:retry --phase <ID> [modo]             reexecuta fase em CORRECTION_PENDING/AUDIT_FAILED
   ai:dry-run [--phase <ID>]                plano offline sem mutações
   ai:dashboard [--port 3177]               painel web em tempo real (custos + verificações)
+  ai:req --file <arquivo> [--apply]        estrutura requisitos em linguagem natural
+                                           em fases enumeradas (e --apply grava no roadmap)
 
 Modos de working tree (run/next/retry):
   --auto-commit       cria checkpoint automático (git add filtrado + commit) antes da fase
@@ -153,14 +157,32 @@ async function main(): Promise<void> {
       break;
     }
     case 'dashboard': {
-      // Painel web em tempo real: serve o dashboard.html + /api/snapshot (leitura ao vivo).
+      // Painel web em tempo real: serve o dashboard.html + /api/snapshot +
+      // entrada de requisitos (POST /api/requisitos → estruturação via LLM).
       const port = Number(opts.port ?? env.AI_DASHBOARD_PORT ?? 3177);
       if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('Porta inválida: ' + opts.port);
-      const url = startDashboardServer({ aiDevDir, config, port, log });
+      const depsReal = deps();
+      const url = startDashboardServer({ aiDevDir, config, port, log, llm: depsReal.llm });
       log.info(`Painel disponível em ${url}/  (Ctrl+C para encerrar)`);
       await new Promise<void>((resolve) => {
         process.on('SIGINT', () => { log.info('Painel encerrado.'); resolve(); });
       });
+      break;
+    }
+    case 'req': {
+      // Estrutura requisitos em linguagem natural → fases enumeradas (DeepSeek Flash).
+      const file = opts.file ?? join(aiDevDir, 'requirements', 'novos.txt');
+      const texto = await readRequirementsInput(file);
+      const idsExistentes = existingPhaseIds(aiDevDir, config);
+      log.info(`Estruturando requisitos de ${file} (ids existentes: ${idsExistentes.join(', ') || 'nenhum'})...`);
+      const doc = await structureRequirements(deps().llm, buildStructureInput(texto, idsExistentes));
+      console.log(renderRequirementsList(doc));
+      if (!flags.includes('apply')) {
+        log.info('Requisitos estruturados (não aplicados). Use --apply para gravar no roadmap e prompts.');
+        break;
+      }
+      const result = await applyRequirements(aiDevDir, config, doc.fases);
+      log.info(`Aplicado. Arquivos: ${result.arquivos.join(', ')}`);
       break;
     }
     default: {

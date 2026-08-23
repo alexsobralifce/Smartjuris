@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/cli.ts",
-    "test": "tsx --test test/roadmap.test.ts test/gate.test.ts test/contracts.test.ts test/safety.test.ts test/dryRun.test.ts test/worktree.test.ts test/relatorio.test.ts test/ledger.test.ts",
+    "test": "tsx --test test/roadmap.test.ts test/gate.test.ts test/contracts.test.ts test/safety.test.ts test/dryRun.test.ts test/worktree.test.ts test/relatorio.test.ts test/ledger.test.ts test/requirements.test.ts",
     "build": "tsc --noEmit"
   },
   "devDependencies": {

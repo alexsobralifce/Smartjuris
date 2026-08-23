@@ -60,6 +60,17 @@
   .run-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
   .run-chip small { color: var(--muted); }
   .empty { color: var(--muted); padding: 16px; }
+  textarea { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin: 10px 0; resize: vertical; }
+  .req-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #reqResultado { margin-top: 14px; }
+  .fase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .fase-card h4 { font-size: 15px; margin-bottom: 4px; }
+  .fase-card ul { margin: 6px 0 0 18px; font-size: 13px; color: var(--fg); }
+  .fase-card .sub { font-size: 12px; }
   footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
   @media (max-width: 640px) { table { font-size: 12px; } th, td { padding: 7px 8px; } }
 </style>
@@ -94,6 +105,16 @@
 
   <h2 class="section-title">Últimos runs</h2>
   <div class="last-runs" id="lastRuns"></div>
+
+  <h2 class="section-title">Novos requisitos</h2>
+  <p class="sub">Cole os requisitos em linguagem natural. O orquestrador estrutura em fases enumeradas (DeepSeek Flash) para você revisar e aplicar no roadmap.</p>
+  <textarea id="reqTexto" rows="6" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
+  <div class="req-actions">
+    <button id="btnEstruturar">1 · Estruturar em fases</button>
+    <button id="btnAplicar" class="primary" disabled>2 · Aplicar no roadmap</button>
+    <span id="reqStatus" class="sub"></span>
+  </div>
+  <div id="reqResultado"></div>
 
   <footer>
     Auto-atualiza a cada 3s. Revisor: <span id="cfgReviewer"></span> · Teto de correções:
@@ -179,6 +200,77 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 3000);
+
+// --- Entrada de requisitos (estruturação + aplicação) ---
+let fasesEstruturadas = null;
+
+function renderFases(fases) {
+  const box = $('reqResultado');
+  if (!fases || fases.length === 0) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = fases.map((f, i) => `
+    <div class="fase-card">
+      <h4>${i + 1}. ${f.id} — ${f.titulo}</h4>
+      <div class="sub">Dependências: ${f.dependencias?.length ? f.dependencias.join(', ') : '—'}</div>
+      <div class="sub">Descrição: ${f.descricao}</div>
+      ${f.escopo ? `<div class="sub">Escopo: ${f.escopo}</div>` : ''}
+      ${f.foraDoEscopo ? `<div class="sub">Fora do escopo: ${f.foraDoEscopo}</div>` : ''}
+      ${f.testesObrigatorios?.length ? `<div class="sub">Testes obrigatórios:</div><ul>${f.testesObrigatorios.map((t) => `<li>${t}</li>`).join('')}</ul>` : ''}
+      <div class="sub">Critérios de aceite:</div>
+      <ul>${f.criteriosAceite.map((c) => `<li>${c}</li>`).join('')}</ul>
+    </div>
+  `).join('');
+}
+
+$('btnEstruturar').addEventListener('click', async () => {
+  const texto = $('reqTexto').value.trim();
+  if (!texto) { $('reqStatus').textContent = 'Cole os requisitos primeiro.'; return; }
+  $('reqStatus').textContent = 'Estruturando… (DeepSeek Flash)';
+  $('btnEstruturar').disabled = true;
+  try {
+    const res = await fetch('/api/requisitos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'HTTP ' + res.status);
+    fasesEstruturadas = data.fases;
+    renderFases(fasesEstruturadas);
+    $('btnAplicar').disabled = false;
+    $('reqStatus').textContent = `${fasesEstruturadas.length} fase(s) estruturada(s). Revise e aplique.`;
+  } catch (err) {
+    $('reqStatus').textContent = 'Erro: ' + err.message;
+  } finally {
+    $('btnEstruturar').disabled = false;
+  }
+});
+
+$('btnAplicar').addEventListener('click', async () => {
+  if (!fasesEstruturadas) return;
+  $('reqStatus').textContent = 'Aplicando no roadmap e prompts…';
+  $('btnAplicar').disabled = true;
+  try {
+    const res = await fetch('/api/requisitos', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fases: fasesEstruturadas }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'HTTP ' + res.status);
+    $('reqStatus').textContent = 'Aplicado. Arquivos: ' + data.arquivos.join(', ');
+    $('reqTexto').value = '';
+    fasesEstruturadas = null;
+    renderFases(null);
+    $('btnAplicar').disabled = true;
+    refresh(); // atualiza a tabela de fases imediatamente
+  } catch (err) {
+    $('reqStatus').textContent = 'Erro: ' + err.message;
+    $('btnAplicar').disabled = false;
+  }
+});
 </script>
 </body>
 </html>

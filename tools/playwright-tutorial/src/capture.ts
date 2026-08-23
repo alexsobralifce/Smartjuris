@@ -19,6 +19,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const OUT_DIR = join(ROOT, 'docs', 'tutorial', 'images');
+// Cópia servida pelo frontend (menu Tutorial usa /tutorial/images/*.png).
+const WEB_IMAGES_DIR = join(ROOT, 'apps', 'web', 'public', 'tutorial', 'images');
 const README_PATH = join(ROOT, 'docs', 'tutorial', 'README.md');
 
 const BASE_URL = process.env.TUTORIAL_BASE_URL ?? 'http://localhost:5173';
@@ -115,6 +117,7 @@ ${secoes}
 async function main(): Promise<void> {
   await verificarInfra();
   mkdirSync(OUT_DIR, { recursive: true });
+  mkdirSync(WEB_IMAGES_DIR, { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -161,8 +164,11 @@ async function main(): Promise<void> {
 
     // 4) Tutorial markdown.
     writeFileSync(README_PATH, gerarReadme(capturadas), 'utf8');
+    // Copia as imagens para o frontend (menu Tutorial usa /tutorial/images/*).
+    const { copyFileSync } = await import('node:fs');
+    for (const f of capturadas) copyFileSync(join(OUT_DIR, f), join(WEB_IMAGES_DIR, f));
     console.log(`\n✅ Tutorial gerado: ${README_PATH}`);
-    console.log(`   Imagens: ${capturadas.length} em ${OUT_DIR}`);
+    console.log(`   Imagens: ${capturadas.length} em ${OUT_DIR} (+ cópia em ${WEB_IMAGES_DIR})`);
   } finally {
     await browser.close();
   }

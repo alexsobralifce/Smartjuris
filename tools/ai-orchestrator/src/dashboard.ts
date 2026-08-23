@@ -12,7 +12,7 @@ import { safeJoin, moduleDir } from './paths.js';
 import { readText } from './io.js';
 import { parseRoadmap } from './roadmap.js';
 import { readLedger, openFindings, type LedgerEntry } from './ledger.js';
-import { structureRequirements, applyRequirements, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS } from './requirements.js';
+import { structureRequirements, applyRequirements, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS, listRequirementPhases, saveRequirementsInput, resetRequirementPhases } from './requirements.js';
 import type { RequirementPhase } from './contracts.js';
 import type { AutomationConfig } from './contracts.js';
 
@@ -62,9 +62,16 @@ export interface Snapshot {
     fasesAprovadas: number;
     fasesPendentes: number;
     revisorPoupado: number;
+    // Resumo das fases geradas por requisitos (requirements/<id>.json).
+    requisitosGerados: number;
+    fasesAnalisando: number;
+    fasesRejeitadas: number;
+    fasesPlanejadas: number;
   };
   fases: PhaseRow[];
   ultimosRuns: RunItem[];
+  /** Ids das fases geradas por requisitos (requirements/<id>.json). */
+  requisitoIds: string[];
 }
 
 function readJsonLoose<T>(file: string): T | null {
@@ -150,6 +157,17 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
   const tokensTotal = runs.reduce((acc, r) => acc + r.promptTokens + r.completionTokens, 0);
   const aprovadas = phases.filter((p) => p.status === 'AUDIT_APPROVED').length;
 
+  // Fases geradas a partir de requisitos (requirements/<id>.json) e seus estados.
+  const idsRequisitos = new Set(listRequirementPhases(aiDevDir).map((f) => f.id));
+  const fasesDeRequisitos = phases.filter((p) => idsRequisitos.has(p.id));
+  const fasesAnalisando = fasesDeRequisitos.filter(
+    (p) => p.status === 'IMPLEMENTING' || p.status === 'AUDIT_PENDING' || p.status === 'IMPLEMENTED',
+  ).length;
+  const fasesRejeitadas = fasesDeRequisitos.filter(
+    (p) => p.status === 'CORRECTION_PENDING' || p.status === 'AUDIT_FAILED' || p.status === 'BLOCKED',
+  ).length;
+  const fasesPlanejadas = fasesDeRequisitos.filter((p) => p.status === 'PLANNED').length;
+
   return {
     geradoEm: new Date().toISOString(),
     config: {
@@ -165,9 +183,14 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
       fasesAprovadas: aprovadas,
       fasesPendentes: phases.length - aprovadas,
       revisorPoupado: runs.filter((r) => r.skip || r.cache).length,
+      requisitosGerados: fasesDeRequisitos.length,
+      fasesAnalisando,
+      fasesRejeitadas,
+      fasesPlanejadas,
     },
     fases,
     ultimosRuns: runs.slice(-12).reverse(),
+    requisitoIds: [...idsRequisitos],
   };
 }
 
@@ -241,6 +264,8 @@ export function startDashboardServer(opts: DashboardServerOptions): string {
           sendJson(res, 400, { erro: err instanceof Error ? err.message : String(err) });
           return;
         }
+        // Persiste o texto vindo do painel em requirements/inbox.txt (fonte para o loader).
+        await saveRequirementsInput(opts.aiDevDir, body.texto);
         const doc = await structureRequirements(opts.llm, body.texto);
         sendJson(res, 200, { fases: doc.fases });
         return;
@@ -254,6 +279,17 @@ export function startDashboardServer(opts: DashboardServerOptions): string {
         }
         const result = await applyRequirements(opts.aiDevDir, opts.config, body.fases);
         sendJson(res, 200, result);
+        return;
+      }
+      if (url === '/api/requisitos/zerar' && req.method === 'POST') {
+        // Zera as fases geradas por requisitos (roadmap + prompts + requirements/).
+        const result = await resetRequirementPhases(opts.aiDevDir, opts.config);
+        sendJson(res, 200, result);
+        return;
+      }
+      if (url === '/api/requisitos' && req.method === 'GET') {
+        // Lista as fases geradas por requisitos (para o painel acompanhar).
+        sendJson(res, 200, { fases: listRequirementPhases(opts.aiDevDir) });
         return;
       }
       // /api/* desconhecido → JSON de erro claro.

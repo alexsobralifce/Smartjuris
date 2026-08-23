@@ -15,7 +15,7 @@
 
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { z } from 'zod';
 import { RequirementsDoc, type RequirementsDoc as RequirementsDocType, type RequirementPhase, type AutomationConfig } from './contracts.js';
@@ -442,4 +442,137 @@ export function existingPhaseIds(aiDevDir: string, config: AutomationConfig): st
   } catch {
     return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// 6) Painel: persistência da entrada + listagem + zerar fases de requisitos
+// ---------------------------------------------------------------------------
+
+/** Lista as fases geradas a partir de requisitos (requirements/<id>.json). */
+export function listRequirementPhases(aiDevDir: string): RequirementPhase[] {
+  const dir = requirementsDir(aiDevDir);
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  const out: RequirementPhase[] = [];
+  for (const entry of entries) {
+    const id = entry.replace(/\.json$/, '');
+    if (!isValidPhaseId(id)) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(safeJoin(dir, entry), 'utf8')) as RequirementPhase;
+      if (parsed.id && parsed.titulo) out.push(parsed);
+    } catch {
+      // requisito inválido — ignora
+    }
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Salva o texto de requisitos vindo do painel em requirements/inbox.txt. */
+export async function saveRequirementsInput(aiDevDir: string, texto: string): Promise<string> {
+  await mkdir(requirementsDir(aiDevDir), { recursive: true });
+  const path = safeJoin(requirementsDir(aiDevDir), 'inbox.txt');
+  await writeFile(path, texto.trim(), 'utf8');
+  return path;
+}
+
+/**
+ * Remove uma fase do roadmap (linha da tabela + seção detalhada) e dos prompts.
+ * Retorna o roadmap e os prompts atualizados (não escreve em disco).
+ */
+export function renderRoadmapWithoutPhase(md: string, phaseId: string): string {
+  const lines = md.split(/\r?\n/);
+  const out: string[] = [];
+  let inGeneralTable = false;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^## Roadmap geral/.test(line)) inGeneralTable = true;
+    else if (/^##\s+/.test(line)) inGeneralTable = false;
+
+    // Remove linha da tabela geral desta fase.
+    if (inGeneralTable) {
+      const row = parsePhaseRow(line);
+      if (row && row.id === phaseId) {
+        i += 1;
+        continue;
+      }
+    }
+    // Remove a seção detalhada `### <id> —` até a próxima `###`/`##`.
+    const sec = line.match(/^###\s+([A-Za-z0-9._-]+)\s*—/);
+    if (sec && sec[1] === phaseId) {
+      i += 1;
+      while (i < lines.length && !/^(###|##)\s+/.test(lines[i])) i += 1;
+      continue;
+    }
+    out.push(line);
+    i += 1;
+  }
+  // Remove linhas em branco duplicadas deixadas pela remoção.
+  return out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+/, '');
+}
+
+/** Remove o bloco de prompts `# <id> —` até a próxima `# `. */
+export function renderPromptsWithoutPhase(md: string, phaseId: string): string {
+  const lines = md.split(/\r?\n/);
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const heading = line.match(/^#\s+([A-Za-z0-9._-]+)\s*—/);
+    if (heading && heading[1] === phaseId) {
+      i += 1;
+      while (i < lines.length && !/^#\s+/.test(lines[i])) i += 1;
+      continue;
+    }
+    out.push(line);
+    i += 1;
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
+}
+
+/**
+ * Zera as fases geradas por requisitos: remove do roadmap, dos prompts e apaga
+ * os requirements/<id>.json. Fases do SmartJuris (2A..4B) NÃO são afetadas
+ * (só entram as que têm requirements/<id>.json).
+ */
+export async function resetRequirementPhases(aiDevDir: string, config: AutomationConfig): Promise<{ removidas: string[] }> {
+  const fases = listRequirementPhases(aiDevDir);
+  if (fases.length === 0) return { removidas: [] };
+
+  const roadmapFile = safeJoin(aiDevDir, basename(config.roadmap));
+  const promptsFile = safeJoin(aiDevDir, basename(config.phasePrompts));
+  let roadmapMd = await readFile(roadmapFile, 'utf8');
+  let promptsMd = await readFile(promptsFile, 'utf8');
+
+  const removidas: string[] = [];
+  for (const fase of fases) {
+    roadmapMd = renderRoadmapWithoutPhase(roadmapMd, fase.id);
+    promptsMd = renderPromptsWithoutPhase(promptsMd, fase.id);
+    removidas.push(fase.id);
+  }
+  await writeTextAtomic(roadmapFile, roadmapMd);
+  await writeTextAtomic(promptsFile, promptsMd);
+
+  // Apaga os requirements/<id>.json (e o inbox, já processado).
+  const { rm } = await import('node:fs/promises');
+  for (const fase of fases) {
+    try {
+      await rm(requirementFile(aiDevDir, fase.id), { force: true });
+    } catch {
+      // best-effort
+    }
+  }
+  try {
+    await rm(safeJoin(requirementsDir(aiDevDir), 'inbox.txt'), { force: true });
+  } catch {
+    // best-effort
+  }
+  return { removidas };
 }

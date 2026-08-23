@@ -113,6 +113,7 @@
   <div class="req-actions">
     <button id="btnEstruturar">1 · Estruturar em fases</button>
     <button id="btnAplicar" class="primary" disabled>2 · Aplicar no roadmap</button>
+    <button id="btnZerar" style="margin-left:auto; color: var(--bad);">Zerar fases de requisitos</button>
     <span id="reqStatus" class="sub"></span>
   </div>
   <div id="reqResultado"></div>
@@ -165,14 +166,19 @@ function render(s) {
     <div class="card"><div class="label">Custo total (US$)</div><div class="value">${usd(t.custoUsd)}</div></div>
     <div class="card"><div class="label">Tokens</div><div class="value">${k(t.tokens)}</div></div>
     <div class="card"><div class="label">Runs</div><div class="value">${t.runs}</div></div>
-    <div class="card ok"><div class="label">Fases aprovadas</div><div class="value">${t.fasesAprovadas}</div></div>
-    <div class="card ${t.fasesPendentes > 0 ? 'bad' : 'ok'}"><div class="label">Fases pendentes</div><div class="value">${t.fasesPendentes}</div></div>
+    <div class="card ${t.requisitosGerados > 0 ? '' : ''}"><div class="label">Fases de requisitos</div><div class="value">${t.requisitosGerados}</div></div>
+    <div class="card warn"><div class="label">Analisando</div><div class="value">${t.fasesAnalisando}</div></div>
+    <div class="card ok"><div class="label">Aprovadas</div><div class="value">${t.fasesAprovadas}</div></div>
+    <div class="card ${t.fasesRejeitadas > 0 ? 'bad' : 'ok'}"><div class="label">Rejeitadas</div><div class="value">${t.fasesRejeitadas}</div></div>
+    <div class="card"><div class="label">Planejadas (aguardando)</div><div class="value">${t.fasesPlanejadas}</div></div>
     <div class="card"><div class="label">Revisor poupado</div><div class="value">${t.revisorPoupado}</div></div>
   `;
 
+  // Marca fases geradas por requisitos com um badge pequeno.
+  const idsReq = new Set(s.requisitoIds || []);
   $('phaseRows').innerHTML = s.fases.map((f) => `
     <tr>
-      <td><strong>${f.id}</strong></td>
+      <td><strong>${f.id}</strong>${idsReq.has(f.id) ? ' <span class="status st-neutral" title="Gerada por requisito">req</span>' : ''}</td>
       <td>${badge(f.estado)}</td>
       <td class="num">${f.rounds}</td>
       <td>${f.ultimoVeredito ? badge(f.ultimoVeredito) : '—'}</td>
@@ -282,6 +288,22 @@ $('btnAplicar').addEventListener('click', async () => {
   } catch (err) {
     $('reqStatus').textContent = 'Erro: ' + err.message;
     $('btnAplicar').disabled = false;
+  }
+});
+
+$('btnZerar').addEventListener('click', async () => {
+  const qtd = (await fetch('/api/requisitos', { cache: 'no-store' }).then((r) => r.json())).fases?.length ?? 0;
+  if (qtd === 0) { $('reqStatus').textContent = 'Nenhuma fase de requisito para zerar.'; return; }
+  if (!confirm(`Zerar ${qtd} fase(s) de requisitos?\n\nRemove do roadmap, dos prompts e apaga os arquivos requirements/*.json. As fases do SmartJuris (2A–4B) NÃO são afetadas.`)) return;
+  $('reqStatus').textContent = 'Zerando…';
+  try {
+    const res = await fetch('/api/requisitos/zerar', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'HTTP ' + res.status);
+    $('reqStatus').textContent = `Zerado: ${data.removidas.length} fase(s) removida(s).`;
+    refresh();
+  } catch (err) {
+    $('reqStatus').textContent = 'Erro: ' + err.message;
   }
 });
 </script>

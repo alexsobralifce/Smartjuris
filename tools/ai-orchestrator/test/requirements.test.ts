@@ -6,7 +6,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseRequirements, structureRequirements, renderRoadmapWithPhases, renderPromptsWithPhases, nextPhaseId, buildStructureInput, renderRequirementsList, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS } from '../src/requirements.js';
+import { parseRequirements, structureRequirements, renderRoadmapWithPhases, renderPromptsWithPhases, nextPhaseId, buildStructureInput, renderRequirementsList, assertRequirementTextLength, DEFAULT_MAX_REQUIREMENT_CHARS, renderRoadmapWithoutPhase, renderPromptsWithoutPhase } from '../src/requirements.js';
 import { parseRoadmap } from '../src/roadmap.js';
 import { extractPhasePrompts } from '../src/prompts.js';
 import type { LlmClient } from '../src/llm.js';
@@ -199,5 +199,28 @@ describe('assertRequirementTextLength (limite de caracteres)', () => {
   test('aceita limite customizado', () => {
     assert.doesNotThrow(() => assertRequirementTextLength('x'.repeat(500), 1000));
     assert.throws(() => assertRequirementTextLength('x'.repeat(1500), 1000), /limite: 1000/);
+  });
+});
+
+describe('renderRoadmapWithoutPhase / renderPromptsWithoutPhase (zerar fases)', () => {
+  test('remove fase de requisito do roadmap e preserva as demais', () => {
+    const com5A = renderRoadmapWithPhases(ROADMAP, FASES);
+    const sem5A = renderRoadmapWithoutPhase(com5A, '5A');
+    const { phases } = parseRoadmap(sem5A);
+    assert.ok(!phases.some((p) => p.id === '5A'), '5A removida');
+    assert.ok(phases.some((p) => p.id === '2A'), '2A preservada');
+    assert.ok(!sem5A.includes('### 5A —'), 'seção detalhada removida');
+  });
+
+  test('remove bloco da fase nos prompts e preserva os demais', () => {
+    const com5A = renderPromptsWithPhases(PROMPTS, FASES);
+    const sem5A = renderPromptsWithoutPhase(com5A, '5A');
+    assert.ok(!sem5A.includes('# 5A —'), 'bloco da fase removido');
+    assert.ok(sem5A.includes('# 2A —'), 'fase 2A preservada');
+  });
+
+  test('remover fase inexistente não altera o conteúdo', () => {
+    const out = renderRoadmapWithoutPhase(ROADMAP, '9X');
+    assert.equal(out, ROADMAP, 'inalterado quando fase não existe');
   });
 });

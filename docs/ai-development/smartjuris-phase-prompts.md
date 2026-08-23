@@ -588,6 +588,202 @@ Critérios de aceite (avaliar APENAS estes, sem criar novos):
 
 Responda somente no formato JSON do contrato de auditoria.
 ```
+
+# 5E — Migrar cost_cents_reserved para numeric(10,2)
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5E — Migrar cost_cents_reserved para numeric(10,2).
+
+Criar migração que altera a coluna cost_cents_reserved da tabela ai_operations de integer para numeric(10,2), preservando dados legados, com upgrade idempotente e rollback.
+
+Escopo:
+Implementar migração de banco de dados (up/down), atualizar tipos no modelo/entidade, garantir que dados legados inteiros sejam lidos como numeric(10,2) sem perda.
+
+Fora do escopo:
+Não alterar o cálculo de custo, nem fluxos de liquidação/orçamento.
+
+Testes obrigatórios:
+- Teste de migração em banco limpo
+- Teste de upgrade a partir de schema anterior com dados legados
+- Teste de idempotência da migração
+- Teste de rollback da migração
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5E — Migrar cost_cents_reserved para numeric(10,2).
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Coluna cost_cents_reserved é numeric(10,2) após migração
+- Dados legados inteiros permanecem com o mesmo valor após migração
+- Migração pode ser executada em banco limpo e em banco com dados, sem erro
+- Executar a migração duas vezes é idempotente
+- Rollback retorna a coluna para integer e preserva os valores
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5F — Calcular custo reservado com precisão de centésimos de centavo
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5F — Calcular custo reservado com precisão de centésimos de centavo.
+
+Alterar a função calculateAiCostCents em services/usage.ts para calcular o custo total em centavos com duas casas decimais (centésimos de centavo), sem Math.ceil por componente. Arredondar o total para cima na precisão de 0,01 centavo.
+
+Escopo:
+Substituir o arredondamento por componente por arredondamento do total a 2 casas decimais (usando teto para não sub-reservar), e ajustar os pontos de leitura utilitários que exigem centavos inteiros. Ajustes específicos nos fluxos de negócio ficam para a fase 5H.
+
+Fora do escopo:
+Não alterar a fórmula de custo real do provedor, nem a liquidação/settle. Não revisar fluxos de negócio (fallback, créditos, release).
+
+Testes obrigatórios:
+- Teste de que fatias com o dobro de tokens reservam custo diferente
+- Teste de que o valor reservado é gravado com até 2 casas decimais
+- Teste de que leitura como inteiro continua funcionando
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5F — Calcular custo reservado com precisão de centésimos de centavo.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- calculateAiCostCents retorna número com duas casas decimais em centavos
+- Uma operação com 2x tokens reserva custo maior que a operação de 1x (sem colapso para o mesmo inteiro)
+- Nenhum Math.ceil por componente permanece no cálculo de reserva
+- Leitores que esperam centavos inteiros recebem valor arredondado de forma consistente
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5G — Ajustar orçamento interno para precisão de reserva
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5G — Ajustar orçamento interno para precisão de reserva.
+
+Atualizar o controle de orçamento interno (maxReserveCents, aviso de 80%, bloqueio 'orcamento-interno-do-ciclo-insuficiente') para trabalhar com somas de reservas numéricas precisas, sem colapsar para inteiro.
+
+Escopo:
+Alterar consultas/cálculos de uso de reserva no ciclo para somar numeric(10,2) diretamente, comparar com limite sem arredondamento para inteiro, e ajustar mensagens/aviso para exibição em centavos inteiros quando necessário.
+
+Fora do escopo:
+Não alterar a definição de maxReserveCents (continua inteiro em centavos).
+
+Testes obrigatórios:
+- Teste de cenário 'FLASH cabe mas PRO estoura' revisto com nova precisão
+- Teste de bloqueio por 'orcamento-interno-do-ciclo-insuficiente' com reserva fracionária
+- Teste de aviso de reserva acima de 80% com precisão
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5G — Ajustar orçamento interno para precisão de reserva.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Reservas com valores fracionários são consideradas no orçamento sem arredondamento para inteiro
+- Uma reserva de 10,4 centavos estoura um maxReserveCents=10, enquanto 10,0 não
+- O bloqueio e o aviso de 80% disparam nos limites corretos com precisão
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5H — Garantir compatibilidade com fluxos e dados legados
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5H — Garantir compatibilidade com fluxos e dados legados.
+
+Ajustar os fluxos existentes (reserva idempotente, fallback Flash→Pro, análise documental, créditos, liquidação, liberação) para operarem com a nova precisão, mantendo compatibilidade com dados legados e sem regressão.
+
+Escopo:
+Revisar e corrigir pontos que convertem cost_cents_reserved para inteiro de forma inadequada; garantir que a liquidação usa o custo real do provedor (não o reservado), e que release/credits usam o valor reservado com precisão.
+
+Fora do escopo:
+Não alterar regras de negócio de cobrança, nem preços.
+
+Testes obrigatórios:
+- Teste de que a liquidação (settle) não cobra a mais com a nova precisão
+- Teste de compatibilidade com dados legados (cost_cents_reserved integer antigo)
+- Teste de reserva idempotente com valores precisos
+- Teste de fallback Flash→Pro sem regressão
+- Teste de análise documental sem regressão
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5H — Garantir compatibilidade com fluxos e dados legados.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Suíte de custo/fallback/análise documental passa com ajustes de precisão
+- Dados legados integer são tratados corretamente nas operações
+- Settle usa custo real do provedor independente da precisão da reserva
+- Release libera exatamente o valor reservado com precisão
+- Reserva idempotente não duplica nem arredonda incorretamente
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 5I — Expor telemetria com precisão de custo reservado
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 5I — Expor telemetria com precisão de custo reservado.
+
+Garantir que o custo reservado com a nova precisão seja rastreável no run/operação, mantendo os mesmos campos da telemetria com valores mais precisos.
+
+Escopo:
+Atualizar serialização de eventos/logs de telemetria para incluir cost_cents_reserved com até 2 casas decimais, sem alterar nomes de campos.
+
+Fora do escopo:
+Não alterar o schema de telemetria além do valor do campo existente.
+
+Testes obrigatórios:
+- Teste de que o campo cost_cents_reserved aparece com precisão decimal na telemetria
+- Teste de que eventos legados sem casas decimais continuam sendo aceitos
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 5I — Expor telemetria com precisão de custo reservado.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Telemetria do run/operação registra cost_cents_reserved com valores fracionários
+- O formato permanece compatível com leitores que esperam número (inteiro ou decimal)
+
+Responda somente no formato JSON do contrato de auditoria.
+```
 # Formato de passagem para o Terra
 
 ```text

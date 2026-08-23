@@ -67,6 +67,11 @@ migrations validadas, quando aplicável
 | 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5G | Ajustar orçamento interno para precisão de reserva | 5F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5I | Expor telemetria com precisão de custo reservado | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -562,6 +567,86 @@ Adicionar logs estruturados e informações de auditoria sobre decisões usadas 
 
 - Toda geração com includeJurisprudence=true registra de forma auditável as decisões ao vivo utilizadas
 - Usuário final nunca vê stack trace ou detalhes do provedor
+
+### 5E — Migrar cost_cents_reserved para numeric(10,2)
+
+**Estado:** `PLANNED`
+
+**Dependência:** nenhuma (fase raiz).
+
+**Objetivo:**
+
+Criar migração que altera a coluna cost_cents_reserved da tabela ai_operations de integer para numeric(10,2), preservando dados legados, com upgrade idempotente e rollback.
+
+**Critérios de aceite:**
+
+- Coluna cost_cents_reserved é numeric(10,2) após migração
+- Dados legados inteiros permanecem com o mesmo valor após migração
+- Migração pode ser executada em banco limpo e em banco com dados, sem erro
+- Executar a migração duas vezes é idempotente
+- Rollback retorna a coluna para integer e preserva os valores
+### 5F — Calcular custo reservado com precisão de centésimos de centavo
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5E aprovada(s).
+
+**Objetivo:**
+
+Alterar a função calculateAiCostCents em services/usage.ts para calcular o custo total em centavos com duas casas decimais (centésimos de centavo), sem Math.ceil por componente. Arredondar o total para cima na precisão de 0,01 centavo.
+
+**Critérios de aceite:**
+
+- calculateAiCostCents retorna número com duas casas decimais em centavos
+- Uma operação com 2x tokens reserva custo maior que a operação de 1x (sem colapso para o mesmo inteiro)
+- Nenhum Math.ceil por componente permanece no cálculo de reserva
+- Leitores que esperam centavos inteiros recebem valor arredondado de forma consistente
+### 5G — Ajustar orçamento interno para precisão de reserva
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5F aprovada(s).
+
+**Objetivo:**
+
+Atualizar o controle de orçamento interno (maxReserveCents, aviso de 80%, bloqueio 'orcamento-interno-do-ciclo-insuficiente') para trabalhar com somas de reservas numéricas precisas, sem colapsar para inteiro.
+
+**Critérios de aceite:**
+
+- Reservas com valores fracionários são consideradas no orçamento sem arredondamento para inteiro
+- Uma reserva de 10,4 centavos estoura um maxReserveCents=10, enquanto 10,0 não
+- O bloqueio e o aviso de 80% disparam nos limites corretos com precisão
+### 5H — Garantir compatibilidade com fluxos e dados legados
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5F, 5G aprovada(s).
+
+**Objetivo:**
+
+Ajustar os fluxos existentes (reserva idempotente, fallback Flash→Pro, análise documental, créditos, liquidação, liberação) para operarem com a nova precisão, mantendo compatibilidade com dados legados e sem regressão.
+
+**Critérios de aceite:**
+
+- Suíte de custo/fallback/análise documental passa com ajustes de precisão
+- Dados legados integer são tratados corretamente nas operações
+- Settle usa custo real do provedor independente da precisão da reserva
+- Release libera exatamente o valor reservado com precisão
+- Reserva idempotente não duplica nem arredonda incorretamente
+### 5I — Expor telemetria com precisão de custo reservado
+
+**Estado:** `PLANNED`
+
+**Dependência:** 5F, 5G aprovada(s).
+
+**Objetivo:**
+
+Garantir que o custo reservado com a nova precisão seja rastreável no run/operação, mantendo os mesmos campos da telemetria com valores mais precisos.
+
+**Critérios de aceite:**
+
+- Telemetria do run/operação registra cost_cents_reserved com valores fracionários
+- O formato permanece compatível com leitores que esperam número (inteiro ou decimal)
 - Resultados de busca não ficam persistidos como dados sensíveis
 - Correções exigidas:
 - Observações:

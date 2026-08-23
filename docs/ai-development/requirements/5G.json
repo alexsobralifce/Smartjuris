@@ -1,0 +1,21 @@
+{
+  "id": "5G",
+  "titulo": "Ajustar orçamento interno para precisão de reserva",
+  "descricao": "Atualizar o controle de orçamento interno (maxReserveCents, aviso de 80%, bloqueio 'orcamento-interno-do-ciclo-insuficiente') para trabalhar com somas de reservas numéricas precisas, sem colapsar para inteiro.",
+  "dependencias": [
+    "5F"
+  ],
+  "escopo": "Alterar consultas/cálculos de uso de reserva no ciclo para somar numeric(10,2) diretamente, comparar com limite sem arredondamento para inteiro, e ajustar mensagens/aviso para exibição em centavos inteiros quando necessário.",
+  "foraDoEscopo": "Não alterar a definição de maxReserveCents (continua inteiro em centavos).",
+  "testesObrigatorios": [
+    "Teste de cenário 'FLASH cabe mas PRO estoura' revisto com nova precisão",
+    "Teste de bloqueio por 'orcamento-interno-do-ciclo-insuficiente' com reserva fracionária",
+    "Teste de aviso de reserva acima de 80% com precisão"
+  ],
+  "criteriosAceite": [
+    "Reservas com valores fracionários são consideradas no orçamento sem arredondamento para inteiro",
+    "Uma reserva de 10,4 centavos estoura um maxReserveCents=10, enquanto 10,0 não",
+    "O bloqueio e o aviso de 80% disparam nos limites corretos com precisão"
+  ],
+  "_hash": "91a2f60645fa"
+}

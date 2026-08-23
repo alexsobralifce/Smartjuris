@@ -1,0 +1,22 @@
+{
+  "id": "5F",
+  "titulo": "Calcular custo reservado com precisão de centésimos de centavo",
+  "descricao": "Alterar a função calculateAiCostCents em services/usage.ts para calcular o custo total em centavos com duas casas decimais (centésimos de centavo), sem Math.ceil por componente. Arredondar o total para cima na precisão de 0,01 centavo.",
+  "dependencias": [
+    "5E"
+  ],
+  "escopo": "Substituir o arredondamento por componente por arredondamento do total a 2 casas decimais (usando teto para não sub-reservar), e ajustar os pontos de leitura utilitários que exigem centavos inteiros. Ajustes específicos nos fluxos de negócio ficam para a fase 5H.",
+  "foraDoEscopo": "Não alterar a fórmula de custo real do provedor, nem a liquidação/settle. Não revisar fluxos de negócio (fallback, créditos, release).",
+  "testesObrigatorios": [
+    "Teste de que fatias com o dobro de tokens reservam custo diferente",
+    "Teste de que o valor reservado é gravado com até 2 casas decimais",
+    "Teste de que leitura como inteiro continua funcionando"
+  ],
+  "criteriosAceite": [
+    "calculateAiCostCents retorna número com duas casas decimais em centavos",
+    "Uma operação com 2x tokens reserva custo maior que a operação de 1x (sem colapso para o mesmo inteiro)",
+    "Nenhum Math.ceil por componente permanece no cálculo de reserva",
+    "Leitores que esperam centavos inteiros recebem valor arredondado de forma consistente"
+  ],
+  "_hash": "98de5e0ff141"
+}

@@ -1,0 +1,43 @@
+Corrigir a granularidade de custo da reserva de IA: os valores de custo estão arredondados para centavos inteiros e não distinguem volumes diferentes de tokens.
+
+CONTEXTO DA DESCOBERTA:
+- O custo de uma operação de IA é calculado em services/usage.ts (calculateAiCostCents) com Math.ceil POR COMPONENTE (input e output separados), armazenado como integer em cost_cents_reserved na tabela ai_operations.
+- Com os preços atuais (centavos por milhão de tokens) e operações de porte médio (15k-30k tokens), fatias de volume bem diferentes arredondam para o MESMO centavo. Exemplo real: análise documental com 100.000 chars (28.750 tokens) e 50.000 chars (14.375 tokens) ambas reservam cost_cents_reserved = 10.
+- Isso quebrou dois testes pré-existentes (fallbackPro e analiseDocumental) que esperavam distinção de custo: "FLASH cabe mas PRO estoura" e "fatia maior reserva mais custo que a menor" — cenários inalcançáveis com a precisão atual.
+- Impacto financeiro: sub-reserva relativa em operações pequenas/médias (o custo real em centavos fica < 1 centavo e colapsa para o mesmo inteiro), o que impede o orçamento interno (maxReserveCents) de refletir volumes diferentes com precisão.
+
+OBJETIVO:
+Fazer o custo reservado distinguir volumes reais de tokens, preservando a correção financeira da reserva e do orçamento interno, sem regressão nos fluxos de cobrança/liquidação.
+
+REQUISITOS FUNCIONAIS:
+
+1. PRECISÃO DO CUSTO RESERVADO
+- A reserva deve distinguir fatias de volume diferente: uma operação com o dobro de tokens deve reservar custo maior (ou pelo menos não colapsar para o mesmo centavo).
+- Avaliar e implementar uma das abordagens: (a) guardar cost_cents_reserved com mais precisão (ex.: centésimos de centavo, numeric(10,2)) mantendo a leitura em centavos inteiros onde for usado; ou (b) arredondar o TOTAL do custo uma única vez (ceil no usdCents total, não por componente); ou (c) outra abordagem que preserve a distinção de volume.
+- Não mudar o cálculo de LIQUIDAÇÃO (settle) de forma que cobre a mais: a liquidação continua com o custo real do provedor.
+
+2. ORÇAMENTO INTERNO
+- maxReserveCents deve refletir a precisão: reservas de volumes diferentes não podem colapsar no mesmo valor quando o teto está próximo.
+- O aviso de "reserva acima de 80%" e o bloqueio "orcamento-interno-do-ciclo-insuficiente" devem continuar funcionando com a nova precisão.
+
+3. COMPATIBILIDADE
+- Nenhuma regressão nos fluxos: reserva idempotente, fallback Flash→Pro, análise documental, créditos, liquidação (settle) e liberação (release).
+- Dados legados (cost_cents_reserved já gravados como integer) devem continuar legíveis/compatíveis; se houver migração de schema, aplicar em banco limpo + upgrade + idempotência + rollback documentado.
+- Testes existentes de custo que dependem de valores inteiros devem ser revisados e ajustados apenas se a nova precisão mudar o comportamento esperado.
+
+4. TELEMETRIA
+- O custo reservado com a nova precisão deve ser rastreável no run/operação (mesmos campos, valores mais precisos).
+
+REQUISITOS DE TESTE:
+
+- Teste de que fatias com volume diferente (ex.: 2x tokens) reservam custo DIFERENTE (não colapsam no mesmo centavo).
+- Teste de que a liquidação (settle) não cobra a mais com a nova precisão.
+- Teste de que o orçamento interno (maxReserveCents) bloqueia corretamente com a nova precisão (cenário "FLASH cabe mas PRO estoura" volta a ser alcançável se for o caso).
+- Teste de compatibilidade com dados legados (cost_cents_reserved integer antigo).
+
+CRITÉRIOS DE ACEITE:
+
+- Duas operações com volumes claramente diferentes reservam custos diferentes.
+- O fluxo de reserva/liquidação/liberação continua correto (sem dupla cobrança, sem liberação incorreta).
+- Nenhuma regressão nas suítes de custo/fallback/análise documental (com os testes ajustados para a nova precisão).
+- Migração (se houver) validada em banco limpo + upgrade + idempotente + rollback.

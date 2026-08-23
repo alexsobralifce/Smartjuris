@@ -1,0 +1,20 @@
+{
+  "id": "5I",
+  "titulo": "Expor telemetria com precisão de custo reservado",
+  "descricao": "Garantir que o custo reservado com a nova precisão seja rastreável no run/operação, mantendo os mesmos campos da telemetria com valores mais precisos.",
+  "dependencias": [
+    "5F",
+    "5G"
+  ],
+  "escopo": "Atualizar serialização de eventos/logs de telemetria para incluir cost_cents_reserved com até 2 casas decimais, sem alterar nomes de campos.",
+  "foraDoEscopo": "Não alterar o schema de telemetria além do valor do campo existente.",
+  "testesObrigatorios": [
+    "Teste de que o campo cost_cents_reserved aparece com precisão decimal na telemetria",
+    "Teste de que eventos legados sem casas decimais continuam sendo aceitos"
+  ],
+  "criteriosAceite": [
+    "Telemetria do run/operação registra cost_cents_reserved com valores fracionários",
+    "O formato permanece compatível com leitores que esperam número (inteiro ou decimal)"
+  ],
+  "_hash": "27fa0aaaf179"
+}

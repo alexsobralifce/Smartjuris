@@ -1,0 +1,26 @@
+{
+  "id": "5H",
+  "titulo": "Garantir compatibilidade com fluxos e dados legados",
+  "descricao": "Ajustar os fluxos existentes (reserva idempotente, fallback Flash→Pro, análise documental, créditos, liquidação, liberação) para operarem com a nova precisão, mantendo compatibilidade com dados legados e sem regressão.",
+  "dependencias": [
+    "5F",
+    "5G"
+  ],
+  "escopo": "Revisar e corrigir pontos que convertem cost_cents_reserved para inteiro de forma inadequada; garantir que a liquidação usa o custo real do provedor (não o reservado), e que release/credits usam o valor reservado com precisão.",
+  "foraDoEscopo": "Não alterar regras de negócio de cobrança, nem preços.",
+  "testesObrigatorios": [
+    "Teste de que a liquidação (settle) não cobra a mais com a nova precisão",
+    "Teste de compatibilidade com dados legados (cost_cents_reserved integer antigo)",
+    "Teste de reserva idempotente com valores precisos",
+    "Teste de fallback Flash→Pro sem regressão",
+    "Teste de análise documental sem regressão"
+  ],
+  "criteriosAceite": [
+    "Suíte de custo/fallback/análise documental passa com ajustes de precisão",
+    "Dados legados integer são tratados corretamente nas operações",
+    "Settle usa custo real do provedor independente da precisão da reserva",
+    "Release libera exatamente o valor reservado com precisão",
+    "Reserva idempotente não duplica nem arredonda incorretamente"
+  ],
+  "_hash": "89acc7549984"
+}

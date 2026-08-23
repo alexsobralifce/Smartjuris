@@ -1,0 +1,22 @@
+{
+  "id": "5E",
+  "titulo": "Migrar cost_cents_reserved para numeric(10,2)",
+  "descricao": "Criar migração que altera a coluna cost_cents_reserved da tabela ai_operations de integer para numeric(10,2), preservando dados legados, com upgrade idempotente e rollback.",
+  "dependencias": [],
+  "escopo": "Implementar migração de banco de dados (up/down), atualizar tipos no modelo/entidade, garantir que dados legados inteiros sejam lidos como numeric(10,2) sem perda.",
+  "foraDoEscopo": "Não alterar o cálculo de custo, nem fluxos de liquidação/orçamento.",
+  "testesObrigatorios": [
+    "Teste de migração em banco limpo",
+    "Teste de upgrade a partir de schema anterior com dados legados",
+    "Teste de idempotência da migração",
+    "Teste de rollback da migração"
+  ],
+  "criteriosAceite": [
+    "Coluna cost_cents_reserved é numeric(10,2) após migração",
+    "Dados legados inteiros permanecem com o mesmo valor após migração",
+    "Migração pode ser executada em banco limpo e em banco com dados, sem erro",
+    "Executar a migração duas vezes é idempotente",
+    "Rollback retorna a coluna para integer e preserva os valores"
+  ],
+  "_hash": "003b3ee7e6fc"
+}

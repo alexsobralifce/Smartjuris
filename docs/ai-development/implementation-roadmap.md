@@ -705,6 +705,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5D | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-23 | 5E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 5E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-23 | 5E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

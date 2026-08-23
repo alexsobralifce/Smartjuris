@@ -66,7 +66,7 @@ migrations validadas, quando aplicável
 | 5A | Integrar busca ao vivo de jurisprudência no orquestrador de geração | 4B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 | 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -555,7 +555,7 @@ Criar cache em memória ou Redis com TTL configurável e chave estável por comb
 - TTL configurável com padrão de 1 hora
 ### 5D — Registrar rastreabilidade e tratar erros de forma segura
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** 5B, 5C aprovada(s).
 
@@ -701,6 +701,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5B | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-23 | 5C | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-23 | 5C | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-23 | 5D | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 
 ## Critério final
 

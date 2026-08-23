@@ -247,18 +247,27 @@ export function startDashboardServer(opts: DashboardServerOptions): string {
         sendJson(res, 200, result);
         return;
       }
-      if (url === '/' || url === '/index.html') {
-        let html = '';
-        try {
-          html = readFileSync(HTML_PATH, 'utf8');
-        } catch {
-          sendHtml(res, 500, '<h1>dashboard.html não encontrado</h1><p>Verifique tools/ai-orchestrator/web/dashboard.html</p>');
-          return;
-        }
-        sendHtml(res, 200, html);
+      // /api/* desconhecido → JSON de erro claro.
+      if (url.startsWith('/api/')) {
+        sendJson(res, 404, { erro: `API não encontrada: ${url}. Use /api/snapshot, POST/PUT /api/requisitos.` });
         return;
       }
-      sendJson(res, 404, { erro: 'rota não encontrada. Use / para o painel e /api/snapshot para o JSON.' });
+      // favicon: silencioso (não vira "rota não encontrada" no console).
+      if (url === '/favicon.ico') {
+        res.writeHead(204, { 'Content-Type': 'image/x-icon' });
+        res.end();
+        return;
+      }
+      // Página do painel: rota raiz + aliases; qualquer outra rota de página
+      // cai no HTML (fallback SPA) — nunca "rota não encontrada" ao navegar.
+      let html = '';
+      try {
+        html = readFileSync(HTML_PATH, 'utf8');
+      } catch {
+        sendHtml(res, 500, '<h1>dashboard.html não encontrado</h1><p>Verifique tools/ai-orchestrator/web/dashboard.html</p>');
+        return;
+      }
+      sendHtml(res, 200, html);
     } catch (err) {
       sendJson(res, 500, { erro: err instanceof Error ? err.message : String(err) });
     }

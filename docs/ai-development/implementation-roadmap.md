@@ -67,7 +67,7 @@ migrations validadas, quando aplicável
 | 5B | Injetar bloco de jurisprudência rastreável no prompt de fundamentação | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5C | Adicionar cache por escritório e controle de rate limit na busca ao vivo | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 5D | Registrar rastreabilidade e tratar erros de forma segura | 5B, 5C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 5E | Migrar cost_cents_reserved para numeric(10,2) | — | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
 | 5F | Calcular custo reservado com precisão de centésimos de centavo | 5E | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5G | Ajustar orçamento interno para precisão de reserva | 5F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 5H | Garantir compatibilidade com fluxos e dados legados | 5F, 5G | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -570,7 +570,7 @@ Adicionar logs estruturados e informações de auditoria sobre decisões usadas 
 
 ### 5E — Migrar cost_cents_reserved para numeric(10,2)
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_FAILED`
 
 **Dependência:** nenhuma (fase raiz).
 
@@ -703,6 +703,7 @@ Garantir que o custo reservado com a nova precisão seja rastreável no run/oper
 | 2026-08-23 | 5C | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-23 | 5D | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 5D | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-23 | 5E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

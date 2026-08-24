@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { sql, SQL } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { requireRoot } from '../middlewares/roleGuard.js';
-
 const router = Router();
 
 // Métricas de plataforma: apenas root. Dados agregados POR ESCRITÓRIO (nunca listar negócio).
@@ -419,6 +418,98 @@ router.get('/logs/sistema', async (req, res) => {
   } catch (error) {
     console.error('Error fetching app logs:', error);
     res.status(500).json({ error: 'Erro ao buscar logs do sistema.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /billing/dev — PAINEL DE DESENVOLVEDOR do billing (Mercado Pago).
+// Visão técnica para o root/gestor: status da configuração, últimos webhooks
+// recebidos, operações de checkout e escritórios com assinatura. Dados
+// agregados/técnicos — nunca expõe segredos nem dados de negócio.
+// ---------------------------------------------------------------------------
+router.get('/billing/dev', async (_req, res) => {
+  try {
+    const mpToken = process.env.MERCADO_PAGO_ACCESS_TOKEN ?? '';
+    const mpPublicKey = process.env.MERCADO_PAGO_PUBLIC_KEY ?? '';
+    const webhookSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET ?? '';
+
+    const [webhookCount] = await db.execute(sql`
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS ultimas_24h
+      FROM billing_webhook_events
+    `);
+    const webhooksRecentes = await db.execute(sql`
+      SELECT event_type, data_id, data_estado, result_status, escritorio_id, created_at
+      FROM billing_webhook_events
+      ORDER BY created_at DESC
+      LIMIT 20
+    `);
+    const operacoesRecentes = await db.execute(sql`
+      SELECT idempotency_key, plano, estado, fase, resultado_incerto, mercado_pago_id, error, created_at
+      FROM billing_checkout_operations
+      ORDER BY created_at DESC
+      LIMIT 20
+    `);
+    const assinaturas = await db.execute(sql`
+      SELECT id, nome, plano, assinatura_status, assinatura_plano, mercado_pago_id,
+             credits_available, assinatura_proxima_cobranca, ativo
+      FROM escritorios
+      WHERE assinatura_status != 'nenhuma'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+
+    res.json({
+      config: {
+        mpConfigurado: mpToken.length > 0,
+        temPublicKey: mpPublicKey.length > 0,
+        temWebhookSecret: webhookSecret.length > 0,
+        // mascarado — apenas diagnóstico
+        accessTokenPrefix: mpToken.length > 8 ? `${mpToken.slice(0, 8)}…` : null,
+        publicKeyPrefix: mpPublicKey.length > 8 ? `${mpPublicKey.slice(0, 8)}…` : null,
+        appUrl: process.env.APP_URL ?? '(não configurado)',
+        publicApiUrl: process.env.PUBLIC_API_URL ?? '(não configurado)',
+        webhookUrl: process.env.PUBLIC_API_URL
+          ? `${process.env.PUBLIC_API_URL.replace(/\/$/, '')}/api/billing/webhook`
+          : '(não configurado)',
+      },
+      webhooks: {
+        total: Number((webhookCount as any)[0]?.total ?? 0),
+        ultimas24h: Number((webhookCount as any)[0]?.ultimas_24h ?? 0),
+        recentes: (webhooksRecentes as any).map((w: any) => ({
+          tipo: w.event_type,
+          dataId: w.data_id,
+          estado: w.data_estado,
+          resultado: w.result_status,
+          escritorioId: w.escritorio_id,
+          createdAt: w.created_at,
+        })),
+      },
+      operacoes: (operacoesRecentes as any).map((o: any) => ({
+        idempotencyKey: o.idempotency_key,
+        plano: o.plano,
+        estado: o.estado,
+        fase: o.fase,
+        resultadoIncerto: o.resultado_incerto,
+        mercadoPagoId: o.mercado_pago_id,
+        error: o.error,
+        createdAt: o.created_at,
+      })),
+      assinaturas: (assinaturas as any).map((e: any) => ({
+        id: e.id,
+        nome: e.nome,
+        plano: e.plano,
+        assinaturaStatus: e.assinatura_status,
+        assinaturaPlano: e.assinatura_plano,
+        mercadoPagoId: e.mercado_pago_id,
+        creditsAvailable: Number(e.credits_available ?? 0),
+        proximaCobranca: e.assinatura_proxima_cobranca,
+        ativo: e.ativo,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching billing dev panel:', error);
+    res.status(500).json({ error: 'Erro ao buscar painel de dev do billing.' });
   }
 });
 

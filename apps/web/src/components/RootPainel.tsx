@@ -3,7 +3,28 @@ import { api, getErrorMessage } from '../api/client'
 import Toast, { ToastMessage } from './Toast'
 import { Button, EmptyRow, EmptyState, FONT, Field, FormGrid, FormRow, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
-type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria' | 'logs'
+type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria' | 'logs' | 'billing'
+
+// Painel de desenvolvedor do billing (Mercado Pago) — visão técnica root.
+interface BillingDev {
+  config: {
+    mpConfigurado: boolean
+    temPublicKey: boolean
+    temWebhookSecret: boolean
+    accessTokenPrefix: string | null
+    publicKeyPrefix: string | null
+    appUrl: string
+    publicApiUrl: string
+    webhookUrl: string
+  }
+  webhooks: {
+    total: number
+    ultimas24h: number
+    recentes: { tipo: string; dataId: string; estado: string | null; resultado: string; escritorioId: string | null; createdAt: string }[]
+  }
+  operacoes: { idempotencyKey: string; plano: string; estado: string; fase: string; resultadoIncerto: boolean; mercadoPagoId: string | null; error: string | null; createdAt: string }[]
+  assinaturas: { id: string; nome: string; plano: string; assinaturaStatus: string; assinaturaPlano: string | null; mercadoPagoId: string | null; creditsAvailable: number; proximaCobranca: string | null; ativo: boolean }[]
+}
 
 interface Escritorio {
   id: string
@@ -140,6 +161,52 @@ function StatCard({ label, value, sub, subColor }: { label: string; value: strin
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.03em', lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: FONT.sm, color: subColor || 'var(--color-muted)', marginTop: SPACE.xs }}>{sub}</div>}
     </div>
+  )
+}
+
+// --- Painel de dev do billing (Mercado Pago) ---
+
+function DevStatus({ label, ok, value }: { label: string; ok: boolean; value: string }) {
+  return (
+    <div style={{ background: ok ? 'var(--color-success-light)' : 'var(--color-danger-light)', border: `1px solid ${ok ? 'var(--color-success)' : 'var(--color-danger)'}`, borderRadius: RADIUS.control, padding: '10px 12px' }}>
+      <div style={{ fontSize: FONT.xs, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: ok ? 'var(--color-success)' : 'var(--color-danger)' }}>{ok ? '✓' : '✗'} {label}</div>
+      <div style={{ fontSize: FONT.sm, marginTop: 4, fontFamily: 'var(--font-mono)', color: 'var(--color-foreground)' }}>{value}</div>
+    </div>
+  )
+}
+
+const STATUS_CORES: Record<string, { cor: string; fundo: string }> = {
+  ativa: { cor: 'var(--color-success)', fundo: 'var(--color-success-light)' },
+  pendente: { cor: 'var(--color-warning)', fundo: 'var(--color-warning-light)' },
+  atrasada: { cor: 'var(--color-danger)', fundo: 'var(--color-danger-light)' },
+  cancelada: { cor: 'var(--color-danger)', fundo: 'var(--color-danger-light)' },
+  nenhuma: { cor: 'var(--color-muted)', fundo: 'var(--color-surface-2)' },
+  created: { cor: 'var(--color-warning)', fundo: 'var(--color-warning-light)' },
+  done: { cor: 'var(--color-success)', fundo: 'var(--color-success-light)' },
+  failed: { cor: 'var(--color-danger)', fundo: 'var(--color-danger-light)' },
+}
+
+function StatusPill({ status }: { status: string }) {
+  const c = STATUS_CORES[status] ?? { cor: 'var(--color-muted)', fundo: 'var(--color-surface-2)' }
+  return (
+    <span style={{ display: 'inline-block', background: c.fundo, color: c.cor, fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip, textTransform: 'capitalize' }}>{status}</span>
+  )
+}
+
+const RESULT_CORES: Record<string, { cor: string; fundo: string }> = {
+  ATIVADO: { cor: 'var(--color-success)', fundo: 'var(--color-success-light)' },
+  DESATIVADO: { cor: 'var(--color-danger)', fundo: 'var(--color-danger-light)' },
+  OBSOLETO: { cor: 'var(--color-muted)', fundo: 'var(--color-surface-2)' },
+  SEM_MUDANCA: { cor: 'var(--color-muted)', fundo: 'var(--color-surface-2)' },
+  SEM_VINCULO: { cor: 'var(--color-warning)', fundo: 'var(--color-warning-light)' },
+  ERRO: { cor: 'var(--color-danger)', fundo: 'var(--color-danger-light)' },
+  MP_INDISPONIVEL: { cor: 'var(--color-danger)', fundo: 'var(--color-danger-light)' },
+}
+
+function ResultPill({ result }: { result: string }) {
+  const c = RESULT_CORES[result] ?? { cor: 'var(--color-muted)', fundo: 'var(--color-surface-2)' }
+  return (
+    <span style={{ display: 'inline-block', background: c.fundo, color: c.cor, fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip, fontFamily: 'var(--font-mono)' }}>{result}</span>
   )
 }
 
@@ -320,6 +387,8 @@ export default function RootPainel() {
   const [logNivel, setLogNivel] = useState('')
   const [logBusca, setLogBusca] = useState('')
   const [logExpanded, setLogExpanded] = useState<string | null>(null)
+  const [billingDev, setBillingDev] = useState<BillingDev | null>(null)
+  const [loadingBilling, setLoadingBilling] = useState(false)
   const [expandedEsc, setExpandedEsc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ModalState>(null)
@@ -375,6 +444,18 @@ export default function RootPainel() {
     }
   }, [addToast])
 
+  const loadBillingDev = useCallback(async () => {
+    setLoadingBilling(true)
+    try {
+      const data = await api.raiz.getBillingDev()
+      setBillingDev(data)
+    } catch {
+      addToast('error', 'Não foi possível carregar o painel de dev do billing.')
+    } finally {
+      setLoadingBilling(false)
+    }
+  }, [addToast])
+
   const loadLogs = useCallback(async () => {
     setLogCarregando(true)
     try {
@@ -384,8 +465,7 @@ export default function RootPainel() {
       const data = await api.raiz.getLogs(params)
       setLogs(Array.isArray(data?.rows) ? data.rows : [])
       setLogTotal(Number(data?.total ?? 0))
-    } catch {
-      addToast('error', 'Não foi possível carregar os logs.')
+    } catch {      addToast('error', 'Não foi possível carregar os logs.')
     } finally {
       setLogCarregando(false)
     }
@@ -396,6 +476,7 @@ export default function RootPainel() {
   useEffect(() => { if (activeTab === 'auditoria') loadAuditoria() }, [activeTab, loadAuditoria])
   useEffect(() => { if (activeTab === 'creditos') loadCreditos() }, [activeTab, loadCreditos])
   useEffect(() => { if (activeTab === 'logs') loadLogs() }, [activeTab, loadLogs])
+  useEffect(() => { if (activeTab === 'billing') loadBillingDev() }, [activeTab, loadBillingDev])
 
   const copiarLog = async (l: any) => {
     const ok = await copiarTexto(formatarLogTexto(l))
@@ -558,7 +639,7 @@ export default function RootPainel() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28, overflowX: 'auto' }}>
-        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria'], ['logs', 'Logs']] as [Tab, string][]).map(([t, label]) => (
+        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria'], ['logs', 'Logs'], ['billing', 'Billing (Dev)']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 2px',
             border: 'none',
@@ -988,6 +1069,107 @@ export default function RootPainel() {
               </tbody>
             </Table>
           </TableShell>
+        </div>
+      )}
+
+      {activeTab === 'billing' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
+          {/* Configuração */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.lg }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: SPACE.sm, marginBottom: SPACE.md }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '-0.02em' }}>Configuração Mercado Pago</div>
+              <Button variant="secondary" size="sm" onClick={loadBillingDev} disabled={loadingBilling}>{loadingBilling ? 'Atualizando...' : '↻ Atualizar'}</Button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: SPACE.sm }}>
+              <DevStatus label="Access Token" ok={billingDev?.config.mpConfigurado ?? false} value={billingDev?.config.accessTokenPrefix ?? '—'} />
+              <DevStatus label="Public Key" ok={billingDev?.config.temPublicKey ?? false} value={billingDev?.config.publicKeyPrefix ?? '—'} />
+              <DevStatus label="Webhook Secret" ok={billingDev?.config.temWebhookSecret ?? false} value={billingDev?.config.temWebhookSecret ? 'configurado' : 'ausente (fail-closed em produção)'} />
+              <DevStatus label="Webhooks 24h" ok={(billingDev?.webhooks.ultimas24h ?? 0) > 0} value={String(billingDev?.webhooks.ultimas24h ?? 0)} />
+            </div>
+            <div style={{ marginTop: SPACE.md, display: 'flex', flexDirection: 'column', gap: SPACE.xs, fontSize: FONT.sm, color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
+              <div>Webhook URL: <span style={{ color: 'var(--color-foreground)' }}>{billingDev?.config.webhookUrl ?? '—'}</span></div>
+              <div>APP_URL: {billingDev?.config.appUrl ?? '—'}</div>
+              <div>PUBLIC_API_URL: {billingDev?.config.publicApiUrl ?? '—'}</div>
+            </div>
+          </div>
+
+          {/* Assinaturas ativas */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.lg }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '-0.02em', marginBottom: SPACE.md }}>
+              Escritórios com assinatura <span style={{ color: 'var(--color-muted)', fontSize: FONT.sm }}>({billingDev?.assinaturas.length ?? 0})</span>
+            </div>
+            <TableShell>
+              <Table>
+                <THeadRow>
+                  <Th>Escritório</Th><Th>Status</Th><Th>Plano</Th><Th>MP ID</Th><Th>Créditos</Th><Th>Próx. cobrança</Th>
+                </THeadRow>
+                <tbody>
+                  {(billingDev?.assinaturas ?? []).map(a => (
+                    <Tr key={a.id}>
+                      <Td>{a.nome}</Td>
+                      <Td><StatusPill status={a.assinaturaStatus} /></Td>
+                      <Td>{a.assinaturaPlano ?? a.plano}</Td>
+                      <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs }}>{a.mercadoPagoId ?? '—'}</Td>
+                      <Td>{a.creditsAvailable}</Td>
+                      <Td>{a.proximaCobranca ? new Date(a.proximaCobranca).toLocaleDateString('pt-BR') : '—'}</Td>
+                    </Tr>
+                  ))}
+                  {(billingDev?.assinaturas ?? []).length === 0 && <EmptyRow colSpan={6} message="Nenhum escritório com assinatura." />}
+                </tbody>
+              </Table>
+            </TableShell>
+          </div>
+
+          {/* Webhooks recentes */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.lg }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '-0.02em', marginBottom: SPACE.md }}>
+              Webhooks recebidos <span style={{ color: 'var(--color-muted)', fontSize: FONT.sm }}>(total {billingDev?.webhooks.total ?? 0})</span>
+            </div>
+            <TableShell>
+              <Table>
+                <THeadRow>
+                  <Th>Tipo</Th><Th>Data ID</Th><Th>Estado</Th><Th>Resultado</Th><Th>Quando</Th>
+                </THeadRow>
+                <tbody>
+                  {(billingDev?.webhooks.recentes ?? []).map((w, i) => (
+                    <Tr key={i}>
+                      <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs }}>{w.tipo}</Td>
+                      <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs }}>{w.dataId}</Td>
+                      <Td>{w.estado ?? '—'}</Td>
+                      <Td><ResultPill result={w.resultado} /></Td>
+                      <Td style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>{new Date(w.createdAt).toLocaleString('pt-BR')}</Td>
+                    </Tr>
+                  ))}
+                  {(billingDev?.webhooks.recentes ?? []).length === 0 && <EmptyRow colSpan={5} message="Nenhum webhook recebido ainda." />}
+                </tbody>
+              </Table>
+            </TableShell>
+          </div>
+
+          {/* Operações de checkout */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.lg }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '-0.02em', marginBottom: SPACE.md }}>Operações de checkout (outbox)</div>
+            <TableShell>
+              <Table>
+                <THeadRow>
+                  <Th>Plano</Th><Th>Estado</Th><Th>Fase</Th><Th>Incerto</Th><Th>MP ID</Th><Th>Erro</Th>
+                </THeadRow>
+                <tbody>
+                  {(billingDev?.operacoes ?? []).map((o, i) => (
+                    <Tr key={i}>
+                      <Td>{o.plano}</Td>
+                      <Td><StatusPill status={o.estado} /></Td>
+                      <Td style={{ fontSize: FONT.sm }}>{o.fase}</Td>
+                      <Td>{o.resultadoIncerto ? '⚠️ sim' : 'não'}</Td>
+                      <Td style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.xs }}>{o.mercadoPagoId ?? '—'}</Td>
+                      <Td style={{ fontSize: FONT.sm, color: 'var(--color-danger)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.error ?? '—'}</Td>
+                    </Tr>
+                  ))}
+                  {(billingDev?.operacoes ?? []).length === 0 && <EmptyRow colSpan={6} message="Nenhuma operação de checkout." />}
+                </tbody>
+              </Table>
+            </TableShell>
+          </div>
         </div>
       )}
 

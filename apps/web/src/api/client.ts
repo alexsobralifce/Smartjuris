@@ -307,6 +307,7 @@ export const api = {
       authFetch(`/api/root/logs/sistema?${new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])))}`).then(r => r.json()),
     getLogsTexto: (params: Record<string, string | number> = {}) =>
       authFetch(`/api/root/logs/sistema?format=text&${new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])))}`).then(r => r.text()),
+    getBillingDev: () => authFetch('/api/root/billing/dev').then(r => r.json()),
     getCreditos: () => authFetch('/api/root/creditos').then(r => r.json()),
     adicionarCreditosEscritorio: async (id: string, quantidade: number) =>
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}/creditos`, { method: 'POST', body: JSON.stringify({ quantidade }) })),

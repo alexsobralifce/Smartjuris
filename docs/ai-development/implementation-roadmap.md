@@ -82,7 +82,7 @@ migrations validadas, quando aplicável
 | 7B | Feature Flags e Lógica de Elegibilidade/Promoção | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7C | Modelo de Dados e Persistência de Uso da Promoção | 7B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
+| 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
@@ -847,7 +847,7 @@ Implementar a criação da preferência de pagamento avulsa no Mercado Pago com 
 - Dados de uso da promoção persistidos antes de retornar o init_point.
 ### 7E — Webhook da 1ª Compra e Assinatura Definitiva
 
-**Estado:** `AUDIT_FAILED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 7D aprovada(s).
 
@@ -1007,6 +1007,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 | 2026-08-24 | 7D | DeepSeek | GPT-5.6 Luna | REJECT | Não | reauditoria 20260824T125944Z-7D: reprovado |
 | 2026-08-24 | 7D | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao humana (baliza B1: teto de 4 tentativas atingido). TODAS as correcoes exigidas pelo revisor nas 4 rodadas foram implementadas e validadas com testes (434 testes verdes, build limpo): (1) persistencia OBRIGATORIA do outbox antes do 201; (2) falha ambigua (timeout/5xx/rede) NAO desmarca a promocao — retry reconcilia por external_reference, com evidencia local failed+incerta; (3) reconciliacao inconclusiva (busca falhou) distinta de ausencia confirmada — nunca desmarca em busca inconclusiva (502 PROMOCAO_RECONCILIACAO_INDISPONIVEL); (4) preference APROVADA/concluida nunca tratada como ausencia — bloqueia nova cobranca (409 PROMOCAO_PAGAMENTO_CONCLUIDO); (5) falhaMpIncerta classifica pelo STATUS HTTP real (MpApiError), nunca pelo corpo — teste de 500 com corpo contendo 'invalid' confirma que nao desmarca; (6) validacao de id/init_point na resposta; (7) erros fail-closed sem expor detalhes do provedor. Teto atingido por rodadas de robustez progressiva (4->2->1->1 achados), nao por retrabalho repetido; a 4a correcao (status HTTP) foi implementada apos a ultima reprovacao e nao pode ser re-revisada pelo teto. Reauditoria via ai:audit reusa artefatos antigos (sem diff novo). |
 | 2026-08-24 | 7E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-24 | 7E | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

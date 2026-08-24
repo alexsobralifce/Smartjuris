@@ -106,6 +106,8 @@ export interface CriarAssinaturaInput {
   notificationUrl: string;
   /** Chave estável por OPERAÇÃO (outbox): retries usam a mesma chave. */
   idempotencyKey?: string;
+  /** Data ISO da 1ª cobrança (auto_recurring.start_date) — ex.: now+30d. */
+  startDate?: string;
 }
 
 export interface AssinaturaCriada {
@@ -135,6 +137,7 @@ export async function criarAssinatura(input: CriarAssinaturaInput): Promise<Assi
         frequency_type: 'months',
         transaction_amount: cfg.precoMensal,
         currency_id: 'BRL',
+        ...(input.startDate ? { start_date: input.startDate } : {}),
       },
       payer_email: input.payerEmail,
       external_reference: input.escritorioId,
@@ -228,11 +231,107 @@ export async function buscarPreapprovalPorReferencia(externalReference: string):
 }
 
 /**
- * Claim/lease atômico da operação de checkout por idempotencyKey: marca
- * `processando_em` (lease) e avança a fase. Impede que retries concorrentes
- * da MESMA operação disparem chamadas remotas simultâneas.
- * Retorna true se este worker adquiriu o lease (pode prosseguir).
+ * Fase 7E — Assinatura DEFINITIVA pós 1ª compra promocional:
+ * cria o preapproval com valor INTEGRAL e 1ª cobrança em ~30 dias
+ * (`auto_recurring.start_date` = now + 30d). Idempotente:
+ *   - reconcilia primeiro por external_reference (se um preapproval pendente/
+ *     authorized do mesmo escritório JÁ existe, reutiliza — nunca duplica);
+ *   - X-Idempotency-Key estável por (escritório, plano) para retries.
+ *
+ * A startDate RETORNADA é a data REAL do preapproval (extraída do recurso no
+ * MP após criar/reutilizar): retries tardios preservam a MESMA 1ª cobrança e
+ * a próxima cobrança local é gravada corretamente.
  */
+export async function criarAssinaturaDefinitivaPromocional(
+  input: CriarAssinaturaInput,
+): Promise<AssinaturaCriada & { startDate?: string }> {
+  const cfg = planoAssinatura(input.plano);
+  if (!cfg) {
+    throw new Error(`Plano de assinatura inválido: ${input.plano}`);
+  }
+
+  // 1) Reconciliação: efeito remoto anterior pode ter criado o preapproval
+  //    (falha ambígua/gravação local perdida) — reutiliza em vez de duplicar.
+  const existente = await buscarPreapprovalPorReferencia(input.escritorioId);
+  if (existente?.id) {
+    const startDate = await extrairStartDatePreapproval(String(existente.id));
+    return {
+      id: String(existente.id),
+      initPoint: String(existente.init_point ?? ''),
+      status: String(existente.status ?? 'pending'),
+      externalReference: String(existente.external_reference ?? ''),
+      startDate: startDate ?? undefined,
+    };
+  }
+
+  // 2) 1ª cobrança da recorrência em ~30 dias (valor integral).
+  const startDateCalculada = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const criada = await criarAssinatura({
+    ...input,
+    startDate: startDateCalculada,
+    idempotencyKey: input.idempotencyKey ?? `sj-promo-final-${input.escritorioId}-${cfg.codigo}`,
+  });
+  // Data REAL do preapproval criado (fallback: a calculada).
+  const startDateReal = (await extrairStartDatePreapproval(criada.id)) ?? startDateCalculada;
+  return { ...criada, startDate: startDateReal };
+}
+
+/** Lê auto_recurring.start_date do preapproval no MP (null se indisponível). */
+async function extrairStartDatePreapproval(preapprovalId: string): Promise<string | null> {
+  try {
+    const preapproval = await obterPreapproval(preapprovalId);
+    const raw = preapproval?.auto_recurring?.start_date ?? preapproval?.start_date;
+    if (!raw) return null;
+    const ts = Date.parse(String(raw));
+    return Number.isFinite(ts) ? String(raw) : null;
+  } catch (e) {
+    console.warn('[Billing] Falha ao ler start_date do preapproval:', (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Fase 7E — Vincula a assinatura definitiva ao escritório (local, sem chamada
+ * remota): mercado_pago_id, status pendente, plano e próxima cobrança. Usado
+ * pelo webhook da 1ª compra para persistir o preapproval criado.
+ *
+ * NUNCA REGRIDE o status: se o escritório já está `ativa` (pagou a 1ª compra
+ * avulsa), o status permanece `ativa` — o vínculo do preapproval definitivo é
+ * adicionado (id + plano + próxima cobrança); o webhook `authorized` do
+ * preapproval confirma a recorrência.
+ */
+export async function vincularAssinaturaDefinitiva(
+  escritorioId: string,
+  assinatura: AssinaturaCriada,
+  plano: string,
+  startDate?: string | null,
+  exec: any = db,
+): Promise<boolean> {
+  const cfg = planoAssinatura(plano);
+  const [esc] = await exec.select({ id: escritorios.id, assinaturaStatus: escritorios.assinaturaStatus })
+    .from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
+  if (!esc) return false;
+  const patch: Record<string, any> = {
+    mercadoPagoId: assinatura.id,
+    assinaturaPlano: cfg?.codigo ?? plano,
+  };
+  // Só marca `pendente` se o escritório ainda não está ativo (sem regressão).
+  if (esc.assinaturaStatus !== 'ativa') {
+    patch.assinaturaStatus = 'pendente';
+  }
+  if (startDate) patch.assinaturaProximaCobranca = new Date(startDate);
+  await exec.update(escritorios).set(patch).where(eq(escritorios.id, escritorioId));
+  return true;
+}
+
+/** Plano gravado no claim promocional (7D) — fonte do plano da 1ª compra. */
+export async function planoPromocionalDoEscritorio(escritorioId: string): Promise<string | null> {
+  const [esc] = await db.select({ promocaoPlano: escritorios.promocaoPlano })
+    .from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
+  return esc?.promocaoPlano ?? null;
+}
+
+
 export async function adquirirOperacaoCheckout(
   idempotencyKey: string,
   fase: string,
@@ -723,7 +822,14 @@ export async function processarWebhook(payload: { type?: string; data?: { id?: s
       const externalReference = String(payment.external_reference ?? '');
       const preapprovalId = payment.preapproval_id ? String(payment.preapproval_id) : undefined;
       const status = String(payment.status ?? 'desconhecido');
-      const escritorioId = await escritorioPorReferencia(externalReference, preapprovalId);
+      // Fase 7E — 1ª compra promocional: external_reference com o marcador
+      // `sj-promo:<escritorioId>` (criado na 7D). O id do escritório é
+      // extraído do marcador para a resolução do vínculo.
+      const promocional = externalReference.startsWith(REFERENCIA_PROMOCIONAL_PREFIXO);
+      const referenciaEscritorio = promocional
+        ? externalReference.slice(REFERENCIA_PROMOCIONAL_PREFIXO.length)
+        : externalReference;
+      const escritorioId = await escritorioPorReferencia(referenciaEscritorio, preapprovalId);
       if (!escritorioId) {
         await registrarEventoFalho(type, dataId, status, 'SEM_VINCULO', 'payment sem vínculo com escritório');
         return { handled: false, motivo: 'Payment sem vínculo com escritório SmartJuris.' };
@@ -737,9 +843,19 @@ export async function processarWebhook(payload: { type?: string; data?: { id?: s
       }
 
       // Plano do pagamento: descrição do MP OU o plano gravado no checkout.
-      const planoAssinado = await planoDoEscritorio(escritorioId);
-      const cfg = planoAssinatura(String(payment.description ?? '')) ?? (planoAssinado ? planoAssinatura(planoAssinado) : null);
-      const plano = cfg?.codigo ?? 'basico';
+      // Na 1ª compra promocional (7E), o plano vem EXCLUSIVAMENTE do claim
+      // persistido na 7D (promocao_plano) — dados do pagamento (description)
+      // são descartados por serem manipuláveis.
+      let plano: string;
+      if (promocional) {
+        const planoClaim = await planoPromocionalDoEscritorio(escritorioId);
+        const cfgClaim = planoAssinatura(planoClaim);
+        plano = cfgClaim?.codigo ?? 'basico';
+      } else {
+        const planoAssinado = await planoDoEscritorio(escritorioId);
+        const cfg = planoAssinatura(String(payment.description ?? '')) ?? (planoAssinado ? planoAssinatura(planoAssinado) : null);
+        plano = cfg?.codigo ?? 'basico';
+      }
 
       // 3) EFEITO sob lock por assinatura (ordenação + mutação atômicas).
       const provedorTs = payment.date_created ? String(payment.date_created) : null;
@@ -769,9 +885,46 @@ export async function processarWebhook(payload: { type?: string; data?: { id?: s
         return { handled: false, motivo: 'Efeito sem resultado sob lock.' };
       }
       const { ok, acao, statusResult } = execucao.resultado;
-      await finalizarEventoWebhook(type, dataId, status, ok ? statusResult : 'ESCRITORIO_NAO_ENCONTRADO', acao);
+
+      // 4) Fase 7E — 1ª compra promocional APROVADA: cria a assinatura
+      //    DEFINITIVA (valor integral, 1ª cobrança ~30 dias) e vincula.
+      //    Idempotente: reconciliação por external_reference + chave estável.
+      //    Falha NÃO derruba a ativação (o pagamento avulso já foi pago), mas
+      //    deixa o evento REPROCESSAVEL (`ERRO`): o reenvio do MP (ou um
+      //    reprocessamento posterior) tenta recriar a recorrência — sem
+      //    duplicar (reconciliação/chave estável) e sem expor detalhes do
+      //    provedor ao chamador (fail-closed).
+      let acaoFinal = acao;
+      let statusFinal = statusResult;
+      if (ok && promocional && status === 'approved') {
+        try {
+          const definitiva = await criarAssinaturaDefinitivaPromocional({
+            escritorioId,
+            plano,
+            payerEmail: String(payment.payer?.email ?? ''),
+            backUrl: '',
+            notificationUrl: '',
+            idempotencyKey: `sj-promo-final-${escritorioId}-${plano}`,
+          });
+          const vinculada = await vincularAssinaturaDefinitiva(
+            escritorioId,
+            definitiva,
+            plano,
+            definitiva.startDate ?? null,
+          );
+          acaoFinal = `payment.approved → ativado + assinatura definitiva criada (${definitiva.id})`;
+          statusFinal = vinculada ? 'ATIVADO_RECORRENCIA' : 'ATIVADO';
+        } catch (e7e) {
+          console.error('[Billing] Falha ao criar assinatura definitiva promocional (7E):', (e7e as Error).message);
+          acaoFinal = 'payment.approved → ativado; recorrência pendente de retry (7E)';
+          // REPROCESSAVEL: o replay do MP re-tenta; a idempotência da criação
+          // da recorrência (reconciliação + chave estável) impede duplicação.
+          statusFinal = 'ERRO';
+        }
+      }
+      await finalizarEventoWebhook(type, dataId, status, ok ? statusFinal : 'ESCRITORIO_NAO_ENCONTRADO', acaoFinal);
       if (!ok) return { handled: false, motivo: `Escritório não encontrado (${escritorioId}).` };
-      return { handled: true, acao, escritorioId };
+      return { handled: true, acao: acaoFinal, escritorioId };
     }
 
     if (type === 'subscription_preapproval') {

@@ -855,7 +855,10 @@ router.post('/trocar-senha', authMiddleware, async (req: AuthenticatedRequest, r
 
     const isValid = await bcrypt.compare(senhaAtual, user.senha);
     if (!isValid) {
-      return res.status(401).json({ error: 'Senha atual incorreta.' });
+      // 400 (não 401): senha atual incorreta é erro de VALIDAÇÃO do payload,
+      // não de autenticação da sessão. O frontend trata 401 como "sessão
+      // expirada" (derruba a sessão); 400 mantém a sessão e mostra o erro.
+      return res.status(400).json({ error: 'Senha atual incorreta.', code: 'SENHA_ATUAL_INCORRETA' });
     }
 
     const senhaHash = await bcrypt.hash(novaSenha, 12);

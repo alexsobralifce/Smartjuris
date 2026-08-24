@@ -47,7 +47,7 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         const code = data?.code
-        if (code === 'PASSWORD_CHANGE_REQUIRED' || res.status === 403 || res.status === 401) {
+        if (code === 'SENHA_ATUAL_INCORRETA' || code === 'PASSWORD_CHANGE_REQUIRED' || res.status === 403 || res.status === 401) {
           addToast('error', data?.error || 'Senha atual incorreta. Verifique e tente novamente.')
         } else {
           addToast('error', data?.error || 'Não foi possível atualizar a senha.')

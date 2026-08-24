@@ -788,8 +788,8 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 - [x] CHECK constraints de `assinatura_status` e `assinatura_plano` (0028) rejeitam valores fora do catálogo
 - [x] checkoutSchema restringe plano a enum/allowlist server-side (preço resolvido só no backend)
 - [x] Webhook testado em integração: assinatura HMAC válida/inválida, replay ignorado (persistido), evento expirado rejeitado, fail-closed em produção, evento desconhecido, falha do MP, ativação/desativação (billingWebhook.test.ts)
-- [x] Webhook com lease de processamento (0030) + ORDENAÇÃO (0032): aquisição atômica/exclusiva; PROCESSANDO retomável só com lease expirado; transições obsoletas (provedor_ts mais antigo que o último aplicado) são ignoradas; testes de lease e ordenação; fail-closed em produção
-- [x] Checkout com outbox (0031): operação persistida com chave ESTÁVEL derivada da intenção (esc-{escritorioId}-{plano}) antes da chamada ao MP; retries reutilizam a MESMA operação + X-Idempotency-Key; assinatura ATIVA → 409; pendente → retoma init_point; cancelamento remoto falho → interrompe; advisory lock no checkout e no cancelar
+- [x] Webhook com lease (0030) + ORDENAÇÃO (0032): aquisição atômica; PROCESSANDO retomável só com lease expirado; escritorio_id associado ao evento; transições obsoletas ignoradas (teste de ordem inversa: evento antigo não altera estado); fail-closed em produção
+- [x] Checkout com outbox (0031): operação persistida com chave EXCLUSIVA por operação (esc-{id}-{plano}-{uuid}) antes da chamada ao MP; retry RECUPERA a operação pendente/criada e reutiliza X-Idempotency-Key + preapproval; assinatura ATIVA → 409; pendente → retoma init_point; cancelamento remoto falho → interrompe; advisory lock no checkout e no cancelar
 - [x] Cancelar consistente: desativação local só após confirmação do provedor (falha remota → 502 sem desativar)
 - [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
 - [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
@@ -879,6 +879,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | reauditoria: gate aprovado (ganhos TPM confirmados) |
+| 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |

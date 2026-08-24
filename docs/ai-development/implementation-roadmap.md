@@ -78,6 +78,7 @@ migrations validadas, quando aplicável
 | 6D | Cache persistente de decisões via Redis com fallback em memória | 5C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6E | Endpoint de telemetria e saúde da integração de jurisprudência | 6C, 6D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6F | Acesso ao portal Jurisprudências.ai e URL da API configurável | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 7A | Integração Mercado Pago — assinatura recorrente (Checkout Pro + webhooks) | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -747,6 +748,50 @@ Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/)
 - A URL base da API é configurável via env sem mudança de código
 - A chave de API não é exposta na interface
 
+### 7A — Integração Mercado Pago — Assinatura Recorrente
+
+**Estado:** `PLANNED`
+
+**Dependência:** Nenhuma (funcionalidade standalone).
+
+**Objetivo:**
+
+Implementar ciclo completo de cobrança recorrente via **Mercado Pago Subscriptions/Preapproval** (Checkout Pro redirect + webhook), integrado ao sistema de créditos SmartJuris — checkout → pagamento → ativação automática do escritório com recarga mensal de créditos; inadimplência/cancelamento → desativação automática.
+
+**Arquitetura (implementada):**
+
+| Camada | Arquivo(s) | Responsabilidade |
+|---|---|---|
+| Migration | `migrations/0027_billing_mercado_pago.sql` | Campos no `escritorios`: `mercado_pago_id`, `assinatura_status/plano/datas`, `cycle_month` reset |
+| Service | `services/billing.ts` | Cliente MP (fetch nativo, sem SDK): criar/consultar/cancelar preapproval, validar x-signature HMAC-SHA256, processar webhooks (payment approved/rejected, subscription_preapproval authorized/paused/cancelled) |
+| Routes | `routes/billing.ts` · `billingWebhook.ts` | `POST /checkout` (admin → initPoint redirect), `GET /status`, `POST /cancelar`, `POST /webhook` (público, sem auth) |
+| Frontend | `Assinatura.tsx` · `App.tsx` · `api/client.ts` | Tela com status da assinatura, cards Plano Básico R$180 / Intermediário R$300 / Avançado R$500, botão assinar (redireciona MP), cancelar assinatura |
+| Config | `.env` | `MERCADO_PAGO_ACCESS_TOKEN` (APP_USR-…), `PUBLIC_API_URL=https://smartjuris-api-production.up.railway.app` |
+
+**Fluxo de eventos:**
+
+```
+Admin escolhe plano → POST /billing/checkout → MP cria preapproval →
+initPoint (redirect Checkout Pro) → admin paga em https://mercadopago.com →
+MP envia subscription_preapproval.updated(authorized) + payment(approved) →
+webhook processa → ativar escritório, recarregar creditsMonthly(20/50/100), cycleMonth reset →
+Cobrança mensal automática (auto_recurring frequency: 1 month) →
+Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
+```
+
+**Critérios de aceite:**
+
+- [x] `pnpm build` do backend e frontend passam sem erros
+- [x] `pnpm test` 377 testes passando (9 novos em billing.test.ts — planos, lista, x-signature HMAC)
+- [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
+- [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
+- [x] Cancelamento real executado no MP (`PUT /preapproval/{id}` → status cancelled)
+- [x] Estado do banco limpo após teste (`UPDATE escritorios SET mercado_pago_id=NULL, assinatura_status='nenhuma'`)
+- [x] URL do back_url valida HTTPS (erro claro se APP_URL = http://)
+- [x] Planos mapeados corretamente: basico→ESSENTIAL(R$180/20cr), intermediario→PROFESSIONAL(R$300/50cr), avancado→OFFICE(R$500/100cr)
+- [x] Resiliência de resolução de escritório por external_reference ou preapproval_id
+- [x] .env.example documenta todas variáveis MP
+
 ## Histórico de auditoria
 
 | Data | Fase | Implementador | Revisor | Veredito | Avanço permitido | Observações |
@@ -825,6 +870,7 @@ Disponibilizar acesso direto ao portal do provedor (https://jurisprudencias.ai/)
 | 2026-08-23 | 6E | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-24 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | reauditoria: gate aprovado (ganhos TPM confirmados) |
 
 ## Critério final
 

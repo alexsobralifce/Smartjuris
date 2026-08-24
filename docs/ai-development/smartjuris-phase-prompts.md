@@ -1500,3 +1500,51 @@ Confirme:
 
 Retorne o veredito em JSON.
 ```
+# 7A — Integração Mercado Pago — Assinatura Recorrente (Checkout Pro + Webhooks)
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7A — Integração Mercado Pago — Assinatura Recorrente.
+
+IMPLEMENTAÇÃO JÁ REALIZADA (commit a51687f). Colete evidências e envie ao revisor.
+
+Escopo (implementado):
+- Migration 0027: novos campos em `escritorios` (`mercado_pago_id`, `assinatura_status/plano/datas`, ciclo de créditos)
+- services/billing.ts: cliente MP via fetch nativo (criar/consultar/cancelar preapproval, validar x-signature HMAC-SHA256, processar webhooks de payment e subscription_preapproval)
+- routes/billing.ts · billingWebhook.ts: POST /checkout (admin → initPoint), GET /status, POST /cancelar, POST /webhook (público, sem auth)
+- frontend Assinatura.tsx: tela com status, cards plano Básico R$180 / Intermediário R$300 / Avançado R$500, redirecionamento checkout, cancelar assinatura
+- api/client.ts · App.tsx: rotas 'assinatura' + retorno post-checkout (?r=assinatura)
+- config .env: MERCADO_PAGO_ACCESS_TOKEN/PUBLIC_KEY, APP_URL (validação HTTPS obrigatória)
+
+Fluxo: admin escolhe plano → checkout → redirect init_point → MP cobra → webhook authorized/approved → escritório ativado + recarga mensal de créditos; payment.rejected ou preapproval.paused → desativa escritório.
+
+Comandos de evidência:
+- `pnpm --filter @lexia/api build` → tsc deve passar
+- `pnpm --filter @lexia/web build` → vite build deve passar
+- `pnpm --filter @lexia/api test` → 377 testes passando (9 novos em billing.test.ts)
+- `git diff --cached --stat` → arquivos alterados na integração
+- Verificar se `apps/api/src/db/migrations/0027_billing_mercado_pago.sql` existe e é válido
+- Verificar se `MERCADO_PAGO_ACCESS_TOKEN` está configurado (.env existente e não-vazio)
+- Confirmar que `mpConfigurado: true` no endpoint GET /api/billing/status
+
+Execute builds + testes. Entregue diff, resultados, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7A — Integração Mercado Pago — Assinatura Recorrente.
+
+Analise o diff, os testes e os resultados executados.
+
+Contexto: integração completa de cobrança recorrente via Mercado Pago Subscriptions (preapproval + auto_recurring). Backend: migration SQL (0027), serviço billing.ts (fetch nativo, x-signature validation, webhook handler), rotas /billing/*, autenticação admin-only para checkout/cancelar. Frontend: tela Assinatura.tsx com 3 planos (R$180/300/500), redirecionamento ao initPoint do MP, validação HTTPS obrigatória. Testes unitários billing.test.ts (9 testes — mapeamento de planos, preços, lista, HMAC x-signature). Suíte total 377 testes verdes.
+
+Críticos (avaliar APENAS estes):
+- **Segurança**: webhook sem cookie mas com validação HMAC-SHA256 (x-signature); tokens MP apenas em env; back_url exige https://; nenhum dado financeiro sensível exposto; auditoria de todas ações financeiras; requireAdmin no checkout/cancelar.
+- **Robustez**: resiliência de resolução escritório (external_reference OU preapproval_id); uso de assinaturaPlano gravado como fallback quando description do payment não bate; tratamento de estados pending/paused/cancelled/rejected corretos; reset seguro do ciclo de créditos (só novo mês ou reativação).
+- **Dados**: migration idempotente (ALTER TABLE ADD COLUMN IF NOT EXISTS); colunas nullable/default; cleanup legado após teste real de produção.
+- **Testes**: 9 unitários + 377 suíte total verde; checkout real testado (created preapproval → verified cancelable); webhook real testado (pending → sem mudança); cancelamento real no MP confirmado.
+
+Não crie critérios novos. Responda somente no formato JSON do contrato de auditoria.
+```

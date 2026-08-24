@@ -250,6 +250,9 @@ interface PhaseRunRecord {
   initialSha?: string | null;
   reviewedSha?: string | null;
   reviewerModel?: string | null;
+  /** Motivo de rodada sem auditoria (no_diff/preflight_failed) — NÃO conta
+   *  como reprovação do revisor (falha de infra ≠ achado de auditoria). */
+  skipReason?: string | null;
 }
 
 export async function phaseRunRecords(aiDevDir: string, phaseId: string, currentRunId?: string): Promise<PhaseRunRecord[]> {
@@ -319,7 +322,11 @@ export async function contagemReprovacoesConsecutivas(
     .sort((a, b) => a.runId.localeCompare(b.runId));
   let consecutivas = 0;
   for (let i = records.length - 1; i >= 0; i--) {
-    const status = records[i].status;
+    const r = records[i];
+    const status = r.status;
+    // Rodadas de INFRAESTRUTURA (sem auditoria: no_diff/preflight_failed)
+    // NÃO são reprovações do revisor — ignoradas na contagem anti-loop.
+    if (r.skipReason === 'no_diff' || r.skipReason === 'preflight_failed') continue;
     if (status === 'CORRECTION_PENDING' || status === 'AUDIT_FAILED') {
       consecutivas++;
     } else {

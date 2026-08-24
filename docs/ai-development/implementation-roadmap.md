@@ -789,7 +789,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 - [x] checkoutSchema restringe plano a enum/allowlist server-side (preço resolvido só no backend)
 - [x] Webhook testado em integração: assinatura HMAC válida/inválida, replay ignorado (persistido), evento expirado rejeitado, fail-closed em produção, evento desconhecido, falha do MP, ativação/desativação (billingWebhook.test.ts)
 - [x] Webhook com lease (0030) + ORDENAÇÃO (0032) + SERIALIZAÇÃO (0033): deduplicação por TRANSIÇÃO (event_type, data_id, data_estado) — múltiplos estados do mesmo recurso (pending→authorized→cancelled) processados 1x cada; efeito sob advisory lock por escritório; eventos fora de ordem ignorados; teste de ordem inversa
-- [x] Checkout com outbox (0031) em 3 FASES: F1 decisão+operação pending (COMMIT antes das chamadas remotas — sobrevive a falhas); F2 efeitos remotos fora de transação (cancelar + criar com X-Idempotency-Key por operação); F3 gravação do resultado; retry recupera operação pendente/criada; advisory lock no checkout e no cancelar
+- [x] Checkout com outbox (0031) em 3 FASES com RECONCILIAÇÃO: F1 decisão+operação pending (COMMIT antecipado); F2 efeitos remotos (fases persistidas: cancelled após cancelar, failed se criação falhar); F3 gravação do resultado; retry RECUPERA o recurso real do MP por external_reference (buscarPreapprovalPorReferencia) antes de alterar estado local; compensação de cancelamento concluído; advisory lock no checkout e no cancelar
 - [x] Cancelar consistente: desativação local só após confirmação do provedor (falha remota → 502 sem desativar)
 - [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
 - [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
@@ -879,6 +879,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | reauditoria: gate aprovado (ganhos TPM confirmados) |
+| 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |

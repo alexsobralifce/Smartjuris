@@ -151,7 +151,7 @@ async function seed() {
       limitePecasMes: 200,
       limiteProcessos: 500,
       isDemo: false,
-      limiteTokensMes: null,
+      limiteTokensMes: 1_500_000, // 1 peça = 1 crédito (opção B): cota de tokens/semana do intermediário
       ativo: true,
       // Papel timbrado completo (testa exportação PDF/DOCX com letterhead)
       razaoSocial: 'Silva & Associados Sociedade de Advogados',
@@ -175,7 +175,7 @@ async function seed() {
       limitePecasMes: 50,
       limiteProcessos: 100,
       isDemo: true,
-      limiteTokensMes: 10000,
+      limiteTokensMes: 600_000, // básico: cota de tokens/mês (opção B)
       ativo: true,
       razaoSocial: 'Teste Beta Advocacia LTDA',
       cnpj: '99.888.777/0001-66',

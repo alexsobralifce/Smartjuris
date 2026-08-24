@@ -53,7 +53,7 @@ describe('Fonte única (@lexia/shared) — valores do contrato 2B', () => {
 
     const padrao = OPERATION_CATALOG.STANDARD_PETITION;
     assert.equal(padrao.classification, 'STANDARD');
-    assert.equal(padrao.credits, 2);
+    assert.equal(padrao.credits, 1);
     assert.equal(padrao.maxInputTokens, 25_000);
     assert.equal(padrao.maxOutputTokens, 10_000);
     assert.equal(padrao.maxOutputPages, 12);
@@ -81,7 +81,7 @@ describe('Fonte única (@lexia/shared) — valores do contrato 2B', () => {
     const recurso = OPERATION_CATALOG.APPEAL;
     assert.equal(recurso.classification, 'COMPLEX');
     assert.equal(recurso.model, 'PRO');
-    assert.equal(recurso.credits, 4);
+    assert.equal(recurso.credits, 1);
     assert.equal(recurso.maxInputTokens, 35_000);
     assert.equal(recurso.maxOutputTokens, 13_000);
     assert.equal(recurso.maxOutputPages, 15);
@@ -90,7 +90,7 @@ describe('Fonte única (@lexia/shared) — valores do contrato 2B', () => {
     const complexo = OPERATION_CATALOG.COMPLEX_DOCUMENT;
     assert.equal(complexo.classification, 'COMPLEX');
     assert.equal(complexo.model, 'PRO');
-    assert.equal(complexo.credits, 6);
+    assert.equal(complexo.credits, 1);
     assert.equal(complexo.maxInputTokens, 45_000);
     assert.equal(complexo.maxOutputTokens, 18_000);
     assert.equal(complexo.maxOutputPages, 20);

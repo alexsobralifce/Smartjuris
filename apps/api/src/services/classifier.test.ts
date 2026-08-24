@@ -119,20 +119,20 @@ test('03. Petição padrão (fatos extensos) → STANDARD_PETITION', () => {
   });
   assert.equal(out.operation, 'STANDARD_PETITION');
   assert.equal(out.classification, 'STANDARD');
-  assert.equal(out.requiredCredits, 2);
+  assert.equal(out.requiredCredits, 1);
   validaSaida(out);
 });
 
-test('04. Contestação → STANDARD_PETITION (Flash, 2 créditos)', () => {
+test('04. Contestação → STANDARD_PETITION (Flash, 1 crédito)', () => {
   const out = classify({ request: { pieceType: 'Contestação' } });
   assert.equal(out.operation, 'STANDARD_PETITION');
   assert.equal(out.recommendedModelTier, 'FLASH');
-  assert.equal(out.requiredCredits, 2);
+  assert.equal(out.requiredCredits, 1);
   assert.equal(out.needsHumanReview, true);
   validaSaida(out);
 });
 
-test('05. Apelação → APPEAL (Pro, 4 créditos, enfrenta sentença)', () => {
+test('05. Apelação → APPEAL (Pro, 1 crédito, enfrenta sentença)', () => {
   const out = classify({
     request: { pieceType: 'Recurso de Apelação' },
     case: { ...casoPadrao, hasJudgmentToAddress: true, riskLevel: 'HIGH' },
@@ -140,18 +140,18 @@ test('05. Apelação → APPEAL (Pro, 4 créditos, enfrenta sentença)', () => {
   assert.equal(out.operation, 'APPEAL');
   assert.equal(out.classification, 'COMPLEX');
   assert.equal(out.recommendedModelTier, 'PRO');
-  assert.equal(out.requiredCredits, 4);
+  assert.equal(out.requiredCredits, 1);
   assert.equal(out.status, 'READY');
   assert.equal(out.canStartDrafting, true);
   validaSaida(out);
 });
 
-test('06. Parecer completo → COMPLEX_DOCUMENT (Pro, 6 créditos)', () => {
+test('06. Parecer completo → COMPLEX_DOCUMENT (Pro, 1 crédito)', () => {
   const out = classify({ request: { pieceType: 'Parecer' } });
   assert.equal(out.operation, 'COMPLEX_DOCUMENT');
   assert.equal(out.classification, 'COMPLEX');
   assert.equal(out.recommendedModelTier, 'PRO');
-  assert.equal(out.requiredCredits, 6);
+  assert.equal(out.requiredCredits, 1);
   assert.equal(out.status, 'READY');
   validaSaida(out);
 });
@@ -209,7 +209,7 @@ test('10. Pesquisa como suboperação de apelação → APPEAL preservado', () =
     case: { ...casoPadrao, hasJudgmentToAddress: true },
   });
   assert.equal(out.operation, 'APPEAL');
-  assert.equal(out.requiredCredits, 4);
+  assert.equal(out.requiredCredits, 1);
   assert.equal(out.needsJurisprudenceResearch, true);
   assert.equal(out.subOperations.length, 0); // Fase 1: só representação conceitual
   assert.ok(out.warnings.some(w => w.includes('etapa interna da operação principal')));
@@ -332,15 +332,15 @@ test('17. Documento ilegível (failedCount>0 + OCR) → BLOCKED', () => {
   validaSaida(out);
 });
 
-test('18. Saldo insuficiente (APPEAL 4 créditos, saldo 2) → REQUIRES_ADDITIONAL_CREDITS', () => {
+test('18. Saldo insuficiente (APPEAL 1 crédito, saldo 0) → REQUIRES_ADDITIONAL_CREDITS', () => {
   const out = classify({
-    workspace: { planCode: 'OFFICE', creditsAvailable: 2 },
+    workspace: { planCode: 'OFFICE', creditsAvailable: 0 },
     request: { operationRequested: 'apelação' },
     case: { ...casoPadrao, hasJudgmentToAddress: true },
   });
   assert.equal(out.status, 'REQUIRES_ADDITIONAL_CREDITS');
   assert.equal(out.operation, 'APPEAL');
-  assert.equal(out.requiredCredits, 4);
+  assert.equal(out.requiredCredits, 1);
   assert.equal(out.canStartDrafting, false);
   assert.ok(out.warnings.some(w => w.includes('Saldo de créditos insuficiente')));
   validaSaida(out);
@@ -454,7 +454,7 @@ test('Cobertura: todos os 7 estados aparecem nos cenários', () => {
     classify({ request: { operationRequested: 'análise de autos' }, documents: { ...documentosPadrao, relevantPages: 120, pagesAlreadyAnalyzed: 0 } }), // NEEDS_DOCUMENT_ANALYSIS
     classify({ request: { userInstruction: 'ajuda' }, case: {}, documents: { count: 0, totalPages: 0, indexedCount: 0, processableCount: 0, failedCount: 0 } }), // NEEDS_CLARIFICATION
     classifyAiOperation({}),                                                                        // INSUFFICIENT_DATA
-    classify({ workspace: { planCode: 'OFFICE', creditsAvailable: 1 }, request: { operationRequested: 'apelação' }, case: { ...casoPadrao, hasJudgmentToAddress: true } }), // REQUIRES_ADDITIONAL_CREDITS
+    classify({ workspace: { planCode: 'OFFICE', creditsAvailable: 0 }, request: { operationRequested: 'apelação' }, case: { ...casoPadrao, hasJudgmentToAddress: true } }), // REQUIRES_ADDITIONAL_CREDITS
     classify({ request: { pieceType: 'Petição Inicial' }, documents: { count: 2, totalPages: 10, indexedCount: 0, processableCount: 0, failedCount: 2, hasOcrRequired: true } }), // BLOCKED
   ];
   const statuses = new Set(resultados.map(r => r.status));
@@ -514,7 +514,7 @@ test('A4. FULL_DOCUMENT + parecer completo com contexto processado → COMPLEX_D
   });
   assert.equal(out.operation, 'COMPLEX_DOCUMENT');
   assert.equal(out.status, 'READY');
-  assert.equal(out.requiredCredits, 6);
+  assert.equal(out.requiredCredits, 1);
   assert.equal(out.canStartDrafting, true);
   validaSaida(out);
 });
@@ -617,8 +617,8 @@ test('A14. Pesquisa jurisprudencial dentro de apelação → APPEAL + etapa inte
 
 test('A15. Saldo inferior aos créditos fixos → REQUIRES_ADDITIONAL_CREDITS', () => {
   const out = classify({
-    workspace: { planCode: 'OFFICE', creditsAvailable: 1 },
-    request: { pieceType: 'Parecer' }, // COMPLEX_DOCUMENT = 6 créditos
+    workspace: { planCode: 'OFFICE', creditsAvailable: 0 },
+    request: { pieceType: 'Parecer' }, // COMPLEX_DOCUMENT = 1 crédito
   });
   assert.equal(out.status, 'REQUIRES_ADDITIONAL_CREDITS');
   assert.equal(out.canStartDrafting, false);
@@ -717,9 +717,9 @@ test('helpers — catálogo com exatamente as 7 operações do contrato', () => 
   assert.deepEqual(Object.keys(OPERATION_CATALOG).sort(), [...AI_OPERATIONS].sort());
   assert.equal(getOperationPolicy('SIMPLE_PETITION').credits, 1);
   assert.equal(getOperationPolicy('SECTION_REVIEW').credits, 1);
-  assert.equal(getOperationPolicy('STANDARD_PETITION').credits, 2);
-  assert.equal(getOperationPolicy('APPEAL').credits, 4);
-  assert.equal(getOperationPolicy('COMPLEX_DOCUMENT').credits, 6);
+  assert.equal(getOperationPolicy('STANDARD_PETITION').credits, 1);
+  assert.equal(getOperationPolicy('APPEAL').credits, 1);
+  assert.equal(getOperationPolicy('COMPLEX_DOCUMENT').credits, 1);
   assert.equal(getOperationPolicy('JURISPRUDENCE_RESEARCH').credits, 1);
   assert.equal(getOperationPolicy('DOCUMENT_ANALYSIS_20_PAGES').credits, 1); // por bloco
   assert.equal(getOperationPolicy('DOCUMENT_ANALYSIS_20_PAGES').creditsArePerBlock, true);
@@ -746,8 +746,8 @@ test('helpers — páginas a analisar', () => {
 
 test('helpers — créditos fixos por operação', () => {
   assert.equal(getFixedCredits('SIMPLE_PETITION', null), 1);
-  assert.equal(getFixedCredits('APPEAL', null), 4);
-  assert.equal(getFixedCredits('COMPLEX_DOCUMENT', null), 6);
+  assert.equal(getFixedCredits('APPEAL', null), 1);
+  assert.equal(getFixedCredits('COMPLEX_DOCUMENT', null), 1);
   assert.equal(getFixedCredits('DOCUMENT_ANALYSIS_20_PAGES', 120), 6);
   assert.equal(getFixedCredits('DOCUMENT_ANALYSIS_20_PAGES', 80), 4);
   assert.equal(getFixedCredits('DOCUMENT_ANALYSIS_20_PAGES', 0), 0);

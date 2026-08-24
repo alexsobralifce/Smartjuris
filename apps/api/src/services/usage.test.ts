@@ -181,9 +181,9 @@ describe('estimateAiOperation', () => {
     assert.equal(e.eligible, true);
   });
 
-  test('APPEAL exige Pro e 4 créditos', () => {
+  test('APPEAL exige Pro e 1 crédito', () => {
     const e = estimativaSimples('APPEAL');
-    assert.equal(e.creditsRequired, 4);
+    assert.equal(e.creditsRequired, 1);
     assert.equal(OPERATION_LIMITS.APPEAL.model, 'pro');
   });
 

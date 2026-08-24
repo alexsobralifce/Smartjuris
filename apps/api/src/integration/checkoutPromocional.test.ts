@@ -173,7 +173,7 @@ async function checkoutPromocional(token: string, plano = 'basico') {
 describe('7D — checkout promocional', () => {
   test('feliz: preference com valor promocional backend + uso persistido antes do init_point', async () => {
     mockHandler = (url, init) => {
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         return { body: { id: 'pref-1', init_point: 'https://mp.test/init/feliz', external_reference: 'sj-promo:' + ESCR_FELIZ } };
       }
       return { status: 404, body: { error: 'rota inesperada: ' + url } };
@@ -212,11 +212,11 @@ describe('7D — checkout promocional', () => {
   test('retry: preference pendente reutilizada (não duplica chamada ao MP)', async () => {
     let chamadas = 0;
     mockHandler = (url, init) => {
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         chamadas++;
         return { body: { id: 'pref-retry', init_point: 'https://mp.test/init/retry', external_reference: 'sj-promo:' + ESCR_RETRY } };
       }
-      if (url.includes('/checkout_urls/pref-retry')) {
+      if (url.includes('/checkout/preferences/pref-retry')) {
         return { body: { id: 'pref-retry', init_point: 'https://mp.test/init/retry' } };
       }
       return { status: 404, body: { error: 'rota inesperada: ' + url } };
@@ -269,13 +269,13 @@ describe('7D — checkout promocional', () => {
     // não cria outra nem reaplica o benefício).
     let chamadasPost = 0;
     mockHandler = (url, init) => {
-      if (url.includes('/checkout_urls/search')) {
+      if (url.includes('/checkout/preferences/search')) {
         return { body: { results: [{ id: 'pref-reconciliada', status: 'active', init_point: 'https://mp.test/init/recon' }] } };
       }
-      if (url.includes('/checkout_urls/pref-reconciliada')) {
+      if (url.includes('/checkout/preferences/pref-reconciliada')) {
         return { body: { id: 'pref-reconciliada', init_point: 'https://mp.test/init/recon' } };
       }
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         chamadasPost++;
         return { body: { id: 'pref-NOVA', init_point: 'https://mp.test/init/nova' } };
       }
@@ -301,10 +301,10 @@ describe('7D — checkout promocional', () => {
     // NUNCA pode ser tratada como ausência → NÃO desmarca, NÃO cria nova.
     let chamadasPost = 0;
     mockHandler = (url, init) => {
-      if (url.includes('/checkout_urls/search')) {
+      if (url.includes('/checkout/preferences/search')) {
         return { body: { results: [{ id: 'pref-aprovada', status: 'approved', init_point: 'https://mp.test/init/aprovada' }] } };
       }
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         chamadasPost++;
         return { body: { id: 'pref-NOVA', init_point: 'https://mp.test/init/nova' } };
       }
@@ -347,7 +347,7 @@ describe('7D — checkout promocional', () => {
     // Retry: busca de reconciliação TAMBÉM falha (inconclusiva) → 502 e NÃO
     // desmarca (busca falha ≠ ausência confirmada; evita duplicar benefício).
     mockHandler = (url) => {
-      if (url.includes('/checkout_urls/search')) {
+      if (url.includes('/checkout/preferences/search')) {
         return { status: 500, body: { error: 'search indisponível' } };
       }
       return { status: 500, body: { error: 'MP indisponível' } };
@@ -366,7 +366,7 @@ describe('7D — checkout promocional', () => {
     // 1ª tentativa: preference criada no MP (id pref-persist), mas simulamos
     // que a gravação local do resultado falhou (operação fica pending sem id).
     mockHandler = (url, init) => {
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         return { body: { id: 'pref-persist', init_point: 'https://mp.test/init/persist' } };
       }
       return { status: 404, body: { error: 'rota inesperada: ' + url } };
@@ -384,13 +384,13 @@ describe('7D — checkout promocional', () => {
     // Retry: reconcilia por external_reference → recupera pref-persist.
     let chamadasPost = 0;
     mockHandler = (url, init) => {
-      if (url.includes('/checkout_urls/search')) {
+      if (url.includes('/checkout/preferences/search')) {
         return { body: { results: [{ id: 'pref-persist', status: 'active', init_point: 'https://mp.test/init/persist' }] } };
       }
-      if (url.includes('/checkout_urls/pref-persist')) {
+      if (url.includes('/checkout/preferences/pref-persist')) {
         return { body: { id: 'pref-persist', init_point: 'https://mp.test/init/persist' } };
       }
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         chamadasPost++;
         return { body: { id: 'pref-NOVA', init_point: 'https://mp.test/init/nova' } };
       }

@@ -171,7 +171,7 @@ describe('7G — validação final ponta a ponta (Opção C)', () => {
 
     // ---- 2. Checkout promocional: preference avulsa R$90 ----
     mockHandler = (url, init) => {
-      if (url.endsWith('/checkout_urls') && init?.method === 'POST') {
+      if (url.endsWith('/checkout/preferences') && init?.method === 'POST') {
         return { body: { id: 'pref-7g', init_point: 'https://mp.test/init/7g', external_reference: 'sj-promo:' + ESCR_NOVO } };
       }
       return { status: 404, body: { error: 'rota inesperada: ' + url } };

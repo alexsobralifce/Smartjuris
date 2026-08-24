@@ -430,7 +430,7 @@ export async function obterPayment(id: string): Promise<any> {
 // Checkout PROMOCIONAL (1ª compra avulsa — Fase 7D)
 //
 // Opção C: a 1ª compra é um pagamento AVULSO com o valor promocional (50% OFF)
-// via Preferences API (/checkout_urls); a assinatura recorrente integral
+// via Preferences API (/checkout/preferences); a assinatura recorrente integral
 // começa no 2º mês (criada na 7E após o webhook do pagamento aprovado).
 // O valor NUNCA vem do cliente: é calculado no backend (promocao.ts).
 // ---------------------------------------------------------------------------
@@ -508,7 +508,7 @@ export async function criarPreferencePromocional(input: CriarPreferencePromocion
   const externalReference = `${REFERENCIA_PROMOCIONAL_PREFIXO}${input.escritorioId}`;
   const idempotencyKey = input.idempotencyKey ?? `sj-promo-checkout-${input.escritorioId}-${cfg.codigo}`;
 
-  const { ok, status, data } = await mpFetch('/checkout_urls', {
+  const { ok, status, data } = await mpFetch('/checkout/preferences', {
     method: 'POST',
     headers: { 'X-Idempotency-Key': idempotencyKey },
     body: JSON.stringify({
@@ -577,7 +577,7 @@ export async function buscarPreferencePorReferencia(externalReference: string): 
 > {
   try {
     const { ok, status, data } = await mpFetch(
-      `/checkout_urls/search?external_reference=${encodeURIComponent(externalReference)}&limit=10`,
+      `/checkout/preferences/search?external_reference=${encodeURIComponent(externalReference)}&limit=10`,
     );
     if (!ok) {
       console.warn(`[Billing] Falha ao reconciliar preference por external_reference (${status})`);
@@ -601,7 +601,7 @@ export async function buscarPreferencePorReferencia(externalReference: string): 
  */
 export async function obterPreferenceInitPoint(preferenceId: string): Promise<string | null> {
   try {
-    const { ok, status, data } = await mpFetch(`/checkout_urls/${encodeURIComponent(preferenceId)}`);
+    const { ok, status, data } = await mpFetch(`/checkout/preferences/${encodeURIComponent(preferenceId)}`);
     if (!ok) {
       console.warn(`[Billing] Falha ao consultar preference (${status})`);
       return null;

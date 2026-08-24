@@ -1002,6 +1002,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 | 2026-08-24 | 7C | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao humana (baliza B4: 2 reprovacoes consecutivas): o BLOCKER e artefato de split de fases — a migration versionada 0036/0037 ja existe no repo e e validada por testes de banco limpo, upgrade legado, upgrade REAL, reaplicacao idempotente e constraints (migrationBilling.test.ts, 9 testes verdes desde a 7B); o HIGH desta rodada foi PASS pelo revisor (teste de persistencia real pos-cancelamento com nova query em promocao.test.ts). 422 testes da suite verdes. Rodar 3a vez reprovaria pelo mesmo motivo estrutural, desperdicando tokens. |
 | 2026-08-24 | 7D | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7D | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
+| 2026-08-24 | 7D | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

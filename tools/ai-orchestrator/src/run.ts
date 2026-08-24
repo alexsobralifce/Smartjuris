@@ -37,9 +37,17 @@ import {
   isValidPhaseId,
 } from './roadmap.js';
 import { extractPhasePrompts, buildImplementerEnvelope, buildReviewContext } from './prompts.js';
+import { buscarSkillsRelevantes, formatarDicasSkills } from './skills.js';
 import { openFindings, readLedger, reconcileLedger, type LedgerEntry } from './ledger.js';
 import { estimateCostUsd, sumTokenUsage, type CostEstimate } from './pricing.js';
 import { auditNextState, evidenceOk, type EvidenceGate } from './audit.js';
+import {
+  checarOrcamentoFase,
+  custoAcumuladoDaFase,
+  convergenciaFalhouV2,
+  deveEscalarRevisor,
+  lerRegrasDeBaliza,
+} from './guardrails.js';
 import {
   prepareWorkingTree,
   commitRoadmapUpdate,
@@ -241,6 +249,7 @@ interface PhaseRunRecord {
   status?: string;
   initialSha?: string | null;
   reviewedSha?: string | null;
+  reviewerModel?: string | null;
 }
 
 export async function phaseRunRecords(aiDevDir: string, phaseId: string, currentRunId?: string): Promise<PhaseRunRecord[]> {
@@ -271,6 +280,59 @@ export async function correctionAttemptCount(aiDevDir: string, phaseId: string):
   return records.filter((run) =>
     run.status === 'CORRECTION_PENDING' || run.status === 'AUDIT_FAILED',
   ).length;
+}
+
+/** Hash estável da saída de evidência (05-tests.txt) — doom-loop detection. */
+export function hashSaidaComando(output: string): string {
+  const { createHash } = require('node:crypto') as typeof import('node:crypto');
+  return createHash('sha256').update(output).digest('hex');
+}
+
+/** Hashes das suítes de testes (05-tests.txt) das rodadas anteriores da fase. */
+export async function hashesSuitesAnteriores(
+  aiDevDir: string,
+  phaseId: string,
+  currentRunId: string,
+): Promise<string[]> {
+  const { readFile } = await import('node:fs/promises');
+  const records = await phaseRunRecords(aiDevDir, phaseId, currentRunId);
+  const hashes: string[] = [];
+  for (const r of records) {
+    try {
+      const raw = await readFile(safeJoin(aiDevDir, 'runs', r.runId, '05-tests.txt'), 'utf8');
+      hashes.push(hashSaidaComando(raw));
+    } catch {
+      // rodada sem artefato de testes — ignora
+    }
+  }
+  return hashes;
+}
+
+/** Nº de reprovações CONSECUTIVAS (mais recentes) da fase — baliza do revisor. */
+export async function contagemReprovacoesConsecutivas(
+  aiDevDir: string,
+  phaseId: string,
+  currentRunId: string,
+): Promise<number> {
+  const records = (await phaseRunRecords(aiDevDir, phaseId))
+    .filter((r) => r.runId !== currentRunId)
+    .sort((a, b) => a.runId.localeCompare(b.runId));
+  let consecutivas = 0;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const status = records[i].status;
+    if (status === 'CORRECTION_PENDING' || status === 'AUDIT_FAILED') {
+      consecutivas++;
+    } else {
+      break;
+    }
+  }
+  return consecutivas;
+}
+
+/** Nº de rodadas da fase que já usaram revisor escalado (reviewerModel != padrão). */
+export async function contagemEscalacoes(aiDevDir: string, phaseId: string): Promise<number> {
+  const records = await phaseRunRecords(aiDevDir, phaseId);
+  return records.filter((r) => r.reviewerModel !== undefined && r.reviewerModel !== null).length;
 }
 
 export function formatEvidence(results: ExecResult[]): string {
@@ -463,6 +525,23 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     //    acelera o ciclo — o revisor é alimentado por git diff + testes + build,
     //    não pela resposta do implementador.
     const prompts = extractPhasePrompts(readText(promptsFile), phaseId);
+    // Regras de baliza (orquestrador-regras.md) — LIDAS A CADA ACIONAMENTO e
+    // injetadas no prompt do implementador E do revisor (lista simples, curta).
+    const guardrails = await lerRegrasDeBaliza(deps.aiDevDir);
+    artifact('00-guardrails.txt', guardrails);
+
+    // DICAS DE SKILLS: busca automática por relevância ao objetivo+escopo da
+    // fase (pasta skills/ do orquestrador). Lista simples, com limite de bytes
+    // — ajuda o implementador a resolver problemas com as boas práticas já
+    // catalogadas (debug, clean code, frontend, testes, auditoria, etc.).
+    const dicasSkills = formatarDicasSkills(
+      await buscarSkillsRelevantes(`${phase.description} ${prompts.implementer}`, {
+        maxSkills: 2,
+        maxBytesPorSkill: 2500,
+      }),
+    );
+    artifact('00-skills.txt', dicasSkills || '(nenhuma skill relevante encontrada)');
+
     const envelope = buildImplementerEnvelope({
       phaseId,
       phaseName: prompts.name,
@@ -471,6 +550,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       scopePrompt: prompts.implementer,
       outOfScope: OUT_OF_SCOPE,
       completionCriteria: COMPLETION_CRITERIA,
+      guardrails: [guardrails, dicasSkills].filter(Boolean).join('\n\n'),
     });
     artifact('00-prompt-implementer.txt', envelope);
     const alreadyImplemented = mode === 'allow-dirty' && prep.preRunFiles.length > 0;
@@ -541,6 +621,39 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     const buildText = formatEvidence([buildApi, buildWeb]);
     artifact('05-tests.txt', testsText);
     artifact('06-build.txt', buildText);
+
+    // B2 — doom-loop de comando (baliza anti-loop): se a suíte de testes
+    // produziu a MESMA saída (hash) N rodadas consecutivas, o retrabalho não
+    // está progredindo — para em vez de re-rodar a mesma suíte falhando do
+    // mesmo jeito (ex.: 3× o mesmo teste/erro).
+    if (!tests.ok && previousState === 'CORRECTION_PENDING' || !tests.ok && previousState === 'AUDIT_FAILED') {
+      const maxRepetido = deps.config.limits.maxComandoRepetido ?? 3;
+      const hashAtual = hashSaidaComando(testsText);
+      const hashesAnteriores = await hashesSuitesAnteriores(deps.aiDevDir, phaseId, runId);
+      const sequencia = hashesAnteriores.length > 0 && hashesAnteriores[hashesAnteriores.length - 1] === hashAtual
+        ? hashesAnteriores.length + 1
+        : 1;
+      if (sequencia >= maxRepetido) {
+        const motivo = `[guardrail] Doom-loop de comando: a suíte de testes falhou com a MESMA saída ${sequencia} rodadas consecutivas (hash ${hashAtual.slice(0, 12)}…). Re-rodar não vai corrigir — circuito aberto para decisão humana.`;
+        deps.log.warn(motivo);
+        artifact('17-doom-loop.txt', motivo);
+        const loopRow = buildHistoryRow({
+          date: now().toISOString().slice(0, 10),
+          phase: phaseId,
+          implementer: phase.implementer || 'DeepSeek',
+          reviewer: 'GUARDRAIL (doom-loop)',
+          verdict: 'REJECT',
+          advanceAllowed: false,
+          note: `Suíte de testes com mesma saída ${sequencia} rodadas seguidas. Decisão humana requerida.`,
+        });
+        writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_FAILED' }, [loopRow]));
+        runSummary.status = 'AUDIT_FAILED';
+        runSummary.finishedAt = now().toISOString();
+        runSummary.error = motivo;
+        artifact('run.json', JSON.stringify(runSummary, null, 2));
+        throw new Error(motivo);
+      }
+    }
 
     const gate: EvidenceGate = {
       testsPass: tests.ok && webTests.ok,
@@ -647,6 +760,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       correctionsApplied,
       openFindings: openFindingsText,
       isCorrection,
+      guardrails: [guardrails, dicasSkills].filter(Boolean).join('\n\n'),
     });
     artifact('08-review-context.txt', context);
     artifact('12-audit-history.txt', auditHistory || '(sem histórico anterior)');
@@ -671,8 +785,44 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       deps.log.info(`Auditoria reutilizada do cache (rodada ${cached.runId}) — sem chamada ao revisor.`);
       artifact('15-audit-cache.txt', `Contexto idêntico ao run ${cached.runId}; veredito reutilizado.`);
     } else {
-      deps.log.info(`Chamando revisor (${runSummary.reviewerModel})...`);
-      const res = await validateAuditWithRetry(deps.llm, context);
+      // Baliza anti-loop de REVISÃO: se o revisor reprovou N rodadas
+      // consecutivas (CORRECTION_PENDING/AUDIT_FAILED), escala para
+      // `reviewer.escalateModel` (se configurado) até `maxEscalations`;
+      // após o teto, exige decisão humana em vez de gastar mais tokens.
+      const reprovacoes = await contagemReprovacoesConsecutivas(deps.aiDevDir, phaseId, runId);
+      const escalada = deveEscalarRevisor(
+        deps.config,
+        reprovacoes,
+        await contagemEscalacoes(deps.aiDevDir, phaseId),
+      );
+      let modeloRevisor = deps.config.reviewer.model;
+      if (escalada.exigirHumano) {
+        const motivo = escalada.motivo ?? 'Baliza anti-loop do revisor disparada.';
+        deps.log.warn(`[guardrail] ${motivo}`);
+        artifact('17-reviewer-loop.txt', motivo);
+        const loopRow = buildHistoryRow({
+          date: now().toISOString().slice(0, 10),
+          phase: phaseId,
+          implementer: phase.implementer || 'DeepSeek',
+          reviewer: 'GUARDRAIL (escalada do revisor)',
+          verdict: 'REJECT',
+          advanceAllowed: false,
+          note: motivo,
+        });
+        writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_FAILED' }, [loopRow]));
+        runSummary.status = 'AUDIT_FAILED';
+        runSummary.finishedAt = now().toISOString();
+        runSummary.error = motivo;
+        artifact('run.json', JSON.stringify(runSummary, null, 2));
+        throw new Error(motivo);
+      }
+      if (escalada.escalar && deps.config.reviewer.escalateModel) {
+        modeloRevisor = deps.config.reviewer.escalateModel;
+        deps.log.warn(`[guardrail] ${escalada.motivo} → revisor escalado para ${modeloRevisor}`);
+      }
+      runSummary.reviewerModel = modeloRevisor;
+      deps.log.info(`Chamando revisor (${modeloRevisor})...`);
+      const res = await validateAuditWithRetry(deps.llm, context, { model: modeloRevisor });
       audit = res.audit;
       rawResponses = res.rawResponses;
       corrected = res.corrected;
@@ -720,13 +870,47 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     }, null, 2));
 
     // 12) Gate de aprovação já foi validado antes de chamar o revisor.
-    // LOOPGAIN: se a rodada de correção NÃO reduziu os achados graves em
-    // relação à anterior, o loop não está convergindo — abre o circuito
-    // (BLOCKED) e exige decisão humana em vez de gastar mais tokens.
+    // BALIZAS ANTI-LOOP (guardrails.ts — determinísticas, abrem o circuito):
+    //   B1. Orçamento de custo por fase (maxUsdPorFase): soma o custo de TODAS
+    //       as rodadas; ultrapassou → para (custo crescente é o sinal mais forte
+    //       de estagnação).
+    //   B3. Loopgain v2 (convergência por conteúdo + custo): achados comparados
+    //       por requirement NORMALIZADO (reescrita de texto ≠ progresso) e sinal
+    //       de custo crescente sem resolução.
     if (previousState === 'CORRECTION_PENDING' || previousState === 'AUDIT_FAILED') {
-      const loop = await convergenciaFalhou(deps.aiDevDir, phaseId, runId, audit);
+      const custoAtual = runSummary.costEstimateUsd ?? 0;
+      const rodadasCusto = await custoAcumuladoDaFase(deps.aiDevDir, phaseId, runId);
+
+      // B1 — orçamento.
+      const orcamento = checarOrcamentoFase(deps.config, rodadasCusto, custoAtual);
+      if (!orcamento.ok) {
+        const motivo = `[guardrail] ${orcamento.motivo}`;
+        deps.log.warn(motivo);
+        artifact('17-loopgain-budget.txt', motivo);
+        const loopRow = buildHistoryRow({
+          date: now().toISOString().slice(0, 10),
+          phase: phaseId,
+          implementer: phase.implementer || 'DeepSeek',
+          reviewer: 'GUARDRAIL (orçamento)',
+          verdict: 'REJECT',
+          advanceAllowed: false,
+          note: `Orçamento da fase ultrapassado (US$ ${orcamento.acumuladoUsd.toFixed(4)} > ${orcamento.limiteUsd}). Decisão humana requerida.`,
+        });
+        writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_FAILED' }, [loopRow]));
+        runSummary.status = 'AUDIT_FAILED';
+        runSummary.finishedAt = now().toISOString();
+        runSummary.error = motivo;
+        artifact('run.json', JSON.stringify(runSummary, null, 2));
+        throw new Error(motivo);
+      }
+
+      // B3 — convergência v2 (chave normalizada + custo crescente).
+      const loop = await convergenciaFalhouV2(deps.aiDevDir, phaseId, runId, audit, custoAtual);
       if (loop) {
-        const motivo = `Rodada de correção sem convergência: nenhum dos achados graves anteriores foi resolvido (${loop.resolvidos} resolvido(s), ${loop.novos} novo(s), ${loop.gravesAtual} grave(s) atuais). O loop não está progredindo — circuito aberto para decisão humana (rodada anterior: ${loop.anterior}).`;
+        const sinalCusto = loop.custoCrescenteSemResolucao
+          ? ` Custo crescente sem resolução (US$ ${loop.custoAnteriorUsd.toFixed(4)} → US$ ${loop.custoAtualUsd.toFixed(4)}).`
+          : '';
+        const motivo = `Rodada de correção sem convergência: nenhum dos achados graves anteriores foi resolvido (${loop.resolvidos} resolvido(s), ${loop.novos} novo(s), ${loop.gravesAtual} grave(s) atuais).${sinalCusto} O loop não está progredindo — circuito aberto para decisão humana (rodada anterior: ${loop.anterior}).`;
         deps.log.warn(`[loopgain] ${motivo}`);
         artifact('16-loopgain.txt', motivo);
         const loopRow = buildHistoryRow({
@@ -736,7 +920,7 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
           reviewer: 'LOOPGAIN (determinístico)',
           verdict: 'REJECT',
           advanceAllowed: false,
-          note: 'Sem convergência entre rodadas (achados graves não reduziram). Decisão humana requerida.',
+          note: 'Sem convergência entre rodadas (achados graves não reduziram / custo crescente). Decisão humana requerida.',
         });
         writeTextAtomic(roadmapFile, renderRoadmap(md, { [phaseId]: 'AUDIT_FAILED' }, [loopRow]));
         runSummary.status = 'AUDIT_FAILED';

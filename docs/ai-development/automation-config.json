@@ -13,16 +13,20 @@
   "reviewer": {
     "provider": "openai",
     "model": "gpt-5.6-luna",
-    "maxContextChars": 450000
+    "maxContextChars": 450000,
+    "escalateAfterAttempts": 2,
+    "maxEscalations": 1
   },
   "limits": {
-    "maxCorrectionAttempts": 20,
+    "maxCorrectionAttempts": 4,
     "maxRequirementChars": 20000,
     "requireTests": true,
     "requireBuild": true,
     "requireDiff": true,
     "blockOnHigh": true,
-    "blockOnBlocker": true
+    "blockOnBlocker": true,
+    "maxUsdPorFase": 0.4,
+    "maxComandoRepetido": 3
   },
   "preflight": {
     "mode": "collect-all"

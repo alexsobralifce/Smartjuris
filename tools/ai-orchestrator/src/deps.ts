@@ -44,7 +44,7 @@ export function createRealDeps(opts: {
         completionTokensField: 'max_tokens', // DeepSeek
       });
     },
-    async reviewer(context: string, correctionHint?: string) {
+    async reviewer(context: string, correctionHint?: string, modelOverride?: string) {
       const eff = loadEnv(opts.env, opts.config);
       const user = correctionHint
         ? `${context}\n\nA resposta anterior não seguiu o contrato. Erro: ${correctionHint}\nResponda novamente somente com o JSON válido do contrato.`
@@ -52,7 +52,7 @@ export function createRealDeps(opts: {
       return chatCompletion({
         baseUrl: eff.openaiBaseUrl,
         apiKey: eff.openaiApiKey,
-        model: eff.openaiReviewModel,
+        model: modelOverride ?? eff.openaiReviewModel,
         system: [
           'Você é um revisor técnico independente de uma implementação de software.',
           'Analise o resultado enviado e responda SOMENTE com um objeto JSON válido,',

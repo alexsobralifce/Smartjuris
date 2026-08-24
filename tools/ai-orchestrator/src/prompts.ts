@@ -70,6 +70,8 @@ export interface ImplementerEnvelopeInput {
   scopePrompt: string;
   outOfScope: string;
   completionCriteria: string;
+  /** Regras de baliza (orquestrador-regras.md) — lidas a cada acionamento. */
+  guardrails?: string;
 }
 
 /** Envelope de implementação (template de smartjuris-prompt-templates.md). */
@@ -98,6 +100,9 @@ export function buildImplementerEnvelope(input: ImplementerEnvelopeInput): strin
     '',
     'Padrões de teste exigidos na pré-auditoria (incorpore JÁ na primeira rodada):',
     REVIEWER_TEST_PATTERNS,
+    '',
+    'REGRA DE BALIZA (valem para esta rodada):',
+    input.guardrails ?? '(nenhuma regra adicional)',
     '',
     'Implemente somente esta fase. Ao concluir, entregue diff, testes, build, riscos e limitações. Pare para revisão.',
   ].join('\n');
@@ -138,6 +143,8 @@ export interface ReviewContextInput {
   openFindings?: string;
   /** Se true, é uma rodada de correção: auditoria focada no delta, sem novas exigências. */
   isCorrection?: boolean;
+  /** Regras de baliza (orquestrador-regras.md) — lidas a cada acionamento. */
+  guardrails?: string;
 }
 
 /** Formato de passagem para o Terra (smartjuris-phase-prompts.md). */
@@ -212,6 +219,11 @@ export function buildReviewContext(input: ReviewContextInput): string {
     '- Liste apenas achados NOVOS e não duplicados em rodadas anteriores.',
     '- Retorne somente o contrato JSON de revisão.',
   );
+
+  // Regras de baliza (orquestrador-regras.md) — lidas a cada acionamento.
+  if (input.guardrails?.trim()) {
+    parts.push('', 'REGRA DE BALIZA (valem para esta rodada):', input.guardrails.trim());
+  }
 
   return parts.join('\n');
 }

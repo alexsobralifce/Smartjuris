@@ -21,7 +21,8 @@ export interface LlmCompletion {
 export interface LlmClient {
   /** `complex=true` usa o modelo pro (escada flash→pro em rodadas de correção avançadas). */
   implementer(prompt: string, opts?: { complex?: boolean }): Promise<LlmCompletion>;
-  reviewer(context: string, correctionHint?: string): Promise<LlmCompletion>;
+  /** `modelOverride` permite escalar o revisor (baliza anti-loop). */
+  reviewer(context: string, correctionHint?: string, modelOverride?: string): Promise<LlmCompletion>;
   /** Estruturador de requisitos (DeepSeek Flash) — SYSTEM de estruturação estrito. */
   structurer(prompt: string): Promise<LlmCompletion>;
 }
@@ -286,15 +287,16 @@ function sumUsage(items: TokenUsage[]): TokenUsage {
 export function validateAuditWithRetry(
   llm: LlmClient,
   context: string,
+  opts?: { model?: string },
 ): Promise<AuditWithRetryResult> {
   return (async () => {
-    const raw1 = await llm.reviewer(context);
+    const raw1 = await llm.reviewer(context, undefined, opts?.model);
     try {
       const audit = parseAudit(raw1.content);
       return { audit, rawResponses: [raw1.content], corrected: false, usage: raw1.usage };
     } catch (err) {
       const hint = (err as Error).message;
-      const raw2 = await llm.reviewer(context, hint);
+      const raw2 = await llm.reviewer(context, hint, opts?.model);
       const audit = parseAudit(raw2.content); // lança AuditParseError se persistir
       return { audit, rawResponses: [raw1.content, raw2.content], corrected: true, usage: sumUsage([raw1.usage, raw2.usage]) };
     }

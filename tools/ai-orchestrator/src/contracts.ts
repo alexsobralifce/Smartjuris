@@ -63,6 +63,15 @@ export const AutomationConfig = z.object({
     /** Limite de caracteres do contexto enviado ao revisor (diff + histórico).
      *  Evita estourar o TPM do modelo (ex.: gpt-5.6-luna = 200k tokens/min). */
     maxContextChars: z.number().int().positive().default(450_000).optional(),
+    /** A partir de quantas reprovações o revisor é ESCALADO (subir de modelo).
+     *  Baliza anti-loop: auditoria em loop não pode gastar N rodadas no mesmo
+     *  revisor sem progresso. Ex.: 2 → na 2ª reprovação, exige decisão humana
+     *  (ou revisor mais forte se configurado). */
+    escalateAfterAttempts: z.number().int().nonnegative().default(2).optional(),
+    /** Teto de escalações do revisor por fase (após ele, exige humano). */
+    maxEscalations: z.number().int().nonnegative().default(1).optional(),
+    /** Modelo usado quando o revisor é escalado (ex.: auditor mais forte). */
+    escalateModel: z.string().optional(),
   }),
   limits: z.object({
     maxCorrectionAttempts: z.number().int(),
@@ -73,6 +82,13 @@ export const AutomationConfig = z.object({
     blockOnBlocker: z.boolean(),
     /** Limite de caracteres do texto de entrada de requisitos (linguagem natural). */
     maxRequirementChars: z.number().int().positive().default(20000).optional(),
+    /** Orçamento de custo (USD) por fase — baliza anti-loop: soma o custo de
+     *  TODAS as rodadas da fase (implementador + revisor); ao ultrapassar,
+     *  abre o circuito e exige decisão humana. */
+    maxUsdPorFase: z.number().nonnegative().default(0.4).optional(),
+    /** Doom-loop de comando: mesma saída de comando (hash) N vezes seguidas →
+     *  stop (evita re-rodar suíte que falha sempre do mesmo jeito). */
+    maxComandoRepetido: z.number().int().positive().default(3).optional(),
   }),
   preflight: z.object({
     mode: PreflightMode,

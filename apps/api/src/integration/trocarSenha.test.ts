@@ -30,6 +30,7 @@ const ESCR_ID = randomUUID();
 const USER_ID = randomUUID();
 const SENHA_TEMP = 'Temp#2026';
 const SENHA_NOVA = 'NovaSenha#2026';
+const SENHA_OUTRA = 'OutraSenha#2026';
 const EMAIL = `troca.${randomUUID().slice(0, 8)}@teste.local`;
 
 const app = express();
@@ -90,22 +91,15 @@ async function trocar(cookie: string, senhaAtual: string, novaSenha: string) {
 }
 
 describe('trocar-senha após reset (regressão)', () => {
-  test('senha atual INCORRETA → 400 + code (não 401 — sessão NÃO cai)', async () => {
+  test('troca FORÇADA (precisaTrocarSenha=true): SEM senha atual → 200', async () => {
     const cookie = await login(SENHA_TEMP);
-    const res = await trocar(cookie, 'senha-errada', SENHA_NOVA);
-    const body = await res.json().catch(() => ({}));
-    assert.equal(res.status, 400, `esperava 400, veio ${res.status}: ${JSON.stringify(body)}`);
-    assert.equal(body.code, 'SENHA_ATUAL_INCORRETA');
-  });
-
-  test('senha atual correta → 200, precisaTrocarSenha=false e novo login funciona', async () => {
-    const cookie = await login(SENHA_TEMP);
-    const res = await trocar(cookie, SENHA_TEMP, SENHA_NOVA);
+    const res = await trocar(cookie, '', SENHA_NOVA);
     const body = await res.json().catch(() => ({}));
     assert.equal(res.status, 200, JSON.stringify(body));
     assert.equal(body.user?.precisaTrocarSenha, false);
+  });
 
-    // Novo login com a nova senha funciona; a temporária não funciona mais.
+  test('pós-troca: novo login com a nova senha; temporária não funciona mais', async () => {
     const novoCookie = await login(SENHA_NOVA);
     assert.ok(novoCookie.length > 0, 'login com a nova senha funciona');
     const tempRes = await fetch(`${baseUrl}/api/auth/login`, {
@@ -114,5 +108,27 @@ describe('trocar-senha após reset (regressão)', () => {
       body: JSON.stringify({ email: EMAIL, password: SENHA_TEMP }),
     });
     assert.equal(tempRes.status, 401, 'senha temporária não funciona mais');
+  });
+
+  test('troca VOLUNTÁRIA (precisaTrocarSenha=false): senha atual INCORRETA → 400 + code, sessão preservada', async () => {
+    const cookie = await login(SENHA_NOVA);
+    const res = await trocar(cookie, 'senha-errada', SENHA_OUTRA);
+    const body = await res.json().catch(() => ({}));
+    assert.equal(res.status, 400, `esperava 400, veio ${res.status}: ${JSON.stringify(body)}`);
+    assert.equal(body.code, 'SENHA_ATUAL_INCORRETA');
+    // Sessão continua válida: /me responde 200 (não foi derrubada).
+    const me = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { Cookie: `smartjuris_token=${cookie}` },
+    });
+    assert.equal(me.status, 200, 'sessão preservada após 400 de senha atual');
+  });
+
+  test('troca VOLUNTÁRIA: senha atual correta → 200 e nova senha vale', async () => {
+    const cookie = await login(SENHA_NOVA);
+    const res = await trocar(cookie, SENHA_NOVA, SENHA_OUTRA);
+    const body = await res.json().catch(() => ({}));
+    assert.equal(res.status, 200, JSON.stringify(body));
+    const novoCookie = await login(SENHA_OUTRA);
+    assert.ok(novoCookie.length > 0, 'login com a senha trocada funciona');
   });
 });

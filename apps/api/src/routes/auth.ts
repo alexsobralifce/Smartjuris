@@ -838,9 +838,12 @@ router.post('/trocar-senha', authMiddleware, async (req: AuthenticatedRequest, r
   if (typeof novaSenha !== 'string' || novaSenha.length < 8) {
     return res.status(400).json({ error: 'A nova senha deve ter no mínimo 8 caracteres.' });
   }
-  // Decisão segura: a senha atual é SEMPRE exigida (inclusive quando precisaTrocarSenha=true,
-  // pois o usuário deve saber a senha temporária informada pelo admin).
-  if (typeof senhaAtual !== 'string' || !senhaAtual) {
+  // Troca FORÇADA (pós-reset do root): o usuário logou com a senha temporária
+  // informada pelo admin — a posse da conta já foi provada pelo login. Exigir
+  // a "senha atual" de novo travaria o fluxo (o usuário não a conhece). A
+  // senha atual só é exigida na troca VOLUNTÁRIA (segurança extra).
+  const trocaForcada = req.user?.precisaTrocarSenha === true;
+  if (!trocaForcada && (typeof senhaAtual !== 'string' || !senhaAtual)) {
     return res.status(400).json({ error: 'A senha atual é obrigatória.' });
   }
   if (!req.user?.id) {
@@ -853,12 +856,16 @@ router.post('/trocar-senha', authMiddleware, async (req: AuthenticatedRequest, r
       return res.status(401).json({ error: 'Usuário não encontrado.' });
     }
 
-    const isValid = await bcrypt.compare(senhaAtual, user.senha);
-    if (!isValid) {
-      // 400 (não 401): senha atual incorreta é erro de VALIDAÇÃO do payload,
-      // não de autenticação da sessão. O frontend trata 401 como "sessão
-      // expirada" (derruba a sessão); 400 mantém a sessão e mostra o erro.
-      return res.status(400).json({ error: 'Senha atual incorreta.', code: 'SENHA_ATUAL_INCORRETA' });
+    if (!trocaForcada) {
+      // O guard acima já garantiu: !trocaForcada ⇒ senhaAtual é string não vazia.
+      const atual = senhaAtual as string;
+      const isValid = await bcrypt.compare(atual, user.senha);
+      if (!isValid) {
+        // 400 (não 401): senha atual incorreta é erro de VALIDAÇÃO do payload,
+        // não de autenticação da sessão. O frontend trata 401 como "sessão
+        // expirada" (derruba a sessão); 400 mantém a sessão e mostra o erro.
+        return res.status(400).json({ error: 'Senha atual incorreta.', code: 'SENHA_ATUAL_INCORRETA' });
+      }
     }
 
     const senhaHash = await bcrypt.hash(novaSenha, 12);

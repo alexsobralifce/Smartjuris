@@ -26,7 +26,9 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
 
   const validate = () => {
     const next: typeof errors = {}
-    if (!senhaAtual.trim()) next.senhaAtual = 'Informe sua senha atual.'
+    // Troca FORÇADA (pós-reset do root): o usuário não sabe a senha atual —
+    // o login com a temporária já provou a posse da conta; campo dispensado.
+    if (!user?.precisaTrocarSenha && !senhaAtual.trim()) next.senhaAtual = 'Informe sua senha atual.'
     if (novaSenha.length < 8) next.novaSenha = 'A nova senha deve ter no mínimo 8 caracteres.'
     if (!confirmar) next.confirmar = 'Confirme a nova senha.'
     else if (confirmar !== novaSenha) next.confirmar = 'As senhas não coincidem.'
@@ -43,7 +45,11 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
     try {
       // Fase 7 implementará o endpoint — shape esperado:
       // POST /api/auth/trocar-senha { senhaAtual, novaSenha } → { user }
-      const res = await api.auth.trocarSenha(senhaAtual, novaSenha)
+      // Na troca forçada (precisaTrocarSenha) a senha atual é dispensada.
+      const res = await api.auth.trocarSenha(
+        user?.precisaTrocarSenha ? '' : senhaAtual,
+        novaSenha,
+      )
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         const code = data?.code
@@ -141,20 +147,22 @@ export default function TrocarSenha({ user, onSuccess }: TrocarSenhaProps) {
           </div>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
-            <Field label="Senha atual" error={errors.senhaAtual}>
-              <input
-                type="password"
-                value={senhaAtual}
-                onChange={e => {
-                  setSenhaAtual(e.target.value)
-                  if (errors.senhaAtual) setErrors(p => ({ ...p, senhaAtual: undefined }))
-                }}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                autoFocus
-                style={inputStyle(!!errors.senhaAtual)}
-              />
-            </Field>
+            {!user?.precisaTrocarSenha && (
+              <Field label="Senha atual" error={errors.senhaAtual}>
+                <input
+                  type="password"
+                  value={senhaAtual}
+                  onChange={e => {
+                    setSenhaAtual(e.target.value)
+                    if (errors.senhaAtual) setErrors(p => ({ ...p, senhaAtual: undefined }))
+                  }}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  autoFocus
+                  style={inputStyle(!!errors.senhaAtual)}
+                />
+              </Field>
+            )}
 
             <Field label="Nova senha" error={errors.novaSenha}>
               <input

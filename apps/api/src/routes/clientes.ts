@@ -7,6 +7,7 @@ import { canMutateTenant } from '../middlewares/ownership.js';
 import { tenantScope, tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { encryptField, decryptField } from '../services/crypto.js';
+import { verificarTravaClientes, LIMITE_CLIENTES_DEMO } from '../services/travaAssinatura.js';
 import { parseBody, formatZodError, clienteSchema, clientePatchSchema, uuidSchema } from '../validation/schemas.js';
 
 const router = Router();
@@ -30,6 +31,16 @@ router.post('/', async (req, res) => {
     const escritorioId = tenantScopeEscritorioId(req);
     if (!escritorioId) {
       return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+    // Trava do plano demo: self-service não assinante cadastra no máximo
+    // N clientes (default 10). Assinantes e escritórios não-demo: liberados.
+    const trava = await verificarTravaClientes(escritorioId);
+    if (!trava.liberado) {
+      return res.status(403).json({
+        error: `Seu plano demo permite cadastrar até ${LIMITE_CLIENTES_DEMO()} clientes. Assine para remover o limite.`,
+        code: 'TRAVA_PLANO_DEMO',
+        limite: LIMITE_CLIENTES_DEMO(),
+      });
     }
     const parsed = parseBody(clienteSchema, req.body);
     if (!parsed.success) {

@@ -9,6 +9,7 @@ import { parseBody, formatZodError, pecasSchema, pecasPatchSchema, uuidSchema } 
 import { montarPecaDocumento } from '../services/letterhead.js';
 import { renderPdf, renderDocx } from '../services/documentExport.js';
 import { gerarPecaComSSE } from '../services/geracaoSSE.js';
+import { verificarTravaPecas, LIMITE_PECAS_DEMO } from '../services/travaAssinatura.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -29,6 +30,19 @@ router.post('/gerar-sse', async (req, res) => {
   const parsed = gerarSSESchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return res.status(400).json({ error: 'Dados inválidos', detalhes: parsed.error.flatten().fieldErrors });
+  }
+  // Trava do plano demo: self-service não assinante gera no máximo N peças
+  // (default 1). Assinantes e escritórios não-demo: liberados.
+  const escritorioId = tenantScopeEscritorioId(req);
+  if (escritorioId) {
+    const trava = await verificarTravaPecas(escritorioId);
+    if (!trava.liberado) {
+      return res.status(403).json({
+        error: `Seu plano demo permite gerar até ${LIMITE_PECAS_DEMO()} peça(s). Assine para remover o limite.`,
+        code: 'TRAVA_PLANO_DEMO',
+        limite: LIMITE_PECAS_DEMO(),
+      });
+    }
   }
   await gerarPecaComSSE(req as any, res, parsed.data);
 });
@@ -52,6 +66,16 @@ router.post('/', async (req, res) => {
     const escritorioId = tenantScopeEscritorioId(req);
     if (!escritorioId) {
       return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+    // Trava do plano demo (mesma regra da geração SSE): salvar manualmente
+    // também consome a cota de peças do self-service não assinante.
+    const trava = await verificarTravaPecas(escritorioId);
+    if (!trava.liberado) {
+      return res.status(403).json({
+        error: `Seu plano demo permite gerar até ${LIMITE_PECAS_DEMO()} peça(s). Assine para remover o limite.`,
+        code: 'TRAVA_PLANO_DEMO',
+        limite: LIMITE_PECAS_DEMO(),
+      });
     }
     const parsed = parseBody(pecasSchema, req.body);
     if (!parsed.success) {

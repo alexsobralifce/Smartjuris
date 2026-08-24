@@ -782,7 +782,12 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 **Critérios de aceite:**
 
 - [x] `pnpm build` do backend e frontend passam sem erros
-- [x] `pnpm test` 377 testes passando (9 novos em billing.test.ts — planos, lista, x-signature HMAC)
+- [x] `pnpm test` 389 testes passando (9 unit billing + 7 integração webhook + 5 migration em banco real)
+- [x] Migration 0027/0028 validadas em banco real ISOLADO via runner oficial (migrationBilling.test.ts: colunas + CHECK constraints + idempotência)
+- [x] CHECK constraints de `assinatura_status` e `assinatura_plano` (0028) rejeitam valores fora do catálogo
+- [x] checkoutSchema restringe plano a enum/allowlist server-side (preço resolvido só no backend)
+- [x] Webhook testado em integração: assinatura HMAC válida/inválida, replay idempotente, evento desconhecido, falha do MP, ativação/desativação (billingWebhook.test.ts)
+- [x] Checkout idempotente: assinatura ATIVA → 409; pendente do mesmo plano → reutiliza; cancelar idempotente
 - [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
 - [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
 - [x] Cancelamento real executado no MP (`PUT /preapproval/{id}` → status cancelled)
@@ -871,6 +876,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | reauditoria: gate aprovado (ganhos TPM confirmados) |
+| 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

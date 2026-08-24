@@ -72,6 +72,17 @@
   .fase-card ul { margin: 6px 0 0 18px; font-size: 13px; color: var(--fg); }
   .fase-card .sub { font-size: 12px; }
   footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
+  /* Abas (mobile-first: empilham; desktop: linha) */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 12px; }
+  .tab-btn {
+    flex: 1 1 auto; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--muted); font-weight: 600; cursor: pointer;
+    min-height: 44px; font-size: 14px;
+  }
+  .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--fg); }
+  .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (min-width: 641px) { .tab-btn { flex: 0 1 auto; } }
   /* Lista de requisitos — "o que cada um fez" */
   .req-lista { display: grid; gap: 10px; }
   .req-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
@@ -94,41 +105,56 @@
 
   <div class="cards" id="cards"></div>
 
-  <h2 class="section-title">Requisitos — o que cada um fez</h2>
-  <p class="sub">Descrição simples de cada requisito aplicado ao roadmap, com a situação atual (concluído / planejado / em análise).</p>
-  <div class="req-lista" id="reqLista"><div class="empty">carregando…</div></div>
+  <!-- Abas (mobile-first): requisitos desenvolvidos | fases | novos requisitos -->
+  <nav class="tabs" role="tablist" aria-label="Seções do painel">
+    <button class="tab-btn active" role="tab" id="tab-req-btn" aria-selected="true" aria-controls="panel-req" data-tab="req">Requisitos desenvolvidos</button>
+    <button class="tab-btn" role="tab" id="tab-fases-btn" aria-selected="false" aria-controls="panel-fases" data-tab="fases">Fases</button>
+    <button class="tab-btn" role="tab" id="tab-novos-btn" aria-selected="false" aria-controls="panel-novos" data-tab="novos">Novos requisitos</button>
+  </nav>
 
-  <h2 class="section-title">Fases</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Fase</th>
-        <th>Estado</th>
-        <th class="num">Rodadas</th>
-        <th>Último veredito</th>
-        <th>Testes / Build / Diff</th>
-        <th class="num">Custo (US$)</th>
-        <th class="num">Tokens</th>
-        <th class="num">Achados abertos</th>
-      </tr>
-    </thead>
-    <tbody id="phaseRows"></tbody>
-  </table>
+  <!-- Aba 1: Requisitos desenvolvidos -->
+  <section role="tabpanel" id="panel-req" aria-labelledby="tab-req-btn">
+    <p class="sub">Descrição simples de cada requisito aplicado ao roadmap, com a situação atual (concluído / planejado / em análise).</p>
+    <div class="req-lista" id="reqLista"><div class="empty">carregando…</div></div>
+  </section>
 
-  <h2 class="section-title">Últimos runs</h2>
-  <div class="last-runs" id="lastRuns"></div>
+  <!-- Aba 2: Fases -->
+  <section role="tabpanel" id="panel-fases" aria-labelledby="tab-fases-btn" hidden>
+    <h2 class="section-title">Fases</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Fase</th>
+          <th>Estado</th>
+          <th class="num">Rodadas</th>
+          <th>Último veredito</th>
+          <th>Testes / Build / Diff</th>
+          <th class="num">Custo Dev (US$)</th>
+          <th class="num">Custo Audit (US$)</th>
+          <th class="num">Tokens</th>
+          <th class="num">Achados abertos</th>
+        </tr>
+      </thead>
+      <tbody id="phaseRows"></tbody>
+    </table>
 
-  <h2 class="section-title">Novos requisitos</h2>
-  <p class="sub">Cole os requisitos em linguagem natural. O orquestrador estrutura em fases enumeradas (DeepSeek Flash) para você revisar e aplicar no roadmap. Limite: <span id="reqMax"></span> caracteres.</p>
-  <textarea id="reqTexto" rows="6" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
-  <div class="sub" id="reqCounter" style="text-align:right; margin-top:-6px;"></div>
-  <div class="req-actions">
-    <button id="btnEstruturar">1 · Estruturar em fases</button>
-    <button id="btnAplicar" class="primary" disabled>2 · Aplicar no roadmap</button>
-    <button id="btnZerar" style="margin-left:auto; color: var(--bad);">Zerar fases de requisitos</button>
-    <span id="reqStatus" class="sub"></span>
-  </div>
-  <div id="reqResultado"></div>
+    <h2 class="section-title">Últimos runs</h2>
+    <div class="last-runs" id="lastRuns"></div>
+  </section>
+
+  <!-- Aba 3: Novos requisitos -->
+  <section role="tabpanel" id="panel-novos" aria-labelledby="tab-novos-btn" hidden>
+    <p class="sub">Cole os requisitos em linguagem natural. O orquestrador estrutura em fases enumeradas (DeepSeek Flash) para você revisar e aplicar no roadmap. Limite: <span id="reqMax"></span> caracteres.</p>
+    <textarea id="reqTexto" rows="6" placeholder="Ex.: Criar um módulo de faturamento por escritório com relatório mensal em PDF, bloqueando o uso quando o plano estiver vencido."></textarea>
+    <div class="sub" id="reqCounter" style="text-align:right; margin-top:-6px;"></div>
+    <div class="req-actions">
+      <button id="btnEstruturar">1 · Estruturar em fases</button>
+      <button id="btnAplicar" class="primary" disabled>2 · Aplicar no roadmap</button>
+      <button id="btnZerar" style="margin-left:auto; color: var(--bad);">Zerar fases de requisitos</button>
+      <span id="reqStatus" class="sub"></span>
+    </div>
+    <div id="reqResultado"></div>
+  </section>
 
   <footer>
     Auto-atualiza a cada 3s. Revisor: <span id="cfgReviewer"></span> · Teto de correções:
@@ -201,6 +227,8 @@ function render(s) {
   $('cards').innerHTML = `
     <div class="card"><div class="label">Custo total (US$)</div><div class="value">${usd(t.custoUsd)}</div></div>
     <div class="card"><div class="label">Tokens</div><div class="value">${k(t.tokens)}</div></div>
+    <div class="card" title="Tokens de desenvolvimento (implementador)"><div class="label">Custo Desenv. (US$)</div><div class="value">${usd(t.custoDevUsd)}</div><div class="sub">${k(t.tokensDev)} tok</div></div>
+    <div class="card" title="Tokens de auditoria (revisor)"><div class="label">Custo Auditoria (US$)</div><div class="value">${usd(t.custoAuditoriaUsd)}</div><div class="sub">${k(t.tokensAuditoria)} tok</div></div>
     <div class="card"><div class="label">Runs</div><div class="value">${t.runs}</div></div>
     <div class="card ${t.requisitosGerados > 0 ? '' : ''}"><div class="label">Fases de requisitos</div><div class="value">${t.requisitosGerados}</div></div>
     <div class="card warn"><div class="label">Analisando</div><div class="value">${t.fasesAnalisando}</div></div>
@@ -219,7 +247,8 @@ function render(s) {
       <td class="num">${f.rounds}</td>
       <td>${f.ultimoVeredito ? badge(f.ultimoVeredito) : '—'}</td>
       <td class="checks">${check(f.testesOk)} ${check(f.buildOk)} ${check(f.diffOk)}</td>
-      <td class="num">${usd(f.custoUsd)}</td>
+      <td class="num" title="Tokens de desenvolvimento: ${k(f.tokensDev)}">${usd(f.custoDev)}</td>
+      <td class="num" title="Tokens de auditoria: ${k(f.tokensAuditoria)}">${usd(f.custoAuditoria)}</td>
       <td class="num">${k(f.tokens)}</td>
       <td class="num">${f.ledgerAbertos || '—'}</td>
     </tr>
@@ -264,6 +293,35 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 3000);
+
+// --- Abas (mobile-first, acessível): requisitos desenvolvidos | fases | novos ---
+function initTabs() {
+  const botoes = document.querySelectorAll('.tab-btn');
+  const mostrar = (nome) => {
+    botoes.forEach((b) => {
+      const ativo = b.dataset.tab === nome;
+      b.classList.toggle('active', ativo);
+      b.setAttribute('aria-selected', ativo ? 'true' : 'false');
+      const painel = document.getElementById('panel-' + b.dataset.tab);
+      if (painel) painel.hidden = !ativo;
+    });
+    try { localStorage.setItem('dsh_aba', nome); } catch { /* privado */ }
+  };
+  botoes.forEach((b) => {
+    b.addEventListener('click', () => mostrar(b.dataset.tab));
+    // Acessibilidade: teclado (setas) — foco dentro do tablist.
+    b.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const idx = Array.from(botoes).indexOf(b);
+      const prox = (idx + (e.key === 'ArrowRight' ? 1 : -1) + botoes.length) % botoes.length;
+      botoes[prox].focus();
+      mostrar(botoes[prox].dataset.tab);
+    });
+  });
+  const salvo = (() => { try { return localStorage.getItem('dsh_aba'); } catch { return null; } })();
+  mostrar(salvo && ['req', 'fases', 'novos'].includes(salvo) ? salvo : 'req');
+}
+initTabs();
 
 // --- Entrada de requisitos (estruturação + aplicação) ---
 let fasesEstruturadas = null;

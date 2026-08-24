@@ -26,6 +26,11 @@ interface RunItem {
   custoUsd: number | null;
   promptTokens: number;
   completionTokens: number;
+  // Uso separado por papel (desenvolvimento x auditoria).
+  custoDev: number | null;
+  tokensDev: number;
+  custoAuditoria: number | null;
+  tokensAuditoria: number;
   testesOk: boolean | null;
   buildOk: boolean | null;
   diffOk: boolean | null;
@@ -41,6 +46,10 @@ interface PhaseRow {
   ultimoRevisor: string | null;
   custoUsd: number | null;
   tokens: number;
+  custoDev: number | null;
+  tokensDev: number;
+  custoAuditoria: number | null;
+  tokensAuditoria: number;
   testesOk: boolean | null;
   buildOk: boolean | null;
   diffOk: boolean | null;
@@ -72,6 +81,11 @@ export interface Snapshot {
     fasesAprovadas: number;
     fasesPendentes: number;
     revisorPoupado: number;
+    // Custos de tokens separados: desenvolvimento (implementador) x auditoria (revisor).
+    custoDevUsd: number;
+    tokensDev: number;
+    custoAuditoriaUsd: number;
+    tokensAuditoria: number;
     // Resumo das fases geradas por requisitos (requirements/<id>.json).
     requisitosGerados: number;
     fasesAnalisando: number;
@@ -117,11 +131,15 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
       reviewerModel?: string;
       costEstimateUsd?: number | null;
       tokenUsage?: { promptTokens?: number; completionTokens?: number };
+      implementerUsage?: { promptTokens?: number; completionTokens?: number; costUsd?: number | null };
+      reviewerUsage?: { promptTokens?: number; completionTokens?: number; costUsd?: number | null };
       fromCache?: boolean;
       skippedReviewer?: boolean;
     }>(safeJoin(dir, 'run.json'));
     const audit = readJsonLoose<{ verdict?: string }>(safeJoin(dir, '10-audit-result.json'));
     const evidence = readJsonLoose<{ testsPass?: boolean; buildsPass?: boolean; hasDiff?: boolean }>(safeJoin(dir, '11-evidence.json'));
+    const uDev = run?.implementerUsage;
+    const uRev = run?.reviewerUsage;
     runs.push({
       id: entry,
       ts: Date.parse(m[1]) || 0,
@@ -132,6 +150,10 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
       custoUsd: typeof run?.costEstimateUsd === 'number' ? run.costEstimateUsd : null,
       promptTokens: run?.tokenUsage?.promptTokens ?? 0,
       completionTokens: run?.tokenUsage?.completionTokens ?? 0,
+      custoDev: typeof uDev?.costUsd === 'number' ? uDev.costUsd : null,
+      tokensDev: (uDev?.promptTokens ?? 0) + (uDev?.completionTokens ?? 0),
+      custoAuditoria: typeof uRev?.costUsd === 'number' ? uRev.costUsd : null,
+      tokensAuditoria: (uRev?.promptTokens ?? 0) + (uRev?.completionTokens ?? 0),
       testesOk: evidence?.testsPass ?? null,
       buildOk: evidence?.buildsPass ?? null,
       diffOk: evidence?.hasDiff ?? null,
@@ -159,6 +181,10 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
       ultimoRevisor: ultimo?.revisor && ultimo.revisor !== '?' ? ultimo.revisor : null,
       custoUsd: lista.reduce((acc, r) => acc + (r.custoUsd ?? 0), 0) || null,
       tokens: lista.reduce((acc, r) => acc + r.promptTokens + r.completionTokens, 0) || 0,
+      custoDev: lista.reduce((acc, r) => acc + (r.custoDev ?? 0), 0) || null,
+      tokensDev: lista.reduce((acc, r) => acc + r.tokensDev, 0) || 0,
+      custoAuditoria: lista.reduce((acc, r) => acc + (r.custoAuditoria ?? 0), 0) || null,
+      tokensAuditoria: lista.reduce((acc, r) => acc + r.tokensAuditoria, 0) || 0,
       testesOk: ultimo?.testesOk ?? null,
       buildOk: ultimo?.buildOk ?? null,
       diffOk: ultimo?.diffOk ?? null,
@@ -167,6 +193,10 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
 
   const custoTotal = runs.reduce((acc, r) => acc + (r.custoUsd ?? 0), 0);
   const tokensTotal = runs.reduce((acc, r) => acc + r.promptTokens + r.completionTokens, 0);
+  const custoDevUsd = runs.reduce((acc, r) => acc + (r.custoDev ?? 0), 0);
+  const tokensDev = runs.reduce((acc, r) => acc + r.tokensDev, 0);
+  const custoAuditoriaUsd = runs.reduce((acc, r) => acc + (r.custoAuditoria ?? 0), 0);
+  const tokensAuditoria = runs.reduce((acc, r) => acc + r.tokensAuditoria, 0);
   const aprovadas = phases.filter((p) => p.status === 'AUDIT_APPROVED').length;
 
   // Fases geradas a partir de requisitos (requirements/<id>.json) e seus estados.
@@ -211,6 +241,10 @@ export function buildSnapshot(aiDevDir: string, config: AutomationConfig): Snaps
       fasesAprovadas: aprovadas,
       fasesPendentes: phases.length - aprovadas,
       revisorPoupado: runs.filter((r) => r.skip || r.cache).length,
+      custoDevUsd,
+      tokensDev,
+      custoAuditoriaUsd,
+      tokensAuditoria,
       requisitosGerados: fasesDeRequisitos.length,
       fasesAnalisando,
       fasesRejeitadas,

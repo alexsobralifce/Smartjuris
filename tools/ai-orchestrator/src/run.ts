@@ -610,6 +610,19 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
         (preRunFiles.length > 0 ? preRunFiles.map((f) => `  - ${f}`).join('\n') : '  (sem arquivos seguros — ver diff)') +
         '\nDiff completo da fase (HEAD) é apresentado acima; revise as condições pendentes, não reabra tópicos resolvidos.'
       : 'Primeira auditoria desta fase (sem rodadas anteriores).';
+    // LIMITE DE CONTEXTO (corrige estouro de TPM): o diff completo pode passar
+    // de 600k tokens (ex.: gpt-5.6-luna = 200k TPM). Trunca o diff para o
+    // máximo configurável (reviewer.maxContextChars) e avisa o revisor.
+    const maxContextChars = deps.config.reviewer.maxContextChars ?? 450_000;
+    const diffCompleto = gitArtifacts.diff ?? '';
+    const diffParaRevisor = diffCompleto.length > maxContextChars
+      ? `${diffCompleto.slice(0, maxContextChars)}\n\n… [DIFF TRUNCADO: ${diffCompleto.length} caracteres — revise o 04-git-diff.txt completo deste run se necessário]`
+      : diffCompleto;
+    // Histórico também truncado (mantém o fim, que tem as rodadas recentes).
+    const histLimite = Math.min(60_000, Math.floor(maxContextChars * 0.1));
+    const auditHistoryTruncado = auditHistory.length > histLimite
+      ? `… [histórico truncado]\n${auditHistory.slice(-histLimite)}`
+      : auditHistory;
     // FINDINGS LEDGER: no round 2+, o revisor valida APENAS os itens abertos
     // (com ID estável) — fim do "alvo móvel" que causava 20-32 rounds por fase.
     const ledgerBefore = await readLedger(deps.aiDevDir, phaseId);
@@ -623,14 +636,14 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
       objective: phase.description,
       approvedDependencies: phase.dependencies,
       filesChanged: gitArtifacts.status,
-      diff: gitArtifacts.diff,
+      diff: diffParaRevisor,
       tests: testsText,
       build: buildText,
       migrations: '(não coletada nesta execução)',
       decisions: '',
       limitations: '',
       risks: '',
-      auditHistory,
+      auditHistory: auditHistoryTruncado,
       correctionsApplied,
       openFindings: openFindingsText,
       isCorrection,
@@ -686,12 +699,25 @@ export async function runPhase(deps: RunDeps, phaseId: string, opts: RunPhaseOpt
     const revCost = reviewerUsage
       ? estimateCostUsd(deps.config, deps.config.reviewer.provider, deps.config.reviewer.model, reviewerUsage)
       : null;
+    // Uso separado por papel (dashboard: desenvolvimento x auditoria).
+    const paraUso = (u: import('./llm.js').TokenUsage | undefined, custo: CostEstimate | null) => {
+      const prompt = u?.promptTokens ?? 0;
+      const completion = u?.completionTokens ?? 0;
+      return { promptTokens: prompt, completionTokens: completion, totalTokens: prompt + completion, costUsd: custo?.billedUsd ?? null };
+    };
+    runSummary.implementerUsage = paraUso(usageAccum[0], implCost);
+    runSummary.reviewerUsage = paraUso(reviewerUsage ?? undefined, revCost);
     const costParts = [implCost, revCost].filter((c): c is CostEstimate => c !== null);
     const costEstimate: CostEstimate | null = costParts.length > 0
       ? { baseUsd: costParts.reduce((a, c) => a + c.baseUsd, 0), billedUsd: costParts.reduce((a, c) => a + c.billedUsd, 0), inputCacheAccounting: 'UNAVAILABLE_ASSUMED_MISS' }
       : null;
     runSummary.costEstimateUsd = costEstimate?.billedUsd ?? null;
-    artifact('20-usage.json', JSON.stringify({ tokenUsage, costEstimateUsd: runSummary.costEstimateUsd }, null, 2));
+    artifact('20-usage.json', JSON.stringify({
+      tokenUsage,
+      implementerUsage: runSummary.implementerUsage,
+      reviewerUsage: runSummary.reviewerUsage,
+      costEstimateUsd: runSummary.costEstimateUsd,
+    }, null, 2));
 
     // 12) Gate de aprovação já foi validado antes de chamar o revisor.
     // LOOPGAIN: se a rodada de correção NÃO reduziu os achados graves em

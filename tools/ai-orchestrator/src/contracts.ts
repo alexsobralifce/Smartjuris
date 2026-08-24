@@ -60,6 +60,9 @@ export const AutomationConfig = z.object({
   reviewer: z.object({
     provider: z.string(),
     model: z.string(),
+    /** Limite de caracteres do contexto enviado ao revisor (diff + histórico).
+     *  Evita estourar o TPM do modelo (ex.: gpt-5.6-luna = 200k tokens/min). */
+    maxContextChars: z.number().int().positive().default(450_000).optional(),
   }),
   limits: z.object({
     maxCorrectionAttempts: z.number().int(),
@@ -210,6 +213,20 @@ export const RunSummary = z.object({
     promptTokens: z.number().int().nonnegative(),
     completionTokens: z.number().int().nonnegative(),
     totalTokens: z.number().int().nonnegative(),
+  }).optional(),
+  // Uso separado por papel (telemetria do dashboard): desenvolvimento
+  // (implementador) vs auditoria (revisor) — tokens + custo estimado.
+  implementerUsage: z.object({
+    promptTokens: z.number().int().nonnegative(),
+    completionTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative().nullable(),
+  }).optional(),
+  reviewerUsage: z.object({
+    promptTokens: z.number().int().nonnegative(),
+    completionTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative().nullable(),
   }).optional(),
   costEstimateUsd: z.number().nonnegative().nullable().optional(),
 }).strict();

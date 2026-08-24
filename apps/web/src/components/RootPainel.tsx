@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, getErrorMessage } from '../api/client'
+import { resumoUsoPromocao } from '../utils/promocaoUI'
 import Toast, { ToastMessage } from './Toast'
 import { Button, EmptyRow, EmptyState, FONT, Field, FormGrid, FormRow, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
@@ -16,6 +17,16 @@ interface BillingDev {
     appUrl: string
     publicApiUrl: string
     webhookUrl: string
+  }
+  promocao: {
+    ativa: boolean
+    percentual: number
+    validade: string | null
+    usos: {
+      total: number
+      ultimas24h: number
+      porPlano: { basico: number; profissional: number; office: number }
+    }
   }
   webhooks: {
     total: number
@@ -1090,6 +1101,36 @@ export default function RootPainel() {
               <div>Webhook URL: <span style={{ color: 'var(--color-foreground)' }}>{billingDev?.config.webhookUrl ?? '—'}</span></div>
               <div>APP_URL: {billingDev?.config.appUrl ?? '—'}</div>
               <div>PUBLIC_API_URL: {billingDev?.config.publicApiUrl ?? '—'}</div>
+            </div>
+          </div>
+
+          {/* Fase 7F — Promoção de boas-vindas (uso) */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card, padding: SPACE.lg }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: SPACE.sm, marginBottom: SPACE.md }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '-0.02em' }}>Promoção de boas-vindas (1º mês)</div>
+              {(() => {
+                const r = resumoUsoPromocao(billingDev?.promocao)
+                return (
+                  <DevStatus
+                    label={r.rotuloEstado}
+                    ok={r.ativa}
+                    value={`${r.percentual}% OFF${r.validade ? ' · até ' + new Date(r.validade).toLocaleDateString('pt-BR') : ''}`}
+                  />
+                )
+              })()}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: SPACE.sm }}>
+              {(() => {
+                const r = resumoUsoPromocao(billingDev?.promocao)
+                return (
+                  <>
+                    <DevStatus label="Usos (total)" ok={r.usos.total > 0} value={String(r.usos.total)} />
+                    <DevStatus label="Usos 24h" ok={false} value={String(r.usos.ultimas24h)} />
+                    <DevStatus label="Básico" ok={false} value={String(r.usos.basico)} />
+                    <DevStatus label="Profissional / Avançado" ok={false} value={`${r.usos.profissional} / ${r.usos.office}`} />
+                  </>
+                )
+              })()}
             </div>
           </div>
 

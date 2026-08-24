@@ -2,12 +2,31 @@ import { useCallback, useEffect, useState } from 'react'
 import { PageContainer, PageHeader, Button, FONT, RADIUS, SPACE, Loading } from '../ui'
 import { api, getErrorMessage } from '../api/client'
 import { useBreakpoint } from '../hooks/useBreakpoint'
+import { decidirCheckoutPromocional, resumoPrecoPlano, type PromocaoStatusApi } from '../utils/promocaoUI'
 
 interface PlanoAssinatura {
   codigo: string
   precoMensal: number
   creditos: number
   rotulo: string
+  promocao: {
+    percentual: number
+    valorPromocional: number
+    valorPromocionalCents: number
+  } | null
+}
+
+interface PromocaoStatus {
+  ativa: boolean
+  percentual: number
+  elegivel: boolean
+  motivoIneligibilidade: string | null
+  valorPromocional: {
+    percentual: number
+    precoMensal: number
+    valorPromocional: number
+    valorPromocionalCents: number
+  } | null
 }
 
 interface StatusAssinatura {
@@ -18,6 +37,7 @@ interface StatusAssinatura {
   creditsAvailable: number
   cycleMonth: string | null
   ativo: boolean
+  promocao: PromocaoStatus
   assinatura: {
     status: string
     plano: string | null
@@ -92,7 +112,14 @@ export default function Assinatura() {
     setAssinarPlano(codigo)
     setErro('')
     try {
-      const res = await api.billing.checkout(codigo)
+      // Fase 7F — 1ª compra promocional: quando o escritório é ELEGÍVEL,
+      // o checkout usa a preference avulsa com o valor promocional (50% OFF
+      // na 1ª mensalidade); a recorrência integral começa no 2º mês.
+      // Lógica pura e testada (promocaoUI.ts); o backend revalida.
+      const decisao = decidirCheckoutPromocional(status?.promocao)
+      const res = decisao.promocional
+        ? await api.billing.checkoutPromocional(codigo)
+        : await api.billing.checkout(codigo)
       if (!res.ok) {
         setErro(await getErrorMessage(res, 'Falha ao criar o checkout.'))
         setAssinarPlano(null)
@@ -166,6 +193,42 @@ export default function Assinatura() {
         </div>
       )}
 
+      {/* Fase 7F — Promoção de boas-vindas (1º mês 50% OFF) */}
+      {status?.promocao?.ativa === true && status.promocao.elegivel === true && (
+        <div style={{
+          marginTop: SPACE.lg,
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          background: 'var(--color-accent-light)',
+          border: '1px solid var(--color-accent)',
+          borderRadius: RADIUS.card,
+          padding: '14px 18px',
+        }}>
+          <span style={{
+            background: 'var(--color-accent)', color: 'var(--color-on-accent)',
+            fontSize: FONT.xs, fontWeight: 700, letterSpacing: '0.06em',
+            textTransform: 'uppercase', padding: '4px 10px', borderRadius: RADIUS.chip,
+            flexShrink: 0,
+          }}>
+            Promoção
+          </span>
+          <div style={{ fontSize: FONT.base, lineHeight: 1.5 }}>
+            <strong>{status.promocao.percentual}% OFF na 1ª mensalidade</strong> — sua assinatura
+            começa com desconto e a recorrência integral vale a partir do 2º mês.
+          </div>
+        </div>
+      )}
+      {status?.promocao?.ativa === true && status.promocao.elegivel === false && status.promocao.motivoIneligibilidade && (
+        <div style={{
+          marginTop: SPACE.lg,
+          background: 'var(--color-surface-2)', color: 'var(--color-muted)',
+          border: '1px solid var(--color-border)',
+          borderRadius: RADIUS.card,
+          padding: '12px 16px', fontSize: FONT.sm,
+        }}>
+          Promoção de boas-vindas indisponível para este escritório ({status.promocao.motivoIneligibilidade}).
+        </div>
+      )}
+
       {/* Estado atual */}
       {status && (
         <div style={{
@@ -233,6 +296,8 @@ export default function Assinatura() {
       }}>
         {planos.map(plano => {
           const atual = status?.plano === plano.codigo && assinaturaAtiva
+          const resumo = resumoPrecoPlano(plano, status?.promocao)
+          const promoElegivel = resumo.promocional
           return (
             <div key={plano.codigo} style={{
               display: 'flex', flexDirection: 'column', gap: SPACE.lg,
@@ -243,22 +308,51 @@ export default function Assinatura() {
             }}>
               <div style={{
                 alignSelf: 'flex-start',
-                background: atual ? 'var(--color-primary)' : 'var(--color-badge-tint)',
-                color: atual ? 'var(--color-on-primary)' : 'var(--color-primary)',
-                fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em',
-                textTransform: 'uppercase', padding: '4px 10px', borderRadius: RADIUS.chip,
+                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
               }}>
-                {atual ? 'Plano atual' : 'Plano'}
+                <span style={{
+                  background: atual ? 'var(--color-primary)' : 'var(--color-badge-tint)',
+                  color: atual ? 'var(--color-on-primary)' : 'var(--color-primary)',
+                  fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', padding: '4px 10px', borderRadius: RADIUS.chip,
+                }}>
+                  {atual ? 'Plano atual' : 'Plano'}
+                </span>
+                {promoElegivel && (
+                  <span style={{
+                    background: 'var(--color-accent)', color: 'var(--color-on-accent)',
+                    fontSize: FONT.xs, fontWeight: 700, letterSpacing: '0.04em',
+                    padding: '4px 10px', borderRadius: RADIUS.chip,
+                  }}>
+                    {plano.promocao.percentual}% OFF 1º mês
+                  </span>
+                )}
               </div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: '-0.02em' }}>
                 {plano.rotulo}
               </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 34, letterSpacing: '-0.02em' }}>
-                  {fmtBRL(plano.precoMensal)}
-                </span>
-                <span style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>/mês</span>
-              </div>
+              {promoElegivel ? (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 34, letterSpacing: '-0.02em' }}>
+                      {fmtBRL(plano.promocao.valorPromocional)}
+                    </span>
+                    <span style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>/mês</span>
+                  </div>
+                  <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>
+                    1ª mensalidade com {plano.promocao.percentual}% OFF
+                    <span style={{ textDecoration: 'line-through', marginLeft: 8 }}>{fmtBRL(plano.precoMensal)}</span>
+                    <span style={{ marginLeft: 8 }}>depois</span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 34, letterSpacing: '-0.02em' }}>
+                    {fmtBRL(plano.precoMensal)}
+                  </span>
+                  <span style={{ fontSize: FONT.base, color: 'var(--color-muted)' }}>/mês</span>
+                </div>
+              )}
               <div style={{
                 background: 'var(--color-surface-2)', color: 'var(--color-foreground)',
                 fontSize: FONT.md, fontWeight: 600, padding: '8px 12px', borderRadius: RADIUS.control,
@@ -272,7 +366,13 @@ export default function Assinatura() {
                 disabled={assinarPlano !== null || !!status?.mpConfigurado === false}
                 style={{ width: '100%', padding: '11px', marginTop: 'auto' }}
               >
-                {assinarPlano === plano.codigo ? 'Abrindo Mercado Pago…' : atual ? 'Assinatura ativa ✓' : `Assinar ${plano.rotulo}`}
+                {assinarPlano === plano.codigo
+                  ? 'Abrindo Mercado Pago…'
+                  : atual
+                    ? 'Assinatura ativa ✓'
+                    : promoElegivel
+                      ? `Assinar com ${plano.promocao.percentual}% OFF`
+                      : `Assinar ${plano.rotulo}`}
               </Button>
             </div>
           )

@@ -458,6 +458,17 @@ router.get('/billing/dev', async (_req, res) => {
       ORDER BY created_at DESC
       LIMIT 50
     `);
+    // Fase 7F — indicador de uso da promoção (1º mês 50% OFF): quantos
+    // escritórios usaram e a configuração atual (flags mascaradas).
+    const usoPromocao = await db.execute(sql`
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE promocao_ativa_em > now() - interval '24 hours')::int AS ultimas_24h,
+             COUNT(*) FILTER (WHERE promocao_plano = 'basico')::int AS basico,
+             COUNT(*) FILTER (WHERE promocao_plano = 'profissional')::int AS profissional,
+             COUNT(*) FILTER (WHERE promocao_plano = 'office')::int AS office
+      FROM escritorios
+      WHERE promocao_usada = true
+    `);
 
     res.json({
       config: {
@@ -472,6 +483,20 @@ router.get('/billing/dev', async (_req, res) => {
         webhookUrl: process.env.PUBLIC_API_URL
           ? `${process.env.PUBLIC_API_URL.replace(/\/$/, '')}/api/billing/webhook`
           : '(não configurado)',
+      },
+      promocao: {
+        ativa: process.env.PROMOCAO_ATIVA === 'true' || process.env.PROMOCAO_ATIVA === '1',
+        percentual: Number(process.env.PROMOCAO_PERCENTUAL ?? 50),
+        validade: process.env.PROMOCAO_VALIDADE ?? null,
+        usos: {
+          total: Number((usoPromocao as any)[0]?.total ?? 0),
+          ultimas24h: Number((usoPromocao as any)[0]?.ultimas_24h ?? 0),
+          porPlano: {
+            basico: Number((usoPromocao as any)[0]?.basico ?? 0),
+            profissional: Number((usoPromocao as any)[0]?.profissional ?? 0),
+            office: Number((usoPromocao as any)[0]?.office ?? 0),
+          },
+        },
       },
       webhooks: {
         total: Number((webhookCount as any)[0]?.total ?? 0),

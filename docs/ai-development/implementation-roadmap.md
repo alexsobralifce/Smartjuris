@@ -83,7 +83,7 @@ migrations validadas, quando aplicável
 | 7C | Modelo de Dados e Persistência de Uso da Promoção | 7B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
+| 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
@@ -863,7 +863,7 @@ Processar o pagamento avulso promocional aprovado e criar a assinatura recorrent
 - Idempotência e retry garantem robustez sem duplicações.
 ### 7F — Frontend - Exibição da Promoção e Painel de Dev
 
-**Estado:** `CORRECTION_PENDING`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 7D aprovada(s).
 
@@ -1009,6 +1009,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 | 2026-08-24 | 7E | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7E | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
+| 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

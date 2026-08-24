@@ -285,6 +285,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ plano }),
     }),
+    // Fase 7F — 1ª compra promocional (50% OFF): preference avulsa no MP.
+    checkoutPromocional: (plano: string) => authFetch('/api/billing/checkout-promocional', {
+      method: 'POST',
+      body: JSON.stringify({ plano }),
+    }),
     cancelar: () => authFetch('/api/billing/cancelar', { method: 'POST' }),
   },
   raiz: {

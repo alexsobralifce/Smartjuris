@@ -1,0 +1,57 @@
+PROMOÇÃO DE BOAS-VINDAS: novo cliente paga 50% a menos na PRIMEIRA mensalidade (Opção C — pagamento avulso + assinatura).
+
+DECISÃO DE ARQUITETURA (confirmada):
+O Mercado Pago NÃO suporta "primeiro pagamento com valor diferenciado" em assinatura recorrente (preapproval). A opção escolhida é a ESTRATÉGIA DE DOIS FLUXOS:
+  1) PRIMEIRA COMPRA AVULSA: preference (Checkout Pro) com o valor PROMOCIONAL = 50% do plano (Básico R$90, Intermediário R$150, Avançado R$250).
+  2) APÓS O PAGAMENTO APROVADO (webhook payment.approved): ativa o escritório (créditos) E cria a assinatura recorrente (preapproval) com o valor INTEGRAL e primeiro vencimento agendado ~30 dias depois.
+A partir do 2º mês, a recorrência integral cobra automaticamente.
+
+REQUISITOS FUNCIONAIS:
+
+1. CATÁLOGO PROMOCIONAL
+- Novo endpoint/parâmetro no checkout: identificar quando a promoção se aplica (novo cliente) e retornar o valor promocional da 1ª compra.
+- Valores promocionais calculados SOMENTE no backend: 50% de 180=90, 300=150, 500=250 (nunca aceitar valor do cliente).
+- Feature flag global (env): PROMOCAO_ATIVA (default false), PROMOCAO_PERCENTUAL (default 50). Desligada = fluxo atual inalterado.
+
+2. CHECKOUT PROMOCIONAL (1ª compra avulsa)
+- Ao assinar como novo cliente elegível com promoção ativa, criar PREFERENCE (Checkout Pro avulso) com:
+  - items: [{ title: "SmartJuris — Plano X (1º mês promocional)", quantity: 1, unit_price: valorPromocional }];
+  - external_reference: escritorioId + marcador promocional;
+  - back_url/notification_url como o fluxo atual.
+- Retornar init_point da preference (redireciona ao MP para pagar R$ 90/150/250).
+- Persistir no escritório: promocao_usada=true, promocao_plano, promocao_valor_cents, promocao_ativa_em (nova coluna ou tabela promocao_uso).
+
+3. WEBHOOK DA 1ª COMPRA (payment.approved do avulso)
+- Processar o pagamento avulso promocional (identificar por external_reference/marcador):
+  - Ativar escritório + recarregar créditos (fluxo atual de ativação);
+  - Criar a ASSINATURA DEFINITIVA (preapproval) com valor INTEGRAL e 1º vencimento ~30 dias (billing_day/first_invoice_offset);
+  - Gravar o mercado_pago_id da assinatura definitiva no escritório.
+- Robusto: reutilizar a idempotência por transição existente (billing_webhook_events); retry/reconciliação se a criação da assinatura definitiva falhar (compensação: sem duplicar a preference nem cobrar 2x).
+
+4. ASSINATURA DEFINITIVA (a partir do 2º mês)
+- Preapproval com transaction_amount INTEGRAL (180/300/500), frequency 1 mês, primeiro vencimento agendado ~30 dias após a 1ª compra.
+- A partir daí, o fluxo é o atual: subscription_preapproval.authorized + payment.approved mensais recarregam créditos; inadimplência desativa.
+
+5. ELEGIBILIDADE / NOVO CLIENTE
+- Novo cliente = escritório SEM histórico de assinatura paga (nunca teve mercado_pago_id com payment aprovado) E admin/CNPJ não associado a assinatura ativa/anterior.
+- Promoção UNA vez por escritório: após usar, promocao_usada=true bloqueia nova aplicação.
+- Anti-abuso: cancelar e re-assinar NÃO reaplica a promoção (bloqueado por promocao_usada).
+
+6. FRONTEND
+- Pricing/tela de assinatura: quando PROMOCAO_ATIVA e escritório elegível, exibir "50% OFF no 1º mês" e o resumo "1º mês R$ X → depois R$ Y/mês".
+- Ao assinar: mostrar o valor promocional da 1ª compra antes de redirecionar ao MP.
+- Painel de dev do billing (root): indicador de escritórios que usaram a promoção.
+
+7. TESTES
+- Unidade: cálculo do valor promocional (50% de 180/300/500 = 90/150/250) no backend.
+- Elegibilidade: novo elegível; re-assinante NÃO; CNPJ repetido NÃO.
+- Anti-abuso: cancelar+re-assinar não reaplica.
+- Integração (MP real): preference avulsa aprovada → ativação + criação da assinatura definitiva; webhook duplicado não ativa 2x nem duplica a assinatura.
+- Regressão: fluxo SEM promoção (PROMOCAO_ATIVA=false) continua idêntico; 398 testes atuais verdes.
+
+CRITÉRIOS DE ACEITE:
+- Cliente novo paga metade na 1ª mensalidade (avulsa) e integral a partir do 2º mês (recorrência).
+- Promoção única por escritório; não repetível por cancelar/re-assinar.
+- Desligada por padrão; sem impacto no fluxo atual quando inativa.
+- Valor promocional calculado no backend; webhooks/ativação robustos (idempotência + retry).
+- Testes: cálculo, elegibilidade, anti-abuso, integração real e regressão.

@@ -1,0 +1,19 @@
+{
+  "id": "7C",
+  "titulo": "Modelo de Dados e Persistência de Uso da Promoção",
+  "descricao": "Adicionar estrutura de dados para rastrear o uso da promoção e evitar reutilização (anti-abuso).",
+  "dependencias": [
+    "7B"
+  ],
+  "escopo": "Criar nova coluna ou tabela (ex: promocao_uso) no escritório para persistir: promocao_usada (boolean), promocao_plano (string), promocao_valor_cents (integer), promocao_ativa_em (timestamp). Atualizar modelos de domínio e repositórios para suportar leitura e escrita desses campos.",
+  "foraDoEscopo": "Lógica de webhook, integração com Mercado Pago, criação de preferências.",
+  "testesObrigatorios": [
+    "Teste de repositório para salvar e recuperar dados de uso da promoção.",
+    "Teste de anti-abuso: cancelar e re-assinar não reaplica a promoção (bloqueado por promocao_usada=true)."
+  ],
+  "criteriosAceite": [
+    "Campos promocao_usada, promocao_plano, promocao_valor_cents e promocao_ativa_em persistidos corretamente.",
+    "Promoção UNA vez por escritório: após usar, promocao_usada=true bloqueia nova aplicação."
+  ],
+  "_hash": "cd9d275329ce"
+}

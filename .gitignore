@@ -33,3 +33,4 @@ reasonix.toml
 # beside it.
 /.plugins/
 /.opencode-skills/
+.railway-cli/

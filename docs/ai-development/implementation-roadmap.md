@@ -79,6 +79,12 @@ migrations validadas, quando aplicável
 | 6E | Endpoint de telemetria e saúde da integração de jurisprudência | 6C, 6D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6F | Acesso ao portal Jurisprudências.ai e URL da API configurável | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7A | Integração Mercado Pago — assinatura recorrente (Checkout Pro + webhooks) | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 7B | Feature Flags e Lógica de Elegibilidade/Promoção | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7C | Modelo de Dados e Persistência de Uso da Promoção | 7B | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7G | Testes de Regressão e Validação Final | 7E, 7F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -794,6 +800,97 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 - [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
 - [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
 - [x] Cancelamento real executado no MP (`PUT /preapproval/{id}` → status cancelled)
+
+### 7B — Feature Flags e Lógica de Elegibilidade/Promoção
+
+**Estado:** `PLANNED`
+
+**Dependência:** nenhuma (fase raiz).
+
+**Objetivo:**
+
+Implementar variáveis de ambiente e serviços de domínio para cálculo de preço promocional e verificação de elegibilidade de novo cliente.
+
+**Critérios de aceite:**
+
+- Feature flags lidas corretamente do ambiente com defaults corretos.
+- Cálculo do valor promocional feito exclusivamente no backend, nunca aceitando valor do cliente.
+- Elegibilidade bloqueia re-assinantes e CNPJs com histórico de pagamento.
+### 7C — Modelo de Dados e Persistência de Uso da Promoção
+
+**Estado:** `PLANNED`
+
+**Dependência:** 7B aprovada(s).
+
+**Objetivo:**
+
+Adicionar estrutura de dados para rastrear o uso da promoção e evitar reutilização (anti-abuso).
+
+**Critérios de aceite:**
+
+- Campos promocao_usada, promocao_plano, promocao_valor_cents e promocao_ativa_em persistidos corretamente.
+- Promoção UNA vez por escritório: após usar, promocao_usada=true bloqueia nova aplicação.
+### 7D — Checkout Promocional (1ª Compra Avulsa)
+
+**Estado:** `PLANNED`
+
+**Dependência:** 7C aprovada(s).
+
+**Objetivo:**
+
+Implementar a criação da preferência de pagamento avulsa no Mercado Pago com o valor promocional para a primeira compra.
+
+**Critérios de aceite:**
+
+- Preference criada com valor promocional calculado no backend.
+- external_reference contém marcador promocional para identificação no webhook.
+- Dados de uso da promoção persistidos antes de retornar o init_point.
+### 7E — Webhook da 1ª Compra e Assinatura Definitiva
+
+**Estado:** `PLANNED`
+
+**Dependência:** 7D aprovada(s).
+
+**Objetivo:**
+
+Processar o pagamento avulso promocional aprovado e criar a assinatura recorrente definitiva com valor integral.
+
+**Critérios de aceite:**
+
+- Webhook identifica corretamente o pagamento promocional via external_reference.
+- Escritório ativado e créditos recarregados.
+- Preapproval criado com valor integral e vencimento em ~30 dias.
+- Idempotência e retry garantem robustez sem duplicações.
+### 7F — Frontend - Exibição da Promoção e Painel de Dev
+
+**Estado:** `PLANNED`
+
+**Dependência:** 7D aprovada(s).
+
+**Objetivo:**
+
+Atualizar a interface do usuário para exibir a promoção de boas-vindas e adicionar indicador no painel de desenvolvedor.
+
+**Critérios de aceite:**
+
+- Frontend exibe corretamente o desconto e o resumo de preços quando elegível.
+- Valor promocional mostrado antes do redirect para o MP.
+- Painel de dev exibe indicador claro de uso da promoção.
+### 7G — Testes de Regressão e Validação Final
+
+**Estado:** `PLANNED`
+
+**Dependência:** 7E, 7F aprovada(s).
+
+**Objetivo:**
+
+Garantir que o fluxo sem promoção permanece inalterado e que todos os testes existentes continuam passando.
+
+**Critérios de aceite:**
+
+- Desligada por padrão, sem impacto no fluxo atual quando inativa.
+- Todos os 398 testes existentes passam sem falhas.
+- Cliente novo paga metade na 1ª mensalidade e integral a partir do 2º mês validado em ponta a ponta.
 - [x] Estado do banco limpo após teste (`UPDATE escritorios SET mercado_pago_id=NULL, assinatura_status='nenhuma'`)
 - [x] URL do back_url valida HTTPS (erro claro se APP_URL = http://)
 - [x] Planos mapeados corretamente: basico→ESSENTIAL(R$180/20cr), intermediario→PROFESSIONAL(R$300/50cr), avancado→OFFICE(R$500/100cr)

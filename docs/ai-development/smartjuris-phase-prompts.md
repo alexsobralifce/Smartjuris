@@ -1006,6 +1006,227 @@ Critérios de aceite (avaliar APENAS estes, sem criar novos):
 
 Responda somente no formato JSON do contrato de auditoria.
 ```
+
+# 7B — Feature Flags e Lógica de Elegibilidade/Promoção
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7B — Feature Flags e Lógica de Elegibilidade/Promoção.
+
+Implementar variáveis de ambiente e serviços de domínio para cálculo de preço promocional e verificação de elegibilidade de novo cliente.
+
+Escopo:
+Adicionar env vars PROMOCAO_ATIVA (default false) e PROMOCAO_PERCENTUAL (default 50). Criar serviço para calcular valor promocional (50% de 180/300/500 = 90/150/250) estritamente no backend. Criar serviço de elegibilidade: novo cliente = escritório sem histórico de assinatura paga (sem mercado_pago_id com payment aprovado) e CNPJ/admin não associado a assinatura ativa/anterior.
+
+Fora do escopo:
+Alterar fluxo de checkout existente, criar preferências no Mercado Pago, persistência de uso da promoção.
+
+Testes obrigatórios:
+- Teste unitário de cálculo do valor promocional (50% de 180/300/500 = 90/150/250).
+- Teste unitário de elegibilidade: novo elegível, re-assinante NÃO elegível, CNPJ repetido NÃO elegível.
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7B — Feature Flags e Lógica de Elegibilidade/Promoção.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Feature flags lidas corretamente do ambiente com defaults corretos.
+- Cálculo do valor promocional feito exclusivamente no backend, nunca aceitando valor do cliente.
+- Elegibilidade bloqueia re-assinantes e CNPJs com histórico de pagamento.
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 7C — Modelo de Dados e Persistência de Uso da Promoção
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7C — Modelo de Dados e Persistência de Uso da Promoção.
+
+Adicionar estrutura de dados para rastrear o uso da promoção e evitar reutilização (anti-abuso).
+
+Escopo:
+Criar nova coluna ou tabela (ex: promocao_uso) no escritório para persistir: promocao_usada (boolean), promocao_plano (string), promocao_valor_cents (integer), promocao_ativa_em (timestamp). Atualizar modelos de domínio e repositórios para suportar leitura e escrita desses campos.
+
+Fora do escopo:
+Lógica de webhook, integração com Mercado Pago, criação de preferências.
+
+Testes obrigatórios:
+- Teste de repositório para salvar e recuperar dados de uso da promoção.
+- Teste de anti-abuso: cancelar e re-assinar não reaplica a promoção (bloqueado por promocao_usada=true).
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7C — Modelo de Dados e Persistência de Uso da Promoção.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Campos promocao_usada, promocao_plano, promocao_valor_cents e promocao_ativa_em persistidos corretamente.
+- Promoção UNA vez por escritório: após usar, promocao_usada=true bloqueia nova aplicação.
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 7D — Checkout Promocional (1ª Compra Avulsa)
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7D — Checkout Promocional (1ª Compra Avulsa).
+
+Implementar a criação da preferência de pagamento avulsa no Mercado Pago com o valor promocional para a primeira compra.
+
+Escopo:
+Ao assinar como novo cliente elegível com promoção ativa, criar PREFERENCE (Checkout Pro) com items contendo título 'SmartJuris — Plano X (1º mês promocional)', quantity 1, unit_price igual ao valor promocional. Definir external_reference com escritorioId e marcador promocional. Manter back_url/notification_url do fluxo atual. Retornar init_point. Persistir dados de uso da promoção no escritório.
+
+Fora do escopo:
+Processamento do webhook de aprovação, criação da assinatura recorrente definitiva.
+
+Testes obrigatórios:
+- Teste de integração para criação da preference avulsa com valor promocional correto e external_reference com marcador.
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7D — Checkout Promocional (1ª Compra Avulsa).
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Preference criada com valor promocional calculado no backend.
+- external_reference contém marcador promocional para identificação no webhook.
+- Dados de uso da promoção persistidos antes de retornar o init_point.
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 7E — Webhook da 1ª Compra e Assinatura Definitiva
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7E — Webhook da 1ª Compra e Assinatura Definitiva.
+
+Processar o pagamento avulso promocional aprovado e criar a assinatura recorrente definitiva com valor integral.
+
+Escopo:
+Processar webhook payment.approved do avulso identificando pelo marcador no external_reference. Ativar escritório e recarregar créditos. Criar ASSINATURA DEFINITIVA (preapproval) com transaction_amount INTEGRAL, frequency 1 mês, e primeiro vencimento agendado ~30 dias após a 1ª compra. Gravar mercado_pago_id da assinatura definitiva no escritório. Implementar idempotência (billing_webhook_events) e retry/reconciliação para falhas na criação da assinatura sem duplicar preference ou cobrar 2x.
+
+Fora do escopo:
+Fluxo de cobrança mensal padrão a partir do 2º mês (já existente).
+
+Testes obrigatórios:
+- Teste de integração (MP real/mock): preference avulsa aprovada gera ativação e criação da assinatura definitiva.
+- Teste de idempotência: webhook duplicado não ativa 2x nem duplica a assinatura.
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7E — Webhook da 1ª Compra e Assinatura Definitiva.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Webhook identifica corretamente o pagamento promocional via external_reference.
+- Escritório ativado e créditos recarregados.
+- Preapproval criado com valor integral e vencimento em ~30 dias.
+- Idempotência e retry garantem robustez sem duplicações.
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 7F — Frontend - Exibição da Promoção e Painel de Dev
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7F — Frontend - Exibição da Promoção e Painel de Dev.
+
+Atualizar a interface do usuário para exibir a promoção de boas-vindas e adicionar indicador no painel de desenvolvedor.
+
+Escopo:
+Na tela de pricing/assinatura, quando PROMOCAO_ATIVA e escritório elegível, exibir '50% OFF no 1º mês' e resumo '1º mês R$ X -> depois R$ Y/mês'. Mostrar valor promocional da 1ª compra antes de redirecionar ao MP. No painel de dev do billing (root), adicionar indicador de escritórios que usaram a promoção.
+
+Fora do escopo:
+Lógica de backend de cálculo, criação de preferências e webhooks.
+
+Testes obrigatórios:
+- Teste de UI/E2E para exibição correta dos valores promocionais e resumo na tela de assinatura.
+- Teste de UI para indicador no painel de dev (root).
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7F — Frontend - Exibição da Promoção e Painel de Dev.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Frontend exibe corretamente o desconto e o resumo de preços quando elegível.
+- Valor promocional mostrado antes do redirect para o MP.
+- Painel de dev exibe indicador claro de uso da promoção.
+
+Responda somente no formato JSON do contrato de auditoria.
+```
+
+# 7G — Testes de Regressão e Validação Final
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 7G — Testes de Regressão e Validação Final.
+
+Garantir que o fluxo sem promoção permanece inalterado e que todos os testes existentes continuam passando.
+
+Escopo:
+Executar suíte de testes de regressão com PROMOCAO_ATIVA=false para garantir que o fluxo atual permanece idêntico. Validar que os 398 testes atuais continuam verdes. Consolidar testes de anti-abuso e integração real.
+
+Fora do escopo:
+Novas funcionalidades de negócio ou alterações no fluxo padrão.
+
+Testes obrigatórios:
+- Teste de regressão: fluxo SEM promoção (PROMOCAO_ATIVA=false) continua idêntico.
+- Execução completa da suíte garantindo 398 testes atuais verdes.
+
+Execute a suíte de testes e o build. Entregue arquivos alterados, comandos, resultados, diff, limitações e riscos. Pare para revisão.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 7G — Testes de Regressão e Validação Final.
+
+Analise o diff, os testes e os resultados executados.
+
+Critérios de aceite (avaliar APENAS estes, sem criar novos):
+- Desligada por padrão, sem impacto no fluxo atual quando inativa.
+- Todos os 398 testes existentes passam sem falhas.
+- Cliente novo paga metade na 1ª mensalidade e integral a partir do 2º mês validado em ponta a ponta.
+
+Responda somente no formato JSON do contrato de auditoria.
+```
 # Formato de passagem para o Terra
 
 ```text

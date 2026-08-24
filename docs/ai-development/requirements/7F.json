@@ -1,0 +1,20 @@
+{
+  "id": "7F",
+  "titulo": "Frontend - Exibição da Promoção e Painel de Dev",
+  "descricao": "Atualizar a interface do usuário para exibir a promoção de boas-vindas e adicionar indicador no painel de desenvolvedor.",
+  "dependencias": [
+    "7D"
+  ],
+  "escopo": "Na tela de pricing/assinatura, quando PROMOCAO_ATIVA e escritório elegível, exibir '50% OFF no 1º mês' e resumo '1º mês R$ X -> depois R$ Y/mês'. Mostrar valor promocional da 1ª compra antes de redirecionar ao MP. No painel de dev do billing (root), adicionar indicador de escritórios que usaram a promoção.",
+  "foraDoEscopo": "Lógica de backend de cálculo, criação de preferências e webhooks.",
+  "testesObrigatorios": [
+    "Teste de UI/E2E para exibição correta dos valores promocionais e resumo na tela de assinatura.",
+    "Teste de UI para indicador no painel de dev (root)."
+  ],
+  "criteriosAceite": [
+    "Frontend exibe corretamente o desconto e o resumo de preços quando elegível.",
+    "Valor promocional mostrado antes do redirect para o MP.",
+    "Painel de dev exibe indicador claro de uso da promoção."
+  ],
+  "_hash": "3b175d17c690"
+}

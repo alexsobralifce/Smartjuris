@@ -1,0 +1,19 @@
+{
+  "id": "7D",
+  "titulo": "Checkout Promocional (1ª Compra Avulsa)",
+  "descricao": "Implementar a criação da preferência de pagamento avulsa no Mercado Pago com o valor promocional para a primeira compra.",
+  "dependencias": [
+    "7C"
+  ],
+  "escopo": "Ao assinar como novo cliente elegível com promoção ativa, criar PREFERENCE (Checkout Pro) com items contendo título 'SmartJuris — Plano X (1º mês promocional)', quantity 1, unit_price igual ao valor promocional. Definir external_reference com escritorioId e marcador promocional. Manter back_url/notification_url do fluxo atual. Retornar init_point. Persistir dados de uso da promoção no escritório.",
+  "foraDoEscopo": "Processamento do webhook de aprovação, criação da assinatura recorrente definitiva.",
+  "testesObrigatorios": [
+    "Teste de integração para criação da preference avulsa com valor promocional correto e external_reference com marcador."
+  ],
+  "criteriosAceite": [
+    "Preference criada com valor promocional calculado no backend.",
+    "external_reference contém marcador promocional para identificação no webhook.",
+    "Dados de uso da promoção persistidos antes de retornar o init_point."
+  ],
+  "_hash": "74f76dce55bf"
+}

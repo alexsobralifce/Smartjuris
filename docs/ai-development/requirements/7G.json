@@ -1,0 +1,21 @@
+{
+  "id": "7G",
+  "titulo": "Testes de Regressão e Validação Final",
+  "descricao": "Garantir que o fluxo sem promoção permanece inalterado e que todos os testes existentes continuam passando.",
+  "dependencias": [
+    "7E",
+    "7F"
+  ],
+  "escopo": "Executar suíte de testes de regressão com PROMOCAO_ATIVA=false para garantir que o fluxo atual permanece idêntico. Validar que os 398 testes atuais continuam verdes. Consolidar testes de anti-abuso e integração real.",
+  "foraDoEscopo": "Novas funcionalidades de negócio ou alterações no fluxo padrão.",
+  "testesObrigatorios": [
+    "Teste de regressão: fluxo SEM promoção (PROMOCAO_ATIVA=false) continua idêntico.",
+    "Execução completa da suíte garantindo 398 testes atuais verdes."
+  ],
+  "criteriosAceite": [
+    "Desligada por padrão, sem impacto no fluxo atual quando inativa.",
+    "Todos os 398 testes existentes passam sem falhas.",
+    "Cliente novo paga metade na 1ª mensalidade e integral a partir do 2º mês validado em ponta a ponta."
+  ],
+  "_hash": "22cb52d6581d"
+}

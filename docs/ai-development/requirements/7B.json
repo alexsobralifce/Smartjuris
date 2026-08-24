@@ -1,0 +1,18 @@
+{
+  "id": "7B",
+  "titulo": "Feature Flags e Lógica de Elegibilidade/Promoção",
+  "descricao": "Implementar variáveis de ambiente e serviços de domínio para cálculo de preço promocional e verificação de elegibilidade de novo cliente.",
+  "dependencias": [],
+  "escopo": "Adicionar env vars PROMOCAO_ATIVA (default false) e PROMOCAO_PERCENTUAL (default 50). Criar serviço para calcular valor promocional (50% de 180/300/500 = 90/150/250) estritamente no backend. Criar serviço de elegibilidade: novo cliente = escritório sem histórico de assinatura paga (sem mercado_pago_id com payment aprovado) e CNPJ/admin não associado a assinatura ativa/anterior.",
+  "foraDoEscopo": "Alterar fluxo de checkout existente, criar preferências no Mercado Pago, persistência de uso da promoção.",
+  "testesObrigatorios": [
+    "Teste unitário de cálculo do valor promocional (50% de 180/300/500 = 90/150/250).",
+    "Teste unitário de elegibilidade: novo elegível, re-assinante NÃO elegível, CNPJ repetido NÃO elegível."
+  ],
+  "criteriosAceite": [
+    "Feature flags lidas corretamente do ambiente com defaults corretos.",
+    "Cálculo do valor promocional feito exclusivamente no backend, nunca aceitando valor do cliente.",
+    "Elegibilidade bloqueia re-assinantes e CNPJs com histórico de pagamento."
+  ],
+  "_hash": "1198ed3b872a"
+}

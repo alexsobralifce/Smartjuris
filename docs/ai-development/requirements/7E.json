@@ -1,0 +1,21 @@
+{
+  "id": "7E",
+  "titulo": "Webhook da 1ª Compra e Assinatura Definitiva",
+  "descricao": "Processar o pagamento avulso promocional aprovado e criar a assinatura recorrente definitiva com valor integral.",
+  "dependencias": [
+    "7D"
+  ],
+  "escopo": "Processar webhook payment.approved do avulso identificando pelo marcador no external_reference. Ativar escritório e recarregar créditos. Criar ASSINATURA DEFINITIVA (preapproval) com transaction_amount INTEGRAL, frequency 1 mês, e primeiro vencimento agendado ~30 dias após a 1ª compra. Gravar mercado_pago_id da assinatura definitiva no escritório. Implementar idempotência (billing_webhook_events) e retry/reconciliação para falhas na criação da assinatura sem duplicar preference ou cobrar 2x.",
+  "foraDoEscopo": "Fluxo de cobrança mensal padrão a partir do 2º mês (já existente).",
+  "testesObrigatorios": [
+    "Teste de integração (MP real/mock): preference avulsa aprovada gera ativação e criação da assinatura definitiva.",
+    "Teste de idempotência: webhook duplicado não ativa 2x nem duplica a assinatura."
+  ],
+  "criteriosAceite": [
+    "Webhook identifica corretamente o pagamento promocional via external_reference.",
+    "Escritório ativado e créditos recarregados.",
+    "Preapproval criado com valor integral e vencimento em ~30 dias.",
+    "Idempotência e retry garantem robustez sem duplicações."
+  ],
+  "_hash": "d64725cdf90b"
+}

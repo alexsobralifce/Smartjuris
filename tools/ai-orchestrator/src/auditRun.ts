@@ -8,6 +8,7 @@ import { basename, join } from 'node:path';
 import { safeJoin } from './paths.js';
 import { RunSummary } from './contracts.js';
 import { validateAuditWithRetry, AuditParseError } from './llm.js';
+import { estimateCostUsd } from './pricing.js';
 import { readText, readArtifact, writeArtifact, writeTextAtomic, exists } from './io.js';
 import { parseRoadmap, findPhase, assertTransition, renderRoadmap, buildHistoryRow } from './roadmap.js';
 import { buildReviewContext } from './prompts.js';
@@ -68,7 +69,17 @@ export async function reAuditRun(deps: RunDeps, runId: string, opts: ReAuditOpti
   }
 
   deps.log.info(`Reauditando ${runId} (fase ${phaseId}) com ${runSummary.reviewerModel}...`);
-  const { audit, rawResponses, corrected } = await validateAuditWithRetry(deps.llm, context);
+  const { audit, rawResponses, corrected, usage } = await validateAuditWithRetry(deps.llm, context);
+  // Telemetria: registra o uso (tokens + custo) do revisor nesta re-auditoria.
+  if (usage) {
+    const custo = estimateCostUsd(deps.config, deps.config.reviewer.provider, deps.config.reviewer.model, usage);
+    runSummary.reviewerUsage = {
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+      costUsd: custo?.billedUsd ?? null,
+    };
+  }
   writeArtifact(runDir, '09-review-response.txt', rawResponses.join('\n\n--- RESPOSTA CORRIGIDA ---\n\n'));
   writeArtifact(runDir, '10-audit-result.json', JSON.stringify(audit, null, 2));
   if (corrected) deps.log.warn('Auditoria corrigida após feedback de validação (1 tentativa).');

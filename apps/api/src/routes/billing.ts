@@ -9,6 +9,13 @@ import { requireAdmin } from '../middlewares/roleGuard.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { parseBody, formatZodError, checkoutSchema } from '../validation/schemas.js';
 import {
+  configPromocao,
+  promocaoExpirada,
+  calcularValorPromocional,
+  decidirElegibilidade,
+  type ValorPromocional,
+} from '../services/promocao.js';
+import {
   MP_CONFIGURADO,
   criarAssinatura,
   cancelarPreapproval,
@@ -55,7 +62,24 @@ function validarUrlMp(url: string, rotulo: string): string | null {
 // interno; a tela de assinatura consome este endpoint).
 // ---------------------------------------------------------------------------
 router.get('/planos', (_req, res) => {
-  res.json({ planos: listarPlanosAssinatura(), mpConfigurado: MP_CONFIGURADO });
+  const cfg = configPromocao();
+  const planos = listarPlanosAssinatura().map((p) => {
+    const promo = calcularValorPromocional(p.codigo, cfg);
+    return {
+      codigo: p.codigo,
+      precoMensal: p.precoMensal,
+      creditos: p.creditos,
+      rotulo: p.rotulo,
+      promocao: promo?.ativo
+        ? { percentual: promo.percentual, valorPromocional: promo.valorPromocional, valorPromocionalCents: promo.valorPromocionalCents }
+        : null,
+    };
+  });
+  res.json({
+    planos,
+    mpConfigurado: MP_CONFIGURADO,
+    promocao: { ativa: cfg.ativa && !promocaoExpirada(cfg), percentual: cfg.percentual },
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -72,6 +96,9 @@ router.get('/status', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ error: 'Escritório não encontrado.' });
     }
     const planoInfo = planoAssinatura(esc.plano);
+    const cfgPromo = configPromocao();
+    const elegibilidade = await decidirElegibilidade(escritorioId);
+    const valorPromo = calcularValorPromocional(esc.plano, cfgPromo);
     res.json({
       plano: esc.plano,
       planoRotulo: planoInfo?.rotulo ?? null,
@@ -80,6 +107,13 @@ router.get('/status', async (req: AuthenticatedRequest, res) => {
       creditsAvailable: esc.creditsAvailable,
       cycleMonth: esc.cycleMonth,
       ativo: esc.ativo,
+      promocao: {
+        ativa: cfgPromo.ativa && !promocaoExpirada(cfgPromo),
+        percentual: cfgPromo.percentual,
+        elegivel: elegibilidade.elegivel,
+        motivoIneligibilidade: elegibilidade.elegivel ? null : elegibilidade.motivo,
+        valorPromocional: valorPromo?.ativo && elegibilidade.elegivel ? valorPromocionalPreco(valorPromo) : null,
+      },
       assinatura: {
         status: esc.assinaturaStatus,
         plano: esc.assinaturaPlano,
@@ -497,5 +531,15 @@ router.post('/cancelar', requireAdmin, async (req: AuthenticatedRequest, res) =>
     res.status(500).json({ error: 'Erro ao cancelar assinatura.' });
   }
 });
+
+/** Formato amigável do valor promocional para o frontend (status). */
+function valorPromocionalPreco(v: ValorPromocional) {
+  return {
+    percentual: v.percentual,
+    precoMensal: v.precoMensal,
+    valorPromocional: v.valorPromocional,
+    valorPromocionalCents: v.valorPromocionalCents,
+  };
+}
 
 export default router;

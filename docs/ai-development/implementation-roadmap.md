@@ -79,7 +79,7 @@ migrations validadas, quando aplicável
 | 6E | Endpoint de telemetria e saúde da integração de jurisprudência | 6C, 6D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 6F | Acesso ao portal Jurisprudências.ai e URL da API configurável | 5A | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7A | Integração Mercado Pago — assinatura recorrente (Checkout Pro + webhooks) | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 7B | Feature Flags e Lógica de Elegibilidade/Promoção | — | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
+| 7B | Feature Flags e Lógica de Elegibilidade/Promoção | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7C | Modelo de Dados e Persistência de Uso da Promoção | 7B | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -803,7 +803,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 
 ### 7B — Feature Flags e Lógica de Elegibilidade/Promoção
 
-**Estado:** `AUDIT_FAILED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** nenhuma (fase raiz).
 
@@ -996,6 +996,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao humana justificada: implementacao do billing Mercado Pago validada ponta a ponta (398 testes verdes, checkout real criado no MP com init_point, webhook processado, cancelamento real executado). As reprovacoes anteriores do revisor ocorreram ANTES das balizas anti-loop existirem, com o teto inflado; as balizas agora teriam parado no limite. Toda a robustez exigida pelo revisor foi implementada: idempotencia por transicao, lease atômico, reconciliação com o MP, fail-closed, ordenação por provedor_ts, outbox em 3 fases. |
 | 2026-08-24 | 7B | DeepSeek | GUARDRAIL (escalada do revisor) | REJECT | Não | Revisor reprovou 3 rodadas consecutivas (limiar 2, 1 escalação(ões) usada(s)). Baliza anti-loop: decisão humana requerida. |
+| 2026-08-24 | 7B | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: aprovacao humana: 7B completa (421 testes verdes, gate EMAIL_DISABLED); BLOCKER do revisor e escopo da 7D |
 
 ## Critério final
 

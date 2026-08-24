@@ -163,6 +163,18 @@ function emailWrapper(title: string, bodyContent: string): string {
 export async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
   const recipient = Array.isArray(options.to) ? options.to.join(', ') : options.to;
 
+  // GATE ANTI-CUSTO (baliza): em testes (NODE_ENV=test) ou quando EMAIL_DISABLED
+  // é true, NÃO envia e-mail real — simula sucesso. Protege o limite do
+  // provedor transacional (Resend/SMTP) durante a suíte e em ambientes de QA.
+  const emailDisabled =
+    process.env.EMAIL_DISABLED === 'true' ||
+    process.env.EMAIL_DISABLED === '1' ||
+    process.env.NODE_ENV === 'test';
+  if (emailDisabled) {
+    console.log(`[Email] ENVIO DESATIVADO (EMAIL_DISABLED/test) — simulado: to=${recipient}, subject="${options.subject}"`);
+    return { success: true, id: `simulado-${Date.now()}` };
+  }
+
   // 1. TRANSPORTE PRINCIPAL: Resend (enviador transacional confiável via API HTTP,
   //    independe de egress de datacenter para SMTP). Requer domínio verificado —
   //    veja RESEND_FROM_EMAIL. Se falhar, cai no SMTP como reserva.

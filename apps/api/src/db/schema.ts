@@ -216,6 +216,13 @@ export const escritorios = pgTable('escritorios', {
   assinaturaProximaCobranca: timestamp('assinatura_proxima_cobranca', { withTimezone: true }),
   assinaturaUltimaCobranca: timestamp('assinatura_ultima_cobranca', { withTimezone: true }),
   assinaturaExpiracao: timestamp('assinatura_expiracao', { withTimezone: true }),
+  // Promoção de boas-vindas (Fase 7B, migration 0036): 1ª mensalidade 50% OFF.
+  // Registro do uso (anti-abuso) — o valor é calculado no backend.
+  promocaoUsada: boolean('promocao_usada').notNull().default(false),
+  promocaoPlano: text('promocao_plano'),
+  promocaoValorCents: integer('promocao_valor_cents'),
+  promocaoPercentual: integer('promocao_percentual'),
+  promocaoAtivaEm: timestamp('promocao_ativa_em', { withTimezone: true }),
 });
 
 export const permissoesUsuario = pgTable('permissoes_usuario', {

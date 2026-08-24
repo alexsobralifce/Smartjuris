@@ -1,258 +1,194 @@
-import { useState, type CSSProperties } from 'react'
-import { Button, PageContainer, PageHeader, FONT, SPACE, RADIUS, useIsMobile } from '../ui'
+import { useState } from 'react'
+import { FONT, RADIUS, SPACE } from '../ui'
 
-interface Passo {
-  titulo: string
-  texto: string
+interface TutorialStep {
+  title: string
+  subtitle: string
+  description: string
+  tips: string[]
+  icon: string
 }
 
-interface ModuloTutorial {
-  id: string
-  label: string
-  descricao: string
-  imagem: string
-  passos: Passo[]
-}
-
-const modulos: ModuloTutorial[] = [
+const STEPS: TutorialStep[] = [
   {
-    id: 'landing', label: 'Entrar no Sistema', descricao: 'Acessar o SmartJuris e fazer login com as credenciais de demonstração.',
-    imagem: '/tutorial/images/01-login.png',
-    passos: [
-      { titulo: 'Tela de Login', texto: 'Abra o SmartJuris no navegador. Informe o e-mail institucional (ex.: admin@smartjuris.com) e a senha de acesso, e clique em "Entrar no Sistema →".' },
-      { titulo: 'Credenciais de demonstração', texto: 'Para testar, use o perfil Administrador (admin@smartjuris.com / admin123) ou Usuário (user@smartjuris.com / user123). Todos os dados são fakes de demonstração.' },
+    title: '1. Indexação & Base de Conhecimento Vetorial (RAG)',
+    subtitle: 'Alimente o SmartJuris com os modelos e teses do seu escritório',
+    description:
+      'Faça upload de peças anteriores, acórdãos e minutas em PDF/DOCX no módulo "Base RAG". O motor BGE-M3 gera embeddings semânticos para recuperar suas teses em segundos.',
+    tips: [
+      'Suba modelos de petições com argumentos consolidados.',
+      'Documentos são segregados com isolamento estrito por escritório.',
+      'A busca semântica encontra argumentos mesmo com palavras diferentes.',
     ],
+    icon: '📚',
   },
   {
-    id: 'dashboard', label: 'Painel (Dashboard)', descricao: 'Visão geral do escritório: KPIs, peças recentes e prazos críticos.',
-    imagem: '/tutorial/images/02-dashboard.png',
-    passos: [
-      { titulo: 'Indicadores', texto: 'O Painel reúne os números do escritório: processos ativos, peças geradas, itens aguardando revisão e a taxa de aprovação.' },
-      { titulo: 'Peças Recentes e Prazos', texto: 'Acompanhe as peças recém-geradas e, no painel lateral, os prazos críticos (implantações/audiências) e o status do Motor RAG (modelos ativos e embeddings).' },
+    title: '2. Geração de Peças & Resumos com IA Supervisionada',
+    subtitle: 'Redija iniciais, contestações e recursos com precisão cirúrgica',
+    description:
+      'No módulo "Gerar Peças", selecione o tipo de peça, o processo e insira os dados do caso. O DeepSeek V4 com RAG gera a minuta em menos de 3 minutos, com citações da jurisprudência nacional.',
+    tips: [
+      'Utilize o streaming para acompanhar a redação em tempo real.',
+      'Defina se deseja incluir jurisprudência vinculante dos tribunais.',
+      'Prazos e intimações são resumidos automaticamente em 2 frases.',
     ],
+    icon: '⚡',
   },
   {
-    id: 'agenda', label: 'Agenda', descricao: 'Audiências, reuniões e prazos do escritório.',
-    imagem: '/tutorial/images/03-agenda.png',
-    passos: [
-      { titulo: 'Calendário', texto: 'A Agenda mostra os eventos do mês (audiências, reuniões, prazos e diligências). Navegue pelos meses e clique em uma data para adicionar um evento.' },
-      { titulo: 'Criar evento', texto: 'Preencha título, tipo, data/hora e vínculo com processo ou cliente. Eventos críticos ajudam no controle de prazos fatídicos.' },
+    title: '3. Fila de Validação Humana & Crivo Ético OAB',
+    subtitle: 'Nenhum documento sai do sistema sem o seu crivo e aprovação',
+    description:
+      'Todas as minutas geradas entram na fila do módulo "Validação". O advogado revisa, edita no Editor Rico e aprova ou reprova com auditoria completa de IP e horário antes de exportar em PDF/DOCX com timbre.',
+    tips: [
+      'Exportação bloqueada para peças sem aprovação expressa do advogado.',
+      'Trilha de auditoria em conformidade com o Código de Ética da OAB.',
+      'Adicione notas de revisão e calcule o custo exato em tokens.',
     ],
+    icon: '⚖️',
   },
   {
-    id: 'processos', label: 'Processos', descricao: 'Gestão de processos com linha do tempo e resumos por IA.',
-    imagem: '/tutorial/images/04-processos.png',
-    passos: [
-      { titulo: 'Lista de processos', texto: 'Acesse os processos do escritório. Use a busca e os filtros para localizar por número, cliente, área ou status.' },
-      { titulo: 'Linha do tempo e intimações', texto: 'No detalhe do processo, acompanhe a linha do tempo e os resumos de intimações gerados por IA, com ação recomendada e prazo fatal.' },
+    title: '4. Gestão Financeira, Timesheet & Jurimetria Preditiva',
+    subtitle: 'Controle de honorários, horas faturáveis e estimativa de êxito',
+    description:
+      'Acompanhe lançamentos de honorários, cronometre minutos de atuação no timesheet com cálculo de horas faturáveis e simule a probabilidade de êxito no simulador de jurimetria.',
+    tips: [
+      'Cronômetro de timesheet com exportação para cobrança de clientes.',
+      'Calculadora de risco processual por área e tribunal.',
+      'Kanban de CRM para conversão de leads e novos contratos.',
     ],
-  },
-  {
-    id: 'clientes', label: 'Clientes', descricao: 'Cadastro de clientes PF/PJ com máscaras e busca de CEP.',
-    imagem: '/tutorial/images/05-clientes.png',
-    passos: [
-      { titulo: 'Cadastro de cliente', texto: 'Cadastre clientes Pessoa Física ou Jurídica. Os campos de CPF/CNPJ e telefone têm máscara automática; o CEP é preenchido pela busca automática (ViaCEP).' },
-      { titulo: 'Qualificação e dados', texto: 'Preencha a qualificação (para peças), dados de contato e endereço. Clientes vinculados aparecem nos processos e peças.' },
-    ],
-  },
-  {
-    id: 'pecas', label: 'Gerar Peças', descricao: 'Gerador de peças com IA (RAG + jurisprudência ao vivo).',
-    imagem: '/tutorial/images/06-gerar-pecas.png',
-    passos: [
-      { titulo: 'Fluxo em 4 etapas', texto: 'O gerador progressivo: 1) Selecionar Tipo → 2) Dados do Caso → 3) Geração IA → 4) Revisão. Escolha a área do direito e o tipo de peça.' },
-      { titulo: 'Vincular processo e tese', texto: 'Vincule um processo cadastrado (autopreenche partes/juízo) e, se quiser, escolha um modelo de tese. A geração usa o RAG local + jurisprudência ao vivo quando ativado.' },
-    ],
-  },
-  {
-    id: 'validacao', label: 'Validação', descricao: 'Fila de revisão humana das peças geradas.',
-    imagem: '/tutorial/images/07-validacao.png',
-    passos: [
-      { titulo: 'Fila de revisão', texto: 'As peças geradas pela IA entram na fila de validação. Abra uma peça para revisar o conteúdo antes de aprovar ou reprovar (crivo ético OAB).' },
-      { titulo: 'Exportar e aprovar', texto: 'Edite se necessário, aprove a peça e exporte em PDF ou DOCX com o timbre do escritório.' },
-    ],
-  },
-  {
-    id: 'jurimetria', label: 'Jurimetria', descricao: 'Analytics de êxito por área e calculadora de risco.',
-    imagem: '/tutorial/images/08-jurimetria.png',
-    passos: [
-      { titulo: 'Taxa de êxito', texto: 'Veja a taxa de êxito por área e status, com base nos processos do escritório.' },
-      { titulo: 'Calculadora preditiva', texto: 'Use a calculadora de risco para estimar a chance de êxito de uma tese — apoio à decisão de aceitar um caso.' },
-    ],
-  },
-  {
-    id: 'decisoes', label: 'Decisões & Tribunais', descricao: 'Consulta ao vivo de jurisprudência (Jurisprudências.ai).',
-    imagem: '/tutorial/images/09-decisoes.png',
-    passos: [
-      { titulo: 'Busca por termo/tese', texto: 'Consulte jurisprudência ao vivo: escolha o tribunal, digite o termo ou tese e filtre por data. As sugestões rápidas ajudam na busca.' },
-      { titulo: 'Usar na peça', texto: 'Copie a citação com a ementa formatada ou envie a decisão direto para o Gerador de Peças. O portal do provedor (Jurisprudências.ai) está disponível no topo.' },
-    ],
-  },
-  {
-    id: 'financeiro', label: 'Financeiro', descricao: 'Honorários, despesas e timesheet faturável.',
-    imagem: '/tutorial/images/10-financeiro.png',
-    passos: [
-      { titulo: 'Lançamentos', texto: 'Registre honorários fixos, êxito e despesas por processo/cliente, com vencimento e status.' },
-      { titulo: 'Timesheet', texto: 'Use o cronômetro para registrar horas faturáveis por processo, com valor-hora — controle billable time.' },
-    ],
-  },
-  {
-    id: 'contratos', label: 'Revisão Contratual', descricao: 'Scanner autônomo de minutas com detecção de riscos.',
-    imagem: '/tutorial/images/11-contratos.png',
-    passos: [
-      { titulo: 'Enviar minuta', texto: 'Envie a minuta do contrato para o scanner; a IA detecta cláusulas de risco e sugestões de redação.' },
-      { titulo: 'Revisar sugestões', texto: 'Revise os pontos destacados e as sugestões; aceite ou edite a redação proposta.' },
-    ],
-  },
-  {
-    id: 'crm', label: 'CRM & Funil', descricao: 'Funil de clientes: Lead → Diagnóstico → Proposta → Contrato.',
-    imagem: '/tutorial/images/12-crm.png',
-    passos: [
-      { titulo: 'Kanban', texto: 'O funil em 4 fases (Lead, Diagnóstico, Proposta, Contrato). Arraste os leads conforme avançam no atendimento.' },
-      { titulo: 'Alerta de conflito', texto: 'O CRM sinaliza conflito de interesses ao cadastrar um novo potencial cliente (verificação de partes adversas).' },
-    ],
-  },
-  {
-    id: 'base', label: 'Base RAG', descricao: 'Base de conhecimento vetorial para fundamentar as peças.',
-    imagem: '/tutorial/images/13-base.png',
-    passos: [
-      { titulo: 'Documentos e coleções', texto: 'Gerencie as coleções indexadas: envie documentos do escritório (contratos, pareceres, teses) para a base vetorial.' },
-      { titulo: 'Busca semântica', texto: 'A busca semântica (BGE-M3) recupera os trechos relevantes da base, usados no RAG da geração de peças.' },
-    ],
-  },
-  {
-    id: 'documentacao', label: 'Documentação', descricao: 'Central de ajuda, manual e arquitetura.',
-    imagem: '/tutorial/images/14-documentacao.png',
-    passos: [
-      { titulo: 'Manual e ajuda', texto: 'Encontre o manual em 3 passos, a arquitetura em camadas, LGPD e perguntas frequentes.' },
-      { titulo: 'Visão geral', texto: 'Explore a documentação para entender os módulos e fluxos do SmartJuris.' },
-    ],
-  },
-  {
-    id: 'admin', label: 'Administração', descricao: 'Configuração do escritório, usuários e permissões.',
-    imagem: '/tutorial/images/15-admin.png',
-    passos: [
-      { titulo: 'Identidade e métricas', texto: 'Configure o timbre (cidade/OAB), veja as métricas do escritório e gerencie a conta.' },
-      { titulo: 'Usuários e permissões', texto: 'Adicione usuários do escritório e defina as permissões por módulo (quais telas cada advogado acessa).' },
-    ],
+    icon: '💼',
   },
 ]
 
-const GRID: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-  gap: SPACE.md,
-}
-
-const CARD: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: RADIUS.lg,
-  padding: SPACE.lg,
-  cursor: 'pointer',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: SPACE.xs,
-  transition: 'border-color .15s',
-}
-
-const IMG: CSSProperties = {
-  width: '100%',
-  borderRadius: RADIUS.md,
-  border: '1px solid var(--color-border)',
-  backgroundColor: 'var(--color-surface-2)',
-}
-
 export default function Tutorial() {
-  const isMobile = useIsMobile()
-  const [moduloIdx, setModuloIdx] = useState<number | null>(null)
-  const [passoIdx, setPassoIdx] = useState(0)
-
-  const modulo = moduloIdx !== null ? modulos[moduloIdx] : null
-
-  const abrir = (i: number) => {
-    setModuloIdx(i)
-    setPassoIdx(0)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  const voltarParaLista = () => setModuloIdx(null)
-
-  // Navegação "encadeada": os botões Anterior/Próximo percorrem primeiro os
-  // passos do módulo e, ao chegar no fim/início, passam para o próximo/anterior
-  // módulo — nunca "travam" nos extremos (a menos que seja o início/fim de tudo).
-  const avancar = () => {
-    if (moduloIdx === null) return
-    const m = modulos[moduloIdx]
-    if (passoIdx < m.passos.length - 1) {
-      setPassoIdx((p) => p + 1)
-    } else if (moduloIdx < modulos.length - 1) {
-      abrir(moduloIdx + 1)
-    }
-  }
-  const voltar = () => {
-    if (moduloIdx === null) return
-    if (passoIdx > 0) {
-      setPassoIdx((p) => p - 1)
-    } else if (moduloIdx > 0) {
-      abrir(moduloIdx - 1)
-    }
-  }
-  const noInicio = moduloIdx === 0 && passoIdx === 0
-  const noFim = moduloIdx === modulos.length - 1 && modulo !== null && passoIdx === modulo.passos.length - 1
+  const [activeStep, setActiveStep] = useState(0)
+  const step = STEPS[activeStep]
 
   return (
-    <PageContainer>
-      <PageHeader
-        eyebrow="GUIA"
-        title="Tutorial"
-        description="Wizards com imagens das telas ensinando a usar cada módulo do SmartJuris. Use as credenciais de demonstração para acompanhar."
-      />
+    <div style={{
+      maxWidth: 1000,
+      margin: '0 auto',
+      padding: '32px 24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: SPACE.xl,
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{
+          display: 'inline-flex',
+          alignSelf: 'flex-start',
+          background: 'var(--color-badge-tint)',
+          color: 'var(--color-primary)',
+          fontSize: FONT.xs,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          padding: '4px 10px',
+          borderRadius: 20,
+        }}>
+          📖 Guia do Usuário
+        </div>
+        <h1 style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 28,
+          color: 'var(--color-foreground)',
+          margin: '6px 0 0',
+          letterSpacing: '-0.02em',
+        }}>
+          Como Operar o SmartJuris LexOS em 4 Passos
+        </h1>
+        <p style={{ fontSize: FONT.md, color: 'var(--color-muted)', margin: 0, lineHeight: 1.5 }}>
+          Conheça o fluxo operacional padrão para extrair máxima produtividade com total segurança jurídica.
+        </p>
+      </div>
 
-      {modulo === null ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
-          <div style={GRID}>
-            {modulos.map((m, i) => (
-              <div key={m.id} style={CARD} onClick={() => abrir(i)} role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') abrir(i) }}>
-                <img src={m.imagem} alt={m.label} style={{ ...IMG, aspectRatio: '16/9', objectFit: 'cover', height: 120 }} />
-                <strong style={{ fontSize: FONT.md, color: 'var(--color-foreground)' }}>{m.label}</strong>
-                <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.4 }}>{m.descricao}</span>
+      {/* Navegação de Etapas */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: SPACE.sm,
+      }}>
+        {STEPS.map((s, idx) => {
+          const isActive = idx === activeStep
+          return (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setActiveStep(idx)}
+              style={{
+                background: isActive ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: isActive ? 'var(--color-on-primary)' : 'var(--color-foreground)',
+                border: '1px solid var(--color-border)',
+                borderRadius: RADIUS.card,
+                padding: '14px 16px',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+              }}
+            >
+              <span style={{ fontSize: 20 }}>{s.icon}</span>
+              <div style={{ fontSize: FONT.sm, fontWeight: isActive ? 700 : 500, lineHeight: 1.3 }}>
+                Passo {idx + 1}
               </div>
-            ))}
-          </div>
-          <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>
-            💡 Clique em um módulo para abrir o passo a passo. Todo o conteúdo usa dados de demonstração (fakes) — nenhum dado real.
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Conteúdo do Passo Ativo */}
+      <div style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: RADIUS.modal,
+        padding: '32px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: SPACE.lg,
+        boxShadow: '0 4px 16px color-mix(in srgb, var(--color-foreground) 4%, transparent)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 32 }}>{step.icon}</span>
+          <div>
+            <h2 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 22,
+              color: 'var(--color-foreground)',
+              margin: 0,
+            }}>
+              {step.title}
+            </h2>
+            <div style={{ fontSize: FONT.md, color: 'var(--color-muted)', marginTop: 2 }}>
+              {step.subtitle}
+            </div>
           </div>
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>
-          {/* Controles do wizard */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.sm }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm }}>
-              <Button size="sm" variant="secondary" onClick={voltarParaLista}>← Todos os módulos</Button>
-              <strong style={{ fontSize: FONT.md, color: 'var(--color-foreground)' }}>{modulo.label}</strong>
-              <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>Módulo {moduloIdx! + 1} de {modulos.length} · Passo {passoIdx + 1} de {modulo.passos.length}</span>
-            </div>
-            <div style={{ display: 'flex', gap: SPACE.sm }}>
-              <Button size="sm" variant="secondary" disabled={noInicio} onClick={voltar}>← Anterior</Button>
-              <Button size="sm" disabled={noFim} onClick={avancar}>Próximo →</Button>
-            </div>
-          </div>
 
-          {/* Slider de passos */}
-          <div style={{ position: 'relative' }}>
-            {modulo.passos.map((p, i) => (
-              <div key={i} style={{ display: i === passoIdx ? 'block' : 'none' }}>
-                <img src={modulo.imagem} alt={p.titulo} style={{ ...IMG, maxHeight: isMobile ? 'none' : 460, objectFit: 'contain', background: '#fff' }} />
-                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: RADIUS.lg, padding: SPACE.lg, marginTop: SPACE.sm }}>
-                  <strong style={{ display: 'block', fontSize: FONT.md, color: 'var(--color-foreground)', marginBottom: 4 }}>{p.titulo}</strong>
-                  <span style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>{p.texto}</span>
-                </div>
-              </div>
-            ))}
+        <p style={{ fontSize: FONT.lg, color: 'var(--color-foreground)', lineHeight: 1.6, margin: 0 }}>
+          {step.description}
+        </p>
+
+        <div style={{
+          background: 'var(--color-surface-2)',
+          borderRadius: RADIUS.card,
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}>
+          <div style={{ fontSize: FONT.xs, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-primary)' }}>
+            💡 Boas práticas recomendadas:
           </div>
+          {step.tips.map((t, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: FONT.md, color: 'var(--color-foreground)' }}>
+              <span style={{ color: 'var(--color-accent)', fontWeight: 700 }}>✓</span>
+              <span>{t}</span>
+            </div>
+          ))}
         </div>
-      )}
-    </PageContainer>
+      </div>
+    </div>
   )
 }

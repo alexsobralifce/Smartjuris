@@ -367,6 +367,7 @@ export default function GeradorPecas() {
         // os dados processuais; a CHAVE DE IDEMPOTÊNCIA cobre TODOS eles.
         const dadosCasoFinal = `${dadosCaso}\n\n[DADOS PROCESSUAIS]: Autor: ${nomeCliente || 'Autor'}, Réu: ${parteAdversa || 'Réu'}, Vara: ${varaTribunal || 'Vara Cível'}, Valor: ${valorCausa || 'A apurar'}.`;
         let idempotencyKey = '';
+        let erroReconciliacao = false;
         try {
           // A chave é montada DENTRO do try: qualquer falha (ex. crypto.subtle)
           // cai no catch e devolve a interface a um estado recuperável.
@@ -415,7 +416,6 @@ export default function GeradorPecas() {
           let acc = '';
           let lastFlush = 0;
           let buffer = '';
-          let erroReconciliacao = false;
           let recebeuTerminal = false;
           let pecaPersistida = false;
           const persistirPeca = async (conteudo: string) => {

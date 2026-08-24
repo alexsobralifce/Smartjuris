@@ -3,6 +3,9 @@ import { api, getErrorMessage } from '../api/client'
 import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import PricingSection from './PricingSection'
+import ProductionShowcase from './ProductionShowcase'
+import TestimonialsSection from './TestimonialsSection'
+import lawyersImg from '../assets/lawyers_operating_smartjuris.jpg'
 
 // Tipografia do hero — exceção de marketing permitida (46px).
 const HERO_FONT_SIZE = 46
@@ -949,40 +952,69 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA Nativa</strong>. Crie minutas de peças em segundos com RAG vetorial, revise contratos com scanner de risco e acompanhe a linha do tempo do processo e prazos.
           </p>
 
-          {/* Ilustração SVG de Advogados e Tecnologia da Justiça */}
+          {/* Showcase Visual: Foto Real dos Advogados Operando o SmartJuris com IA */}
           <div style={{
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
-            borderRadius: 12,
-            padding: '24px',
+            borderRadius: RADIUS.card,
+            overflow: 'hidden',
             marginBottom: 32,
+            boxShadow: '0 8px 24px color-mix(in srgb, var(--color-foreground) 6%, transparent)',
             display: 'flex',
-            flexDirection: isDesktop ? 'row' : 'column',
-            alignItems: 'center',
-            gap: SPACE.xl
+            flexDirection: 'column',
           }}>
-            <svg width="110" height="90" viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-              {/* Ilustração Representativa de Advogado/Advogada com Pasta e Documento de IA */}
-              <rect x="10" y="20" width="40" height="65" rx="6" fill="var(--color-primary)"/>
-              <circle cx="30" cy="35" r="10" fill="var(--color-accent-light)"/>
-              <path d="M18 65C18 55 23 50 30 50C37 50 42 55 42 65V80H18V65Z" fill="var(--color-accent)"/>
-
-              {/* Documento Digital Jurídico */}
-              <rect x="60" y="15" width="50" height="70" rx="6" fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth="2"/>
-              <line x1="68" y1="28" x2="98" y2="28" stroke="var(--color-primary)" strokeWidth="3" strokeLinecap="round"/>
-              <line x1="68" y1="38" x2="102" y2="38" stroke="var(--color-muted)" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="68" y1="46" x2="95" y2="46" stroke="var(--color-muted)" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="68" y1="54" x2="88" y2="54" stroke="var(--color-muted)" strokeWidth="2" strokeLinecap="round"/>
-              <circle cx="95" cy="70" r="10" fill="var(--color-success)"/>
-              <path d="M91 70L94 73L99 67" stroke="var(--color-on-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-
-            <div>
-              <div style={{ fontSize: FONT.lg, fontWeight: 600, color: 'var(--color-primary)', marginBottom: 4 }}>
-                Arquitetura em 4 Camadas de Segurança
+            <div style={{
+              position: 'relative',
+              width: '100%',
+              // Em mobile reduz o tamanho drasticamente conforme o requisito do usuário
+              maxHeight: isMobile ? 180 : isTablet ? 260 : 320,
+              overflow: 'hidden',
+            }}>
+              <img
+                src={lawyersImg}
+                alt="Advogados operando a plataforma jurídica SmartJuris com inteligência artificial"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                  filter: 'contrast(1.02) brightness(0.98)',
+                }}
+                loading="eager"
+              />
+              <div style={{
+                position: 'absolute',
+                bottom: 8,
+                right: 8,
+                background: 'rgba(26, 39, 68, 0.85)',
+                backdropFilter: 'blur(6px)',
+                color: '#ffffff',
+                fontSize: FONT.xs,
+                fontWeight: 600,
+                padding: '4px 10px',
+                borderRadius: RADIUS.chip,
+                border: '1px solid rgba(255,255,255,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+              }}>
+                <span>⚖️</span>
+                <span>IA Supervisionada por Advogados</span>
               </div>
-              <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-                1. Geração LLM · 2. RAG Vetorial (BGE-M3) · 3. Banco de Cláusulas · 4. Validação e Crivo Humano Obrigatório.
+            </div>
+
+            <div style={{
+              padding: isMobile ? '16px 18px' : '20px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              background: 'var(--color-surface)',
+            }}>
+              <div style={{ fontSize: FONT.lg, fontWeight: 700, color: 'var(--color-primary)' }}>
+                Blindagem Ética OAB & RAG Vetorial sem Alucinações
+              </div>
+              <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+                1. Extração semântica com BGE-M3 · 2. Raciocínio DeepSeek V4 · 3. Playbooks de teses · 4. Crivo e validação humana auditável.
               </div>
             </div>
           </div>
@@ -1181,6 +1213,13 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         </div>
       </main>
 
+      {/* Seção 1: Mostruário de Produção com Fonte Destacada & Capacidade por Plano */}
+      <ProductionShowcase />
+
+      {/* Seção 2: Feedbacks e Prova Social de Advogados pelo Brasil */}
+      <TestimonialsSection />
+
+      {/* Seção 3: Planos e Preços Detalhados */}
       <PricingSection />
 
       {/* Footer Swiss */}

@@ -16,7 +16,7 @@
     "maxContextChars": 450000
   },
   "limits": {
-    "maxCorrectionAttempts": 12,
+    "maxCorrectionAttempts": 16,
     "maxRequirementChars": 20000,
     "requireTests": true,
     "requireBuild": true,

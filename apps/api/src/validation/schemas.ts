@@ -280,3 +280,19 @@ export const creditosAddSchema = z.object({
   quantidade: z.number().int().positive().max(1_000_000_000),
 });
 
+// --- Billing (Mercado Pago): escolha do plano de assinatura ---
+// Allowlist server-side: preço/produto são resolvidos EXCLUSIVAMENTE no
+// backend (services/billing.ts → BILLING_PLANS); o cliente nunca envia
+// valores monetários. Aliases aceitos: basico | intermediario | profissional |
+// avancado | office | enterprise.
+export const checkoutSchema = z.object({
+  plano: z.enum([
+    'basico',
+    'intermediario',
+    'profissional',
+    'avancado',
+    'office',
+    'enterprise',
+  ]),
+});
+

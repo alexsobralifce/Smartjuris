@@ -22,6 +22,8 @@ import rootDocumentosRoutes from './routes/rootDocumentos.js';
 import pilotoRoutes from './routes/piloto.js';
 import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 import agendaRoutes from './routes/agenda.js';
+import billingRoutes from './routes/billing.js';
+import billingWebhookRoutes from './routes/billingWebhook.js';
 
 import { authMiddleware } from './middlewares/auth.js';
 import { refreshSession } from './middlewares/refreshSession.js';
@@ -70,6 +72,13 @@ app.use('/api', globalApiLimiter);
 // Rotas — ordem importa: rotas mais específicas primeiro.
 // Auth (público, mas com authMiddleware para /me e /logout)
 app.use('/api/auth', authRoutes);
+
+// Billing — webhook PÚBLICO (Mercado Pago não envia cookie; segurança via
+// x-signature + conferência na API do MP). Deve vir ANTES do router autenticado.
+app.use('/api/billing/webhook', billingWebhookRoutes);
+
+// Billing autenticado — assinatura do escritório (admin; root bloqueado)
+app.use('/api/billing', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, billingRoutes);
 
 // Plataforma — root only
 app.use('/api/root/escritorios', authMiddleware, refreshSession, requireRoot, escritorioRoutes);

@@ -206,6 +206,16 @@ export const escritorios = pgTable('escritorios', {
   creditsAvailable: integer('credits_available').notNull().default(0),
   reserveCentsUsed: integer('reserve_cents_used').notNull().default(0),
   cycleMonth: text('cycle_month').notNull().default(sql`to_char(now(), 'YYYY-MM')`),
+  // Billing (Fase Mercado Pago, migration 0027): assinatura recorrente.
+  mercadoPagoId: text('mercado_pago_id'),
+  mercadoPagoPlanId: text('mercado_pago_plan_id'),
+  // nenhuma | pendente | ativa | atrasada | cancelada
+  assinaturaStatus: text('assinatura_status').notNull().default('nenhuma'),
+  // plano contratado na assinatura (basico | profissional | office)
+  assinaturaPlano: text('assinatura_plano'),
+  assinaturaProximaCobranca: timestamp('assinatura_proxima_cobranca', { withTimezone: true }),
+  assinaturaUltimaCobranca: timestamp('assinatura_ultima_cobranca', { withTimezone: true }),
+  assinaturaExpiracao: timestamp('assinatura_expiracao', { withTimezone: true }),
 });
 
 export const permissoesUsuario = pgTable('permissoes_usuario', {
@@ -419,8 +429,7 @@ export const aiOperations = pgTable('ai_operations', {
 }));
 
 // Ledger de créditos (append-only): reserva, liquidação, liberação, ajuste.
-export const creditLedger = pgTable('credit_ledger', {
-  id: uuid('id').defaultRandom().primaryKey(),
+export const creditLedger = pgTable('credit_ledger', {  id: uuid('id').defaultRandom().primaryKey(),
   escritorioId: uuid('escritorio_id').notNull(),
   usuarioId: uuid('usuario_id'),
   operationId: uuid('operation_id'),
@@ -439,6 +448,67 @@ export const creditLedger = pgTable('credit_ledger', {
   escIdx: index('credit_ledger_esc_idx').on(table.escritorioId, table.createdAt),
   tenantKeyIdx: uniqueIndex('credit_ledger_tenant_key_unique').on(table.escritorioId, table.idempotencyKey),
 }));
+
+// Eventos de webhook do Mercado Pago (append-only): idempotência persistida
+// por (event_type, data_id) — replays/reenvios são ignorados (migration 0029).
+// `processando_em`/`attempts` (migration 0030): lease de processamento para
+// aquisição atômica/exclusiva do evento sob concorrência.
+export const billingWebhookEvents = pgTable('billing_webhook_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  eventType: text('event_type').notNull(),
+  dataId: text('data_id').notNull(),
+  resultStatus: text('result_status').notNull(),
+  resultDetail: text('result_detail'),
+  escritorioId: uuid('escritorio_id'),
+  processandoEm: timestamp('processando_em', { withTimezone: true }),
+  attempts: integer('attempts').notNull().default(0),
+  // Timestamp/versão do recurso no provedor (migration 0032) — ordenação.
+  provedorTs: timestamp('provedor_ts', { withTimezone: true }),
+  // Status do recurso na notificação (migration 0033): a deduplicação por
+  // (event_type, data_id, data_estado) permite múltiplas TRANSIÇÕES do mesmo
+  // recurso (ex.: pending → authorized → cancelled), cada uma processada 1x.
+  dataEstado: text('data_estado'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  unique: uniqueIndex('billing_webhook_events_unique').on(table.eventType, table.dataId, table.dataEstado),
+  escIdx: index('billing_webhook_events_esc_idx').on(table.escritorioId, table.createdAt),
+}));
+
+// Operações de checkout persistidas (outbox leve, migration 0031): cada
+// intenção de criar/trocar assinatura é registrada ANTES da chamada ao
+// Mercado Pago, com chave de idempotência estável por operação.
+// `fase`/`resultado_incerto`/`processando_em` (migration 0034): transições
+// explícitas + distinção de falha ambígua + lease atômico da operação.
+export const billingCheckoutOperations = pgTable('billing_checkout_operations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  escritorioId: uuid('escritorio_id').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  plano: text('plano').notNull(),
+  // pending | created | done | failed | cancelled
+  estado: text('estado').notNull().default('pending'),
+  // pending | cancelando | criando | gravando | done
+  fase: text('fase').notNull().default('pending'),
+  // true quando o resultado remoto é ambíguo (timeout/5xx) — retry reconcilia
+  resultadoIncerto: boolean('resultado_incerto').notNull().default(false),
+  processandoEm: timestamp('processando_em', { withTimezone: true }),
+  mercadoPagoId: text('mercado_pago_id'),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  unique: uniqueIndex('billing_checkout_operations_key_unique').on(table.idempotencyKey),
+  escIdx: index('billing_checkout_operations_esc_idx').on(table.escritorioId, table.createdAt),
+}));
+
+// Lease atômico por escritório (migration 0035): impede checkout/cancelamento
+// concorrentes do mesmo escritório durante toda a operação remota (o advisory
+// lock transacional não cobre chamadas fora da transação).
+export const billingEscritorioLocks = pgTable('billing_escritorio_locks', {
+  escritorioId: uuid('escritorio_id').primaryKey(),
+  processandoEm: timestamp('processando_em', { withTimezone: true }).notNull().defaultNow(),
+  dono: text('dono').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 
 

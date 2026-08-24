@@ -278,6 +278,15 @@ export const api = {
     getPermissoes: (id: string) => authFetch(`/api/admin/escritorio/permissoes/${id}`).then(r => r.json()),
     getMetricas: () => authFetch('/api/admin/escritorio/metricas').then(r => r.json()),
   },
+  billing: {
+    planos: () => authFetch('/api/billing/planos').then(r => r.json()),
+    status: () => authFetch('/api/billing/status').then(r => r.json()),
+    checkout: (plano: string) => authFetch('/api/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ plano }),
+    }),
+    cancelar: () => authFetch('/api/billing/cancelar', { method: 'POST' }),
+  },
   raiz: {
     listEscritorios: () => authFetch('/api/root/escritorios').then(r => r.json()),
     criarEscritorio: async (data: { nome: string; adminNome: string; adminEmail: string }) =>

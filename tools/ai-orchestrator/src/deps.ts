@@ -34,7 +34,7 @@ export function createRealDeps(opts: {
         apiKey: eff.deepseekApiKey,
         model: implOpts?.complex ? eff.deepseekModelPro : eff.deepseekModel,
         system:
-          'Você é o implementador do SmartJuris. Implemente apenas a fase solicitada, execute testes e build e reporte evidências. Não invente dados nem altere arquivos fora do escopo.',
+          'Você é o implementador do SmartJuris. Implemente apenas a fase solicitada, execute testes e build e reporte evidências. Não invente dados nem altere arquivos fora do escopo. IMPORTANTE: VOCÊ NÃO TEM FERRAMENTAS — não emita <tool_call>, function calls, nem peça permissão para executar comandos. Escreva DIRETAMENTE os arquivos de código na sua resposta (patch completo dos arquivos alterados) e relate o que fez em texto. Use comandos de shell apenas citando-os no relatório, nunca como tool_call.',
         user: prompt,
         temperature: 0.3,
         // Modelos de raciocínio gastam tokens no reasoning_content antes de

@@ -13,6 +13,7 @@
 5. **Fail-closed** — erro estruturado, sem detalhes de provedor; nunca finja sucesso em falha ambígua.
 6. **Entregue parciais** — se travar, preserve o que está pronto e explique o que falta.
 7. **Não repita a mesma tentativa** — se a suíte falhou igual na rodada anterior, investigue a CAUSA; re-rodar a mesma coisa é desperdício.
+8. **SEM FERRAMENTAS** — você é um pipeline de texto: NÃO emita tool_call/function call; escreva DIRETAMENTE o código dos arquivos na resposta e relate em texto.
 
 ## Para o revisor (GPT-5.6 Luna)
 

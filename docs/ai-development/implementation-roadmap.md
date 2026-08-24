@@ -782,14 +782,14 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 **Critérios de aceite:**
 
 - [x] `pnpm build` do backend e frontend passam sem erros
-- [x] `pnpm test` 392 testes passando (9 unit billing + 10 integração webhook + 5 migration em banco real)
+- [x] `pnpm test` 395 testes passando (9 unit billing + 13 integração webhook + 5 migration em banco real)
 - [x] Migration 0027/0028 validadas em banco real ISOLADO via runner oficial (migrationBilling.test.ts: colunas + CHECK constraints + idempotência)
 - [x] Migration 0029: `billing_webhook_events` (idempotência persistida por event_type+data_id)
 - [x] CHECK constraints de `assinatura_status` e `assinatura_plano` (0028) rejeitam valores fora do catálogo
 - [x] checkoutSchema restringe plano a enum/allowlist server-side (preço resolvido só no backend)
 - [x] Webhook testado em integração: assinatura HMAC válida/inválida, replay ignorado (persistido), evento expirado rejeitado, fail-closed em produção, evento desconhecido, falha do MP, ativação/desativação (billingWebhook.test.ts)
-- [x] Webhook com lease de processamento (migration 0030): aquisição atômica/exclusiva do evento (UPDATE condicional); evento em ERRO/lease expirado pode ser reprocessado; deduplicação só consolida após sucesso; fail-closed se tabela indisponível em produção
-- [x] Checkout idempotente: assinatura ATIVA → 409; pendente do mesmo plano → devolve init_point real do MP (retomada); cancelamento remoto falho → interrompe (502, sem duplicidade); advisory lock transacional por escritório no checkout E no cancelar; X-Idempotency-Key (escritorioId:plano) no MP — retries retornam o MESMO preapproval
+- [x] Webhook com lease de processamento (migration 0030): aquisição atômica/exclusiva (UPDATE condicional); PROCESSANDO/RECEBIDO retomáveis SÓ com lease expirado/ausente; estados finalizados reprocessáveis separados; testes de lease ativo/expirado/finalizado; fail-closed em produção
+- [x] Checkout com outbox (migration 0031): operação persistida com estado+chave ANTES da chamada ao MP; X-Idempotency-Key estável por operação; assinatura ATIVA → 409; pendente → retoma init_point; cancelamento remoto falho → interrompe; advisory lock no checkout E no cancelar
 - [x] Cancelar consistente: desativação local só após confirmação do provedor (falha remota → 502 sem desativar)
 - [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
 - [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
@@ -879,6 +879,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | reauditoria: gate aprovado (ganhos TPM confirmados) |
+| 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |

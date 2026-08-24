@@ -89,6 +89,9 @@ export const AutomationConfig = z.object({
     /** Doom-loop de comando: mesma saída de comando (hash) N vezes seguidas →
      *  stop (evita re-rodar suíte que falha sempre do mesmo jeito). */
     maxComandoRepetido: z.number().int().positive().default(3).optional(),
+    /** Timeout (minutos) de cada chamada LLM (implementador/revisor). Baliza
+     *  anti-queima: chamada travada é abortada (não espera o teto do provedor). */
+    maxMinutesPorRodada: z.number().positive().default(10).optional(),
   }),
   preflight: z.object({
     mode: PreflightMode,

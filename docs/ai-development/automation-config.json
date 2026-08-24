@@ -26,7 +26,8 @@
     "blockOnHigh": true,
     "blockOnBlocker": true,
     "maxUsdPorFase": 0.4,
-    "maxComandoRepetido": 3
+    "maxComandoRepetido": 3,
+    "maxMinutesPorRodada": 10
   },
   "preflight": {
     "mode": "collect-all"

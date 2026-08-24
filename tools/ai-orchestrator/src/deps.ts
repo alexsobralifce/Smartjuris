@@ -42,6 +42,7 @@ export function createRealDeps(opts: {
         // escrever arquivos. 12000 garante raciocínio + código real.
         maxTokens: 12000,
         completionTokensField: 'max_tokens', // DeepSeek
+        timeoutMs: (opts.config.limits.maxMinutesPorRodada ?? 10) * 60_000,
       });
     },
     async reviewer(context: string, correctionHint?: string, modelOverride?: string) {
@@ -70,6 +71,7 @@ export function createRealDeps(opts: {
         user,
         maxTokens: 4000,
         completionTokensField: 'max_completion_tokens', // OpenAI (modelos novos)
+        timeoutMs: (opts.config.limits.maxMinutesPorRodada ?? 10) * 60_000,
       });
     },
     async structurer(prompt: string) {
@@ -85,6 +87,7 @@ export function createRealDeps(opts: {
         // reasoning_content antes de emitir o JSON; 4000 truncava o contrato.
         maxTokens: 12000,
         completionTokensField: 'max_tokens', // DeepSeek
+        timeoutMs: (opts.config.limits.maxMinutesPorRodada ?? 10) * 60_000,
       });
     },
   };

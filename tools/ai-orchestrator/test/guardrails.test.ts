@@ -191,3 +191,34 @@ describe('B4 — escalada do revisor (anti-loop de revisão)', () => {
     assert.match(r.motivo ?? '', /decisão humana/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// B5 — Timeout de LLM por rodada (maxMinutesPorRodada)
+// ---------------------------------------------------------------------------
+
+describe('B5 — timeout de chamada LLM', () => {
+  test('chatCompletion aborta com timeout curto e lança erro de limite', async () => {
+    const { chatCompletion } = await import('../src/llm.js');
+    // Servidor HTTP local que NUNCA responde (fica preso) → timeout dispara.
+    const http = await import('node:http');
+    const server = http.createServer(() => { /* nunca responde */ });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as { port: number }).port;
+    try {
+      await assert.rejects(
+        chatCompletion({
+          baseUrl: `http://127.0.0.1:${port}`,
+          apiKey: 'teste',
+          model: 'x',
+          system: 's',
+          user: 'u',
+          timeoutMs: 300, // 300ms → aborta rápido
+        }),
+        /tempo limite|LLM/,
+        'chamada travada deve ser abortada pelo timeout',
+      );
+    } finally {
+      server.close();
+    }
+  });
+});

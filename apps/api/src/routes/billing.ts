@@ -40,6 +40,38 @@ import {
 
 const router = Router();
 
+// ---------------------------------------------------------------------------
+// Router PÚBLICO — rotas de billing SEM autenticação (landing page). Montado
+// em server.ts ANTES do router autenticado (authMiddleware aplicado em
+// /api/billing no server.ts bloqueia qualquer rota deste arquivo — por isso
+// este router é exportado separadamente e montado em /api/billing).
+// Rotas deste router só casam /promocao/status; as demais fluem para o
+// router autenticado.
+// ---------------------------------------------------------------------------
+export const billingPublicRouter = Router();
+
+// GET /api/billing/promocao/status — status público da promoção (landing page)
+billingPublicRouter.get('/promocao/status', (_req, res) => {
+  const cfg = configPromocao();
+  const ativa = cfg.ativa && !promocaoExpirada(cfg);
+
+  const planos = listarPlanosAssinatura().map((p) => {
+    const promo = calcularValorPromocional(p.codigo, cfg);
+    return {
+      codigo: p.codigo,
+      precoMensal: p.precoMensal,
+      valorPromocional: promo?.ativo ? promo.valorPromocional : null,
+      valorPromocionalCents: promo?.ativo ? promo.valorPromocionalCents : null,
+    };
+  });
+
+  res.json({
+    ativa,
+    percentual: cfg.percentual,
+    planos,
+  });
+});
+
 /** URL pública de retorno (frontend) — usada no back_url do preapproval.
  *  O Mercado Pago REJEITA back_url http:// (exige https://). Em produção a
  *  APP_URL já é https; em dev local, use um túnel https (ex.: ngrok). */

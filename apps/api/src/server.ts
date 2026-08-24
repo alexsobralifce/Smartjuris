@@ -22,7 +22,7 @@ import rootDocumentosRoutes from './routes/rootDocumentos.js';
 import pilotoRoutes from './routes/piloto.js';
 import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 import agendaRoutes from './routes/agenda.js';
-import billingRoutes from './routes/billing.js';
+import billingRoutes, { billingPublicRouter } from './routes/billing.js';
 import billingWebhookRoutes from './routes/billingWebhook.js';
 
 import { authMiddleware } from './middlewares/auth.js';
@@ -76,6 +76,12 @@ app.use('/api/auth', authRoutes);
 // Billing — webhook PÚBLICO (Mercado Pago não envia cookie; segurança via
 // x-signature + conferência na API do MP). Deve vir ANTES do router autenticado.
 app.use('/api/billing/webhook', billingWebhookRoutes);
+
+// Billing PÚBLICO — status da promoção para a landing page (SEM autenticação).
+// Deve vir ANTES do router autenticado abaixo (o authMiddleware montado em
+// /api/billing bloquearia a rota caso estivesse dentro de billingRoutes).
+// Só casa /promocao/status; demais rotas seguem para o router autenticado.
+app.use('/api/billing', billingPublicRouter);
 
 // Billing autenticado — assinatura do escritório (admin; root bloqueado)
 app.use('/api/billing', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, billingRoutes);

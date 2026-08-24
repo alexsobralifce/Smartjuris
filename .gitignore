@@ -34,3 +34,4 @@ reasonix.toml
 /.plugins/
 /.opencode-skills/
 .railway-cli/
+/docs/ai-development/mercadopago-webhook-secret.txt

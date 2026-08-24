@@ -19,8 +19,8 @@ Monorepo pnpm (workspaces) — Backend Express + Drizzle ORM + PostgreSQL (pgvec
 
 **SmartJuris (LexOS Edition)** é uma plataforma SaaS de gestão jurídica inteligente, multi-tenant, com IA nativa. Unifica contencioso, consultivo, financeiro, relacionamento com clientes e operação da plataforma em um único sistema, com:
 
-- **Gestão de processos** com Matter Dashboard, linha do tempo e resumo de intimações por IA (BGE-M3 + DeepSeek V4).
-- **Geração de peças** com RAG vetorial (pgvector + BGE-M3 via Ollama) e DeepSeek V4 (Flash padrão, fallback Pro), com **fila de validação humana auditável** (crivo ético OAB) e exportação PDF/DOCX.
+- **Gestão de processos** com Matter Dashboard, linha do tempo e resumo de intimações por IA (BGE-M3 + Qwen via Token Plan).
+- **Geração de peças** com RAG vetorial (pgvector + BGE-M3 via Ollama) e Qwen via Token Plan (tier FLASH padrão, fallback PRO), com **fila de validação humana auditável** (crivo ético OAB) e exportação PDF/DOCX.
 - **Catálogo compartilhado de IA** (`@lexia/shared`): planos canônicos (ESSENTIAL/PROFESSIONAL/OFFICE) e 7 operações de IA (créditos, modelo FLASH/PRO, limites de tokens/páginas/resultados) — fonte única consumida por classifier e usage.
 - **Jurimetria preditiva**, **financeiro & timesheet faturável**, **scanner de revisão contratual**, **CRM/funil** e **base de conhecimento vetorial**.
 - **Cadastro self-service** de advogado + escritório (aprovado pelo root) e **consulta de jurisprudência ao vivo** em tribunais.
@@ -34,7 +34,7 @@ Monorepo pnpm (workspaces) — Backend Express + Drizzle ORM + PostgreSQL (pgvec
 | Agenda | `agenda` | `components/Agenda.tsx` | Calendário de eventos (audiências, reuniões, prazos) com CRUD e vínculo a processos/clientes |
 | Processos | `processos` | `components/Processos.tsx` | Gestão de processos com Matter Dashboard, linha do tempo e resumo de intimações por IA |
 | Clientes | `clientes` | `components/Clientes.tsx` | CRUD de clientes PF/PJ com máscaras de CPF/CNPJ e busca de CEP (ViaCEP) |
-| Gerar Peças | `pecas` | `components/GeradorPecas.tsx` | Fluxo em 4 etapas: tipo → dados do caso → RAG BGE-M3 + DeepSeek (streaming) → revisão/exportação |
+| Gerar Peças | `pecas` | `components/GeradorPecas.tsx` | Fluxo em 4 etapas: tipo → dados do caso → RAG BGE-M3 + Qwen (streaming) → revisão/exportação |
 | Validação | `validacao` | `components/Validacao.tsx` | Fila de revisão humana com crivo ético OAB, edição, exportar PDF/DOCX e metadados de custo |
 | Jurimetria | `jurimetria` | `components/Jurimetria.tsx` | Analytics de taxa de êxito por área e Calculadora Preditiva de Risco interativa |
 | Decisões & Tribunais | `decisoes` | `components/Decisoes.tsx` | Consulta ao vivo de jurisprudência (busca e lookup) via Jurisprudências.ai Live API |
@@ -84,10 +84,10 @@ Fonte única de verdade para planos e operações de IA — consumida por `class
 
 ## IA e Geração de Conteúdo
 
-- **Modelos** (`services/ai.ts`): cliente DeepSeek (OpenAI-compat, `https://api.deepseek.com/v1`) com `deepseekModel` (default `deepseek-v4-flash`) e `deepseekModelPro` (default `deepseek-v4-pro`) via env; **fallback automático Flash → Pro** na criação da chamada (complexidade alta).
+- **Modelos** (`services/ai.ts`): cliente OpenAI-compatível apontando para o Token Plan (Alibaba Model Studio/Bailian) via `AI_BASE_URL` (fallback `DEEPSEEK_BASE_URL`; default `https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`) com `deepseekModel` (default `qwen3.7-plus`) e `deepseekModelPro` (default `qwen3.8-max`) via env; **fallback automático Flash → Pro** na criação da chamada (complexidade alta). Raciocínio Qwen desligado por padrão: `opcoesQwen` envia `enable_thinking: false` (tokens de raciocínio são cobrados como saída); religue com `QWEN_ENABLE_THINKING=true`.
 - **RAG** (`routes/rag.ts`): busca vetorial/cosene em `chunks` (embedding BGE-M3 `vector(1024)`) + playbooks de teses (`services/modelosPeca.ts`) + geração com streaming SSE (sem markdown, temperatura 0.3).
 - **Classificador** (`services/classifier.ts`): classifica operação → modelo FLASH/PRO, créditos e limites, a partir do catálogo compartilhado.
-- **Custo/cota** (`services/usage.ts`): rastreia tokens (pico/fora-pico), precificação por modelo, limites por operação e cota mensal (`checkTokenQuota`).
+- **Custo/cota** (`services/usage.ts`): rastreia tokens (pico/fora-pico), precificação por modelo, limites por operação e cota mensal (`checkTokenQuota`). Tier FLASH/PRO derivado do NOME do modelo (`precoDoModelo`: `pro`/`max` → PRO; demais → FLASH) — vale para reserva (tier canônico) e liquidação (modelo real).
 - **Resumos de intimações** (`routes/andamentos.ts`): resumo em 2 frases com ação recomendada e prazo fatal, com redação de PII antes do envio (`services/pii.ts`).
 - **Embeddings**: `services/embedding.ts` gera BGE-M3 via Ollama (com timeout configurável).
 - **Jurisprudência**: `services/jurisprudencias.ts` integra a Jurisprudências.ai Live API (`/courts`, `/search`, `/lookup`).
@@ -191,7 +191,7 @@ Fonte única de verdade para planos e operações de IA — consumida por `class
 | `financeiro` | `/api/financeiro` | módulo financeiro | GET/POST lancamentos, PATCH, GET/POST timesheet |
 | `andamentos` | `/api/andamentos` | negócio | GET por processo; POST com resumo IA e prazo fatal |
 | `documentos` | `/api/documentos` | negócio | GET lista; POST upload (multer) para indexação vetorial |
-| `rag` | `/api/rag` | módulo pecas | GET modelos (playbooks); POST generate (RAG + DeepSeek streaming) |
+| `rag` | `/api/rag` | módulo pecas | GET modelos (playbooks); POST generate (RAG + Qwen streaming) |
 | `jurimetria` | `/api/jurimetria` | módulo jurimetria | GET stats (êxito por área/status) |
 | `jurisprudencias` | `/api/jurisprudencias` | negócio | GET courts, search, lookup |
 | `agenda` | `/api/agenda` | negócio | GET eventos do mês; POST/PUT/DELETE eventos |
@@ -238,7 +238,7 @@ Persistência relacional e vetorial no PostgreSQL com extensão `vector`. Todas 
 ## Serviços e Middlewares
 
 **Serviços (`apps/api/src/services/`):**
-- `ai.ts` — Cliente DeepSeek (OpenAI-compat) + geração de peças com streaming; modelos V4 via env com fallback Pro.
+- `ai.ts` — Cliente Token Plan/Qwen (OpenAI-compat) + geração de peças com streaming; modelos via env com fallback FLASH→PRO; `opcoesQwen` desliga raciocínio por padrão.
 - `classifier.ts` — Classifica operação → modelo/créditos/limites (deriva `OPERATION_CATALOG` do shared).
 - `usage.ts` — Custo de tokens (pico/fora-pico) + limites por operação + cota mensal (`checkTokenQuota`); deriva `OPERATION_LIMITS`/`PLANS` do shared.
 - `documento.ts` — Indexação/escopo documental (`IndexedStatus`, validação de escritório).
@@ -305,7 +305,7 @@ Regras de UI: máx. 2 colunas em formulários (1 no mobile); mobile-first adapt�
 
 ## Variáveis de Ambiente (backup em `.env.example`)
 
-**Backend (`process.env.*`):** `PORT`, `CORS_ORIGINS`, `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV`, `DATA_ENCRYPTION_KEY`, `DEEP_SEEK_API`, `DEEPSEEK_MODEL` (default `deepseek-v4-flash`), `DEEPSEEK_MODEL_PRO` (default `deepseek-v4-pro`), `DEEPSEEK_INPUT_COST_PEAK`/`OFFPEAK` (0.44/0.22), `DEEPSEEK_OUTPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `USD_BRL_RATE`, `OLLAMA_URL`, `EMBEDDING_TIMEOUT_MS`, `JURISPRUDENCIAS_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SERVICE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_CONNECTION_TIMEOUT_MS`, `SMTP_GREETING_TIMEOUT_MS`, `SMTP_SOCKET_TIMEOUT_MS`, `ROOT_NOTIFICATION_EMAIL`, `ROOT_EMAIL`, `ROOT_PASSWORD`, `ROOT_AUTH_EMAIL`, `ROOT_AUTH_PASSWORD`, `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, `REQUIRE_EMAIL_OTP` (default `false`), `ANTHROPIC_API_KEY`.
+**Backend (`process.env.*`):** `PORT`, `CORS_ORIGINS`, `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV`, `DATA_ENCRYPTION_KEY`, `DEEP_SEEK_API` (chave do Token Plan), `AI_BASE_URL` (endpoint OpenAI-compat do plano; fallback `DEEPSEEK_BASE_URL`; default Token Plan), `DEEPSEEK_MODEL` (default `qwen3.7-plus`), `DEEPSEEK_MODEL_PRO` (default `qwen3.8-max`), `QWEN_ENABLE_THINKING` (default `false` — raciocínio Qwen desligado para economizar o plano), `DEEPSEEK_INPUT_COST_PEAK`/`OFFPEAK` (0.44/0.22), `DEEPSEEK_OUTPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `DEEPSEEK_PRO_INPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `DEEPSEEK_PRO_OUTPUT_COST_PEAK`/`OFFPEAK` (3.96/1.98), `USD_BRL_RATE`, `OLLAMA_URL`, `EMBEDDING_TIMEOUT_MS`, `JURISPRUDENCIAS_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SERVICE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_CONNECTION_TIMEOUT_MS`, `SMTP_GREETING_TIMEOUT_MS`, `SMTP_SOCKET_TIMEOUT_MS`, `ROOT_NOTIFICATION_EMAIL`, `ROOT_EMAIL`, `ROOT_PASSWORD`, `ROOT_AUTH_EMAIL`, `ROOT_AUTH_PASSWORD`, `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, `REQUIRE_EMAIL_OTP` (default `false`), `ANTHROPIC_API_KEY`.
 
 **Web (`import.meta.env.*`):** `VITE_API_URL` (URL base da API).
 
@@ -333,7 +333,7 @@ pnpm ai:approve --phase <ID>     # Aprovação manual (humano)
 pnpm --filter @lexia/api dev     # tsx watch src/startup.ts (predev → shared build)
 pnpm --filter @lexia/api build   # tsc (prebuild → shared build)
 pnpm --filter @lexia/api start   # node dist/startup.js
-pnpm --filter @lexia/api test    # 130 testes (services + integração + catálogo)
+pnpm --filter @lexia/api test    # 450 testes (services + integração + catálogo)
 pnpm --filter @lexia/api db:push # drizzle-kit push
 pnpm --filter @lexia/api db:seed # seed de demonstração
 pnpm --filter @lexia/api db:seed:test  # seed QA multi-tenant

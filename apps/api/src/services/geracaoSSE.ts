@@ -8,15 +8,15 @@
 //
 // O `runAiOperation` (2F) executa: payload real → classificação → estimativa →
 // reserva idempotente → GERAÇÃO (callback injetado) → settle/release. Este
-// serviço injeta o gerador de PRODUÇÃO que faz RAG + streaming DeepSeek,
-// emite eventos SSE tipados e devolve o uso real (tokens do stream) para o
-// settle — nunca zero sem confirmação (política 3B).
+// serviço injeta o gerador de PRODUÇÃO que faz RAG + streaming do provedor
+// (Qwen via Token Plan), emite eventos SSE tipados e devolve o uso real
+// (tokens do stream) para o settle — nunca zero sem confirmação (política 3B).
 // ===========================================================================
 
 import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../middlewares/auth.js';
 import { runAiOperation } from './aiOperation.js';
-import { deepseekClient, deepseekModel, deepseekModelPro, normalizarErroProvedor } from './ai.js';
+import { deepseekClient, deepseekModel, deepseekModelPro, normalizarErroProvedor, opcoesQwen } from './ai.js';
 import { generateEmbedding } from './embedding.js';
 import { buscarChunksPorEmbedding, buscarChunksPorKeywords } from './documento.js';
 import { sql } from 'drizzle-orm';
@@ -321,7 +321,8 @@ export async function gerarPecaComSSE(
 
       emitir(res, { type: 'progresso', progresso: 50, label: `Enviando para o modelo ${modeloPorTier(modelTier)}...` });
 
-      // Streaming real do DeepSeek com outputSize efetivo (prompt + max_tokens).
+      // Streaming real do provedor (Qwen) com outputSize efetivo (prompt +
+      // max_tokens).
       const prompt = montarPrompt(payload, input.dadosCaso ?? '', contextoFinal, input.outputSize);
       // Streaming com USO REAL: `stream_options.include_usage` faz o provedor
       // retornar um chunk final com `usage` (tokens reais) — a liquidação usa
@@ -332,6 +333,7 @@ export async function gerarPecaComSSE(
         stream = await deepseekClient.chat.completions.create(
           {
             model: modeloPorTier(modelTier),
+            ...opcoesQwen(modeloPorTier(modelTier)),
             messages: [
               { role: 'system', content: 'Você é um advogado sênior e parecerista. Redija sem Markdown.' },
               { role: 'user', content: prompt },

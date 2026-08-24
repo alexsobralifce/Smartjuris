@@ -897,7 +897,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
 
         {isDesktop && (
           <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.xxl, fontSize: FONT.base, fontWeight: 500, color: 'var(--color-muted)' }}>
-            <span>RAG BGE-M3 + DeepSeek</span>
+            <span>RAG BGE-M3 + Qwen</span>
             <span>•</span>
             <span>Supervisão Ética OAB</span>
             <span>•</span>
@@ -1014,7 +1014,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 Blindagem Ética OAB & RAG Vetorial sem Alucinações
               </div>
               <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-                1. Extração semântica com BGE-M3 · 2. Raciocínio DeepSeek V4 · 3. Playbooks de teses · 4. Crivo e validação humana auditável.
+                1. Extração semântica com BGE-M3 · 2. Raciocínio Qwen · 3. Playbooks de teses · 4. Crivo e validação humana auditável.
               </div>
             </div>
           </div>

@@ -436,7 +436,7 @@ export default function GeradorPecas() {
                   cliente: nomeCliente || 'Cliente SmartJuris',
                   status: 'revisao',
                   prazo: new Date().toISOString().slice(0, 10),
-                  modelo: 'DeepSeek (classificação de servidor + fallback Flash/Pro)',
+                  modelo: 'Qwen (classificação de servidor + fallback Flash/Pro)',
                   fontes: 0,
                   conteudo,
                   // Idempotência DURÁVEL no servidor (migration 0023): mesmo que
@@ -564,7 +564,7 @@ export default function GeradorPecas() {
       <PageHeader
         eyebrow="GERAÇÃO DE PEÇAS COM IA"
         title="Gerar Peça Processual"
-        description="Motor RAG jurídico · BGE-M3 · DeepSeek Chat · Validação Auditável"
+        description="Motor RAG jurídico · BGE-M3 · Qwen · Validação Auditável"
       />
 
       {/* Stepper */}
@@ -912,7 +912,7 @@ export default function GeradorPecas() {
             )}
 
             <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.6, borderTop: '1px solid var(--color-border)', paddingTop: SPACE.lg }}>
-              🔍 <strong>Pipeline ativo:</strong> Ingestão semântica ➔ Embeddings BGE-M3 ➔ Busca vetorial no pgvector ➔ Síntese DeepSeek Chat ➔ Validação anti-alucinação.
+              🔍 <strong>Pipeline ativo:</strong> Ingestão semântica ➔ Embeddings BGE-M3 ➔ Busca vetorial no pgvector ➔ Síntese Qwen ➔ Validação anti-alucinação.
             </div>
           </div>
         </div>

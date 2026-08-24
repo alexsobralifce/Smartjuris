@@ -338,7 +338,7 @@ export default function Documentacao() {
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginTop: 12 }}>
                   {[
                     { title: 'Gestão Processual & Painel do Processo', desc: 'Controle de processos, linha do tempo de andamentos, resumo automático de intimações por IA e calculadora de prazos.' },
-                    { title: 'Geração com RAG & IA (DeepSeek)', desc: 'Produção automatizada de petições iniciais, contestações e recursos ancorados na base vetorial pgvector.' },
+                    { title: 'Geração com RAG & IA (Qwen)', desc: 'Produção automatizada de petições iniciais, contestações e recursos ancorados na base vetorial pgvector.' },
                     { title: 'Cadastro de Clientes & ViaCEP', desc: 'Consulta automática de endereço por CEP e preenchimento instantâneo da qualificação jurídica.' },
                     { title: 'Financeiro & Horas Cobráveis', desc: 'Gestão de honorários fixos e de êxito (ad exitum), com cronômetro de horas faturáveis (horas cobráveis).' },
                     { title: 'Revisão Contratual & Riscos', desc: 'Scanner autônomo de minutas contratuais para detecção de cláusulas abusivas e sugestão de redações padronizadas.' },

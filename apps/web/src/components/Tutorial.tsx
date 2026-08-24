@@ -26,7 +26,7 @@ const STEPS: TutorialStep[] = [
     title: '2. Geração de Peças & Resumos com IA Supervisionada',
     subtitle: 'Redija iniciais, contestações e recursos com precisão cirúrgica',
     description:
-      'No módulo "Gerar Peças", selecione o tipo de peça, o processo e insira os dados do caso. O DeepSeek V4 com RAG gera a minuta em menos de 3 minutos, com citações da jurisprudência nacional.',
+      'No módulo "Gerar Peças", selecione o tipo de peça, o processo e insira os dados do caso. O Qwen com RAG gera a minuta em menos de 3 minutos, com citações da jurisprudência nacional.',
     tips: [
       'Utilize o streaming para acompanhar a redação em tempo real.',
       'Defina se deseja incluir jurisprudência vinculante dos tribunais.',

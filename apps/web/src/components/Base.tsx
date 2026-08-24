@@ -224,7 +224,7 @@ export default function Base() {
                 { label: 'Modelo de Embeddings', value: 'BGE-M3 (multilíngue)' },
                 { label: 'Vector Store',          value: 'PostgreSQL (pgvector)' },
                 { label: 'Chunk Size',            value: '512 tokens' },
-                { label: 'Modelo de Geração',     value: 'DeepSeek' },
+                { label: 'Modelo de Geração',     value: 'Qwen' },
               ].map(c => (
                 <div key={c.label} style={{ padding: '12px 16px', background: 'var(--color-surface-2)', borderRadius: RADIUS.control }}>
                   <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: SPACE.xs }}>{c.label}</div>

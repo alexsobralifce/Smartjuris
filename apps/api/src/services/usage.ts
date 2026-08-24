@@ -39,15 +39,11 @@ export async function trackTokenUsage(
   const pico = isHorarioPico();
 
   let custoUsd = 0;
-  if (modelo.toLowerCase().includes('deepseek')) {
-    const inputCost = pico
-      ? Number(process.env.DEEPSEEK_INPUT_COST_PEAK ?? '0.44')
-      : Number(process.env.DEEPSEEK_INPUT_COST_OFFPEAK ?? '0.22');
-    const outputCost = pico
-      ? Number(process.env.DEEPSEEK_OUTPUT_COST_PEAK ?? '1.32')
-      : Number(process.env.DEEPSEEK_OUTPUT_COST_OFFPEAK ?? '0.66');
-    custoUsd = (prompt / 1_000_000) * inputCost + (completion / 1_000_000) * outputCost;
-  }
+  // Custo pela MESMA tabela da reserva/liquidação (tier do modelo) — vale para
+  // DeepSeek e para os modelos Qwen do Token Plan (que não contêm 'deepseek'
+  // no nome e antes ficavam com custo zero nos dashboards).
+  const price = precoDoModelo(modelo, pico);
+  custoUsd = (prompt / 1_000_000) * (price.inputCentsPerM / 100) + (completion / 1_000_000) * (price.outputCentsPerM / 100);
 
   const usdBrl = Number(process.env.USD_BRL_RATE ?? '5.00');
   const custoBrl = custoUsd * usdBrl;
@@ -198,7 +194,11 @@ export function loadPricing(env: NodeJS.ProcessEnv = process.env): TabelaPrecos 
 
 export function precoDoModelo(model: string, isPeak: boolean, env: NodeJS.ProcessEnv = process.env): PrecoModelo {
   const pricing = loadPricing(env);
-  const tier: ModeloTier = model.toLowerCase().includes('pro') ? 'pro' : 'flash';
+  // Tier pelo NOME do modelo — usado na liquidação (modelo real) e na reserva
+  // (tier canônico 'flash'/'pro'). Modelos Qwen do Token Plan: 'max' = Pro,
+  // 'plus'/'flash' = Flash. DeepSeek: 'pro' = Pro, 'flash' = Flash.
+  const nome = model.toLowerCase();
+  const tier: ModeloTier = nome.includes('pro') || nome.includes('max') ? 'pro' : 'flash';
   return isPeak ? pricing[tier].peak : pricing[tier].offPeak;
 }
 

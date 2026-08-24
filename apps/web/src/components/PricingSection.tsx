@@ -19,7 +19,7 @@ const PLANS: Plan[] = [
     price: 'R$ 180,00',
     limit: '20 peças completas por mês',
     features: [
-      'Até 20 peças geradas com RAG BGE-M3 + DeepSeek',
+      'Até 20 peças geradas com RAG BGE-M3 + Qwen',
       'Ideal para ~6 iniciais, 6 contestações e 8 recursos/contratos',
       'Economia de até ~40 horas de redação no mês',
       'Suporte técnico via WhatsApp e e-mail',

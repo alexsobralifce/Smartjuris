@@ -5,7 +5,7 @@ import { processos, clientes, usuarios, escritorios } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { decryptField } from '../services/crypto.js';
-import { deepseekClient, deepseekModel, deepseekModelPro, selecionarModeloDeepSeek } from '../services/ai.js';
+import { deepseekClient, deepseekModel, deepseekModelPro, selecionarModeloDeepSeek, opcoesQwen } from '../services/ai.js';
 import {
   validarProcessoDoEscritorio,
   buscarChunksPorEmbedding,
@@ -29,11 +29,11 @@ async function criarStreamComFallback(
   const principal = selecionarModeloDeepSeek(isComplex);
   const reserva = isComplex ? deepseekModel : deepseekModelPro;
   try {
-    const stream = await deepseekClient.chat.completions.create({ ...params, model: principal }, { signal });
+    const stream = await deepseekClient.chat.completions.create({ ...params, model: principal, ...opcoesQwen(principal) }, { signal });
     return { stream, modelUsado: principal };
   } catch (err: any) {
     console.warn(`[RAG] ${principal} falhou, tentando ${reserva}:`, err?.message);
-    const stream = await deepseekClient.chat.completions.create({ ...params, model: reserva }, { signal });
+    const stream = await deepseekClient.chat.completions.create({ ...params, model: reserva, ...opcoesQwen(reserva) }, { signal });
     return { stream, modelUsado: reserva };
   }
 }
@@ -205,7 +205,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       'Connection': 'keep-alive'
     });
 
-    // Client disconnect cancels the in-flight DeepSeek stream
+    // Client disconnect cancels the in-flight LLM stream
     req.on('close', abort);
 
     if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 10, label: 'Gerando embeddings da requisição...' })}\n\n`);
@@ -266,7 +266,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 
     const contexto = relevantChunks.map(c => c.texto).join('\n\n');
 
-    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 50, label: 'Enviando para o modelo DeepSeek...' })}\n\n`);
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 50, label: 'Enviando para o modelo Qwen...' })}\n\n`);
 
     const prompt = `Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica.
 

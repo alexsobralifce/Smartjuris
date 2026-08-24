@@ -239,7 +239,7 @@ export default function Dashboard() {
               {[
                 { label: 'Documentos indexados', value: '12.847' },
                 { label: 'Último sync jurisprudência', value: 'Hoje 06:00' },
-                { label: 'Modelo ativo', value: 'DeepSeek Chat' },
+                { label: 'Modelo ativo', value: 'Qwen' },
                 { label: 'Embeddings', value: 'BGE-M3 · PT-BR' },
               ].map(item => (
                 <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>

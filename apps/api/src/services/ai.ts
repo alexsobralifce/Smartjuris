@@ -3,8 +3,13 @@ import { z } from 'zod';
 
 // Provedor de IA: Token Plan (Alibaba Model Studio / Bailian) — OpenAI-compat.
 // Substitui o DeepSeek oficial; endpoint e chave configuráveis por env.
+// `AI_BASE_URL` é o nome canônico no código; `DEEPSEEK_BASE_URL` também é
+// aceito por compatibilidade com o .env existente.
 export const deepseekClient = new OpenAI({
-  baseURL: process.env.AI_BASE_URL || 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+  baseURL:
+    process.env.AI_BASE_URL ||
+    process.env.DEEPSEEK_BASE_URL ||
+    'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
   apiKey: process.env.DEEP_SEEK_API || '',
 });
 
@@ -12,6 +17,19 @@ export const deepseekClient = new OpenAI({
 // vs o antigo deepseek-v4-flash); complexas = qwen3.8-max (topo do plano).
 export const deepseekModel = process.env.DEEPSEEK_MODEL || 'qwen3.7-plus';
 export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'qwen3.8-max';
+
+// Raciocínio explícito (reasoning tokens) dos modelos Qwen: o "pensamento" do
+// modelo é COBRADO como tokens de saída e consome o saldo do plano muito
+// rápido (num teste trivial foram ~200 tokens de raciocínio para 1 de texto).
+// Por padrão fica DESLIGADO (`enable_thinking: false`); ligue com
+// `QWEN_ENABLE_THINKING=true` se quiser qualidade máxima de raciocínio.
+// Só é enviado para modelos Qwen — provedores OpenAI puros rejeitam
+// parâmetros desconhecidos no corpo.
+export function opcoesQwen(model: string): { enable_thinking?: false } {
+  return model.toLowerCase().startsWith('qwen') && process.env.QWEN_ENABLE_THINKING !== 'true'
+    ? { enable_thinking: false }
+    : {};
+}
 
 // Seleção dinâmica de modelo por complexidade da peça:
 // peças complexas (Recurso/Contestação) usam o Pro; demais usam o Flash.
@@ -53,6 +71,7 @@ REGRAS DE FORMAÇÃO DO SISTEMA:
   try {
     const completion = await deepseekClient.chat.completions.create({
       model: deepseekModel,
+      ...opcoesQwen(deepseekModel),
       messages: [
         { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
@@ -70,7 +89,7 @@ REGRAS DE FORMAÇÃO DO SISTEMA:
     }
     return fullText;
   } catch (err) {
-    console.error('[AI Service] Error calling DeepSeek:', err);
+    console.error('[AI Service] Erro ao chamar o provedor de IA:', err);
     throw err;
   }
 }
@@ -110,6 +129,7 @@ REGRAS DE FORMAÇÃO DO SISTEMA:
   try {
     const stream = await deepseekClient.chat.completions.create({
       model: selecionarModeloDeepSeek(isComplex),
+      ...opcoesQwen(selecionarModeloDeepSeek(isComplex)),
       messages: [
         { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
         { role: 'user', content: prompt }
@@ -120,7 +140,7 @@ REGRAS DE FORMAÇÃO DO SISTEMA:
 
     return stream;
   } catch (err) {
-    console.error('[AI Service] Error calling DeepSeek:', err);
+    console.error('[AI Service] Erro ao chamar o provedor de IA:', err);
     throw err;
   }
 }
@@ -131,7 +151,8 @@ REGRAS DE FORMAÇÃO DO SISTEMA:
 // `gerarOperacaoIA` é o ponto de integração PRODUÇÃO do orquestrador de
 // operação de IA (runAiOperation, Fase 2F): recebe o `modelTier` escolhido
 // (FLASH para a tentativa normal, PRO para a reexecução do fallback 3B),
-// chama o provedor DeepSeek e NORMALIZA erros para `ErroGeracaoIA`:
+// chama o provedor (Qwen via Token Plan) e NORMALIZA erros para
+// `ErroGeracaoIA`:
 //   - resposta do provedor com status HTTP de erro (4xx/5xx) →
 //     `confirmadoSemProcessamento: true` (o provedor respondeu SEM gerar —
 //     seguro liberar reserva e/ou reexecutar);
@@ -190,6 +211,7 @@ export async function gerarOperacaoIA(op: {
   try {
     const completion = await deepseekClient.chat.completions.create({
       model: modelo,
+      ...opcoesQwen(modelo),
       messages: [
         { role: 'system', content: 'Você é um advogado sênior e parecerista. Redija sem Markdown.' },
         { role: 'user', content: promptDeGeracao(op.payload) },

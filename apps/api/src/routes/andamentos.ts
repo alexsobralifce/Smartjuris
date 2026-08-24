@@ -3,7 +3,7 @@ import { db } from '../db/client.js';
 import { andamentos, processos } from '../db/schema.js';
 import { eq, desc, and } from 'drizzle-orm';
 import { tenantScope, tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
-import { deepseekClient, deepseekModel, deepseekModelPro } from '../services/ai.js';
+import { deepseekClient, deepseekModel, deepseekModelPro, opcoesQwen } from '../services/ai.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { parseBody, formatZodError, andamentoSchema, uuidSchema } from '../validation/schemas.js';
@@ -69,11 +69,11 @@ router.post('/', aiRateLimiter, async (req, res) => {
           let completion: any;
           let modelUsado = deepseekModel;
           try {
-            completion = await deepseekClient.chat.completions.create({ model: deepseekModel, messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
+            completion = await deepseekClient.chat.completions.create({ model: deepseekModel, ...opcoesQwen(deepseekModel), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
           } catch (err: any) {
-            console.warn('[Andamentos] DeepSeek Flash falhou, tentando Pro:', err?.message);
+            console.warn('[Andamentos] Modelo padrão falhou, tentando Pro:', err?.message);
             modelUsado = deepseekModelPro;
-            completion = await deepseekClient.chat.completions.create({ model: deepseekModelPro, messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
+            completion = await deepseekClient.chat.completions.create({ model: deepseekModelPro, ...opcoesQwen(deepseekModelPro), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
           }
           resumoIA = `🤖 Resumo IA: ${completion.choices[0]?.message?.content || 'Intimação registrada.'}`;
           await trackTokenUsage((req as any).user?.id, 'resumo_andamento', modelUsado, {

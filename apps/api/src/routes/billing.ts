@@ -13,11 +13,18 @@ import {
   promocaoExpirada,
   calcularValorPromocional,
   decidirElegibilidade,
+  marcarPromocaoUsada,
+  desmarcarPromocaoUsada,
   type ValorPromocional,
 } from '../services/promocao.js';
 import {
   MP_CONFIGURADO,
   criarAssinatura,
+  criarPreferencePromocional,
+  obterPreferenceInitPoint,
+  buscarPreferencePorReferencia,
+  falhaMpIncerta,
+  REFERENCIA_PROMOCIONAL_PREFIXO,
   cancelarPreapproval,
   obterInitPointPendente,
   buscarPreapprovalPorReferencia,
@@ -462,6 +469,366 @@ async function executarCheckout(
       mercadoPagoId: assinatura.id,
       plano,
     });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/billing/checkout-promocional — 1ª compra avulsa com valor
+// promocional (Opção C: 50% OFF na primeira mensalidade).
+//
+// Fluxo:
+//   1. Verifica elegibilidade (novo cliente, sem histórico/uso) e a flag.
+//   2. Claim ATÔMICO do uso (marcarPromocaoUsada) — persiste o uso ANTES de
+//      retornar o init_point (critério 7D) e impede corrida/anti-fraude.
+//   3. Cria a PREFERENCE avulsa no MP com o valor promocional calculado no
+//      backend e external_reference com marcador `sj-promo:` (identificação
+//      no webhook da 7E).
+//   4. Em falha remota: compensa desmarcando o uso (elegibilidade restaurada).
+// ===========================================================================
+router.post('/checkout-promocional', requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const escritorioId = req.user?.escritorioId;
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+    const parsed = parseBody(checkoutSchema, req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: formatZodError(parsed.error) });
+    }
+    const plano = parsed.data.plano;
+    if (!planoAssinatura(plano)) {
+      return res.status(400).json({ error: `Plano de assinatura inválido: ${plano}` });
+    }
+
+    // Promoção desligada/expirada → caminho promocional indisponível (o fluxo
+    // normal de assinatura permanece inalterado).
+    const cfgPromo = configPromocao();
+    if (!cfgPromo.ativa || promocaoExpirada(cfgPromo)) {
+      return res.status(400).json({ error: 'A promoção de boas-vindas não está ativa no momento.', code: 'PROMOCAO_INATIVA' });
+    }
+    if (!MP_CONFIGURADO) {
+      return res.status(503).json({ error: 'Mercado Pago não configurado (MERCADO_PAGO_ACCESS_TOKEN ausente).' });
+    }
+
+    // Valida TODA a configuração (URLs https) ANTES de tocar o provedor.
+    const backUrl = `${appUrl()}/?r=assinatura`;
+    const notificationUrl = `${apiUrl()}/api/billing/webhook`;
+    const erroUrl = validarUrlMp(backUrl, 'APP_URL') ?? validarUrlMp(notificationUrl, 'PUBLIC_API_URL');
+    if (erroUrl) {
+      return res.status(400).json({ error: erroUrl });
+    }
+
+    // Lease atômico POR ESCRITÓRIO: impede checkout promocional × checkout/
+    // cancelamento concorrentes do mesmo escritório. A ELEGIBILIDADE é
+    // verificada DENTRO do executar (após a reutilização de retry — um retry
+    // do mesmo checkout já marcou o uso e não pode ser barrado pela
+    // elegibilidade que ele mesmo satisfez na 1ª chamada).
+    const lockAdquirido = await adquirirLockEscritorio(escritorioId, `checkout-promo:${req.user?.id ?? '?'}`);
+    if (!lockAdquirido) {
+      return res.status(409).json({
+        error: 'Já existe uma operação de assinatura em andamento para este escritório. Aguarde e tente novamente.',
+        code: 'ESCRITORIO_EM_OPERACAO',
+      });
+    }
+    try {
+      return await executarCheckoutPromocional(req, res, { escritorioId, plano, backUrl, notificationUrl });
+    } finally {
+      await liberarLockEscritorio(escritorioId);
+    }
+  } catch (error) {
+    // Fail-closed: NUNCA expõe status/corpo do provedor ao cliente. Erros com
+    // status próprio (502 do catch da FASE 2) preservam o status e a mensagem
+    // sanitizada; demais erros retornam mensagem genérica.
+    const status = (error as any)?.status && Number((error as any).status) >= 400 ? Number((error as any).status) : 500;
+    const mensagem = status === 502 ? (error as Error).message : 'Erro ao criar checkout promocional.';
+    console.error('[Billing] Erro ao criar checkout promocional:', (error as Error).message);
+    res.status(status).json({ error: mensagem });
+  }
+});
+
+/**
+ * Executa o checkout promocional sob o lock por escritório já adquirido:
+ * claim do uso → preference avulsa no MP → gravação do init_point.
+ *
+ * Robustez (revisor 7D):
+ *   - persistência do outbox OBRIGATÓRIA (sem sucesso se a gravação falhar);
+ *   - falha AMBÍGUA do provedor (timeout/5xx) NÃO desmarca o uso — o retry
+ *     reconcilia por external_reference (nunca duplica o benefício);
+ *   - falha DEFINITIVA (4xx) desmarca (elegibilidade restaurada);
+ *   - erros fail-closed (nunca expõem detalhes do provedor);
+ *   - id/init_point da resposta validados antes do 201.
+ *
+ * Idempotência/retry: a idempotencyKey é ESTÁVEL por (escritório, plano) e a
+ * preference criada é persistida no outbox (billingCheckoutOperations). Um
+ * segundo clique devolve o init_point da preference pendente (reutilização)
+ * em vez de criar outra.
+ */
+async function executarCheckoutPromocional(
+  req: AuthenticatedRequest,
+  res: Response,
+  ctx: { escritorioId: string; plano: string; backUrl: string; notificationUrl: string },
+): Promise<Response> {
+  const { escritorioId, plano, backUrl, notificationUrl } = ctx;
+  const cfgOp = planoAssinatura(plano);
+  const idempotencyKey = `sj-promo-${escritorioId}-${cfgOp?.codigo ?? plano}`;
+  const externalReference = `${REFERENCIA_PROMOCIONAL_PREFIXO}${escritorioId}`;
+
+  // =====================================================================
+  // FASE 0 — Retry/reutilização: se esta operação promocional já criou a
+  // preference (efeito remoto concluído), devolve o init_point pendente sem
+  // chamar o provedor de novo (o claim já foi feito na 1ª tentativa).
+  // =====================================================================
+  const [operacao] = await db.select({
+    estado: billingCheckoutOperations.estado,
+    resultadoIncerto: billingCheckoutOperations.resultadoIncerto,
+    mercadoPagoId: billingCheckoutOperations.mercadoPagoId,
+  }).from(billingCheckoutOperations)
+    .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey))
+    .limit(1);
+  if (operacao?.mercadoPagoId && (operacao.estado === 'pending' || operacao.estado === 'created')) {
+    const initPoint = await obterPreferenceInitPoint(operacao.mercadoPagoId);
+    if (initPoint) {
+      return res.status(200).json({
+        initPoint,
+        preferenceId: operacao.mercadoPagoId,
+        plano,
+        promocional: true,
+        reutilizada: true,
+      });
+    }
+  }
+
+  // =====================================================================
+  // FASE 0r — RECONCILIAÇÃO de operação `pending` SEM mercadoPagoId: a
+  // preference pode ter sido criada remotamente e a PERSISTÊNCIA LOCAL do
+  // resultado falhou (insert do created) — o efeito remoto existe mas a
+  // operação local ficou sem id. Busca a preference REAL no MP:
+  //   - encontrada active/pending → recupera e persiste o id (nunca duplica);
+  //   - encontrada APROVADA/outros → pagamento já ocorreu no MP: NUNCA trata
+  //     como ausência — bloqueia nova cobrança e preserva o claim (a 7E
+  //     ativa o escritório via webhook);
+  //   - busca INCONCLUSIVA (erro) → fail-closed: não prossegue nem desmarca
+  //     (retry posterior reconsulta);
+  //   - ausência CONFIRMADA → a preference nunca foi criada: segue o fluxo
+  //     normal (claim abaixo marca/atualiza e cria a preference).
+  // =====================================================================
+  if (operacao?.estado === 'pending' && !operacao.mercadoPagoId) {
+    const reconciliada = await buscarPreferencePorReferencia(externalReference);
+    if (reconciliada.status === 'erro') {
+      return res.status(502).json({
+        error: 'Não foi possível confirmar o estado do pagamento no Mercado Pago. Tente novamente em instantes.',
+        code: 'PROMOCAO_RECONCILIACAO_INDISPONIVEL',
+      });
+    }
+    if (reconciliada.preference?.id) {
+      const st = String(reconciliada.preference.status ?? '');
+      if (st === 'active' || st === 'pending') {
+        await db.update(billingCheckoutOperations)
+          .set({ estado: 'created', mercadoPagoId: String(reconciliada.preference.id), updatedAt: new Date() })
+          .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey));
+        const initPoint = await obterPreferenceInitPoint(String(reconciliada.preference.id));
+        if (initPoint) {
+          return res.status(200).json({
+            initPoint,
+            preferenceId: String(reconciliada.preference.id),
+            plano,
+            promocional: true,
+            reutilizada: true,
+          });
+        }
+      } else {
+        // Preference APROVADA/CONCLUÍDA (pagamento ocorreu): a 1ª compra
+        // promocional JÁ FOI PAGA. Manter o claim e bloquear nova cobrança
+        // (anti-duplicação); a ativação segue via webhook (7E).
+        await db.update(billingCheckoutOperations)
+          .set({ estado: 'created', mercadoPagoId: String(reconciliada.preference.id), updatedAt: new Date() })
+          .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey));
+        return res.status(409).json({
+          error: 'O pagamento promocional já foi concluído. Aguarde a ativação do escritório.',
+          code: 'PROMOCAO_PAGAMENTO_CONCLUIDO',
+        });
+      }
+    } else {
+      // Ausência CONFIRMADA: a preference nunca foi criada no MP. A operação
+      // pending sem id significa que o efeito remoto NÃO ocorreu — desmarca o
+      // uso e reabre a operação, deixando o fluxo refazer o claim limpo.
+      await desmarcarPromocaoUsada(escritorioId, plano);
+      await db.update(billingCheckoutOperations)
+        .set({ estado: 'pending', resultadoIncerto: false, updatedAt: new Date() })
+        .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey));
+    }
+  }
+
+  // =====================================================================
+  // FASE 0b — RECONCILIAÇÃO pós-falha AMBÍGUA (evidência local): a operação
+  // está `failed` com `resultadoIncerto=true` (a FASE 2 gravou essa evidência
+  // quando o efeito remoto era incerto). Busca a preference REAL no MP pelo
+  // external_reference `sj-promo:<id>`:
+  //   - existe active/pending → recupera e persiste (nunca duplica);
+  //   - existe APROVADA/outros → pagamento já ocorreu: NUNCA desmarca, NUNCA
+  //     recria cobrança — bloqueia (o webhook 7E ativa o escritório);
+  //   - busca INCONCLUSIVA (erro) → fail-closed: NUNCA desmarca (o uso fica
+  //     preservado; o retry reconsulta mais tarde);
+  //   - ausência CONFIRMADA → a falha foi definitiva → desmarca o uso e
+  //     segue para uma nova tentativa limpa.
+  // SEM essa evidência local, `promocao_usada=true` é uso REAL concluído
+  // (anti-abuso 7C) — NUNCA desmarca.
+  // =====================================================================
+  if (operacao?.estado === 'failed' && operacao.resultadoIncerto === true) {
+    const reconciliada = await buscarPreferencePorReferencia(externalReference);
+    if (reconciliada.status === 'erro') {
+      // Busca inconclusiva ≠ ausência: NÃO desmarca (evita duplicação de
+      // benefício). Retry posterior reconsulta.
+      return res.status(502).json({
+        error: 'Não foi possível confirmar o estado do pagamento no Mercado Pago. Tente novamente em instantes.',
+        code: 'PROMOCAO_RECONCILIACAO_INDISPONIVEL',
+      });
+    }
+    if (reconciliada.preference?.id) {
+      const st = String(reconciliada.preference.status ?? '');
+      if (st === 'active' || st === 'pending') {
+        const initPoint = await obterPreferenceInitPoint(String(reconciliada.preference.id));
+        await db.update(billingCheckoutOperations)
+          .set({ estado: 'created', mercadoPagoId: String(reconciliada.preference.id), resultadoIncerto: false, updatedAt: new Date() })
+          .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey));
+        if (initPoint) {
+          return res.status(200).json({
+            initPoint,
+            preferenceId: String(reconciliada.preference.id),
+            plano,
+            promocional: true,
+            reutilizada: true,
+          });
+        }
+      } else {
+        // Preference APROVADA (pagamento ocorreu): bloqueia nova cobrança.
+        await db.update(billingCheckoutOperations)
+          .set({ estado: 'created', mercadoPagoId: String(reconciliada.preference.id), resultadoIncerto: false, updatedAt: new Date() })
+          .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey));
+        return res.status(409).json({
+          error: 'O pagamento promocional já foi concluído. Aguarde a ativação do escritório.',
+          code: 'PROMOCAO_PAGAMENTO_CONCLUIDO',
+        });
+      }
+    } else {
+      // Ausência CONFIRMADA + evidência de tentativa incerta → falha
+      // definitiva real: restaura a elegibilidade e reabre a operação.
+      await desmarcarPromocaoUsada(escritorioId, plano);
+      await db.update(billingCheckoutOperations)
+        .set({ estado: 'pending', resultadoIncerto: false, updatedAt: new Date() })
+        .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey));
+    }
+  }
+
+  // =====================================================================
+  // FASE 0.5 — Elegibilidade "novo cliente" (anti-abuso): sem uso prévio,
+  // sem assinatura ativa e sem histórico de pagamento. Só chega aqui quem
+  // NÃO tem retry pendente (acima) — ou seja, quem ainda não marcou o uso.
+  // =====================================================================
+  const elegibilidade = await decidirElegibilidade(escritorioId);
+  if (!elegibilidade.elegivel) {
+    return res.status(409).json({
+      error: 'Este escritório não é elegível à promoção de boas-vindas.',
+      code: 'PROMOCAO_NAO_ELEGIVEL',
+      motivo: elegibilidade.motivo,
+    });
+  }
+
+  // =====================================================================
+  // FASE 1 — Claim ATÔMICO do uso + persistência da INTENÇÃO (outbox) ANTES
+  // de qualquer chamada remota. O UPDATE condicional só marca se o escritório
+  // AINDA é elegível em todas as condições (mesmo UPDATE anti-corrida da
+  // promocao.ts). O valor é RECALCULADO aqui (backend-only).
+  // A gravação da operação é OBRIGATÓRIA (fail-closed): sem ela, nenhuma
+  // chamada remota ocorre — o retry recupera por idempotencyKey estável.
+  // =====================================================================
+  const claim = await marcarPromocaoUsada(escritorioId, plano);
+  if (!claim.ok) {
+    return res.status(409).json({
+      error: 'A promoção não pôde ser aplicada (escritório não elegível ou outra operação já a utilizou).',
+      code: 'PROMOCAO_CLAIM_PERDIDO',
+    });
+  }
+  await db.insert(billingCheckoutOperations).values({
+    escritorioId,
+    idempotencyKey,
+    plano: cfgOp?.codigo ?? plano,
+    estado: 'pending',
+  }).onConflictDoNothing();
+
+  // =====================================================================
+  // FASE 2 — Preference avulsa no MP (fora de transação). Tratamento da
+  // falha DISTINGUE o resultado:
+  //   - DEFINITIVA (4xx/payload rejeitado): nada foi criado → desmarca o uso
+  //     (elegibilidade restaurada para nova tentativa limpa);
+  //   - AMBÍGUA (timeout/5xx/rede/resposta incompleta): NÃO sabemos → NÃO
+  //     desmarca (evita duplicar o benefício) — o retry reconcilia na 0b.
+  // =====================================================================
+  const preference = await criarPreferencePromocional({
+    escritorioId,
+    plano,
+    valorPromocionalCents: claim.valorPromocionalCents,
+    payerEmail: req.user?.email ?? '',
+    backUrl,
+    notificationUrl,
+    idempotencyKey,
+  }).catch(async (e: Error) => {
+    console.error('[Billing] Falha ao criar preference promocional:', e.message);
+    const incerta = falhaMpIncerta(e);
+    if (!incerta) {
+      // Falha definitiva: o MP NÃO criou a preference → compensa o uso.
+      await desmarcarPromocaoUsada(escritorioId, plano);
+    }
+    // Registra a operação como falha (resultado incerto se ambíguo) — o
+    // retry da 0b reconcilia por external_reference. Erro SANITIZADO
+    // (fail-closed: nunca expõe status/corpo do provedor ao cliente).
+    await db.update(billingCheckoutOperations)
+      .set({
+        estado: 'failed',
+        resultadoIncerto: incerta,
+        error: 'criação da preference falhou (resultado ' + (incerta ? 'incerto' : 'definitivo') + ')',
+        updatedAt: new Date(),
+      })
+      .where(eq(billingCheckoutOperations.idempotencyKey, idempotencyKey))
+      .catch(() => {});
+    const erro = new Error(incerta
+      ? 'Não foi possível confirmar a criação do pagamento no Mercado Pago. Tente novamente em instantes.'
+      : 'O Mercado Pago rejeitou o pagamento promocional. Verifique os dados e tente novamente.');
+    (erro as any).status = 502;
+    throw erro;
+  });
+
+  // =====================================================================
+  // FASE 3 — Persistência OBRIGATÓRIA do resultado no outbox + resposta.
+  // Se a gravação falhar, NÃO retorna sucesso (fail-closed): o uso segue
+  // marcado e o retry da 0b RECONCILIA por external_reference.
+  // =====================================================================
+  await db.insert(billingCheckoutOperations).values({
+    escritorioId,
+    idempotencyKey,
+    plano: cfgOp?.codigo ?? plano,
+    estado: 'created',
+    mercadoPagoId: preference.id,
+  }).onConflictDoUpdate({
+    target: billingCheckoutOperations.idempotencyKey,
+    set: { estado: 'created', mercadoPagoId: preference.id, updatedAt: new Date() },
+  });
+
+  await recordAudit(req, 'BILLING_CHECKOUT_PROMOCIONAL', {
+    alvoId: escritorioId,
+    detalhes: {
+      plano,
+      preferenceId: preference.id,
+      valorPromocionalCents: claim.valorPromocionalCents,
+    },
+  });
+  return res.status(201).json({
+    initPoint: preference.initPoint,
+    preferenceId: preference.id,
+    plano,
+    promocional: true,
+    valorPromocionalCents: claim.valorPromocionalCents,
+    valorPromocional: claim.valorPromocionalCents / 100,
+  });
 }
 
 // ---------------------------------------------------------------------------

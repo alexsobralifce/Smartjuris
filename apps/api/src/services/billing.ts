@@ -328,6 +328,194 @@ export async function obterPayment(id: string): Promise<any> {
 }
 
 // ---------------------------------------------------------------------------
+// Checkout PROMOCIONAL (1ª compra avulsa — Fase 7D)
+//
+// Opção C: a 1ª compra é um pagamento AVULSO com o valor promocional (50% OFF)
+// via Preferences API (/checkout_urls); a assinatura recorrente integral
+// começa no 2º mês (criada na 7E após o webhook do pagamento aprovado).
+// O valor NUNCA vem do cliente: é calculado no backend (promocao.ts).
+// ---------------------------------------------------------------------------
+
+/** Prefijo do external_reference da preference promocional (marcador p/ webhook). */
+export const REFERENCIA_PROMOCIONAL_PREFIXO = 'sj-promo:';
+
+/**
+ * Erro da API do Mercado Pago com o STATUS HTTP REAL (numérico). A distinção
+ * definitiva/ambígua NUNCA pode depender do corpo da mensagem (um 5xx pode
+ * conter termos como "invalid" no corpo retornado pelo provedor).
+ */
+export class MpApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'MpApiError';
+    this.status = status;
+  }
+}
+
+/**
+ * Classifica uma falha da API do Mercado Pago pelo STATUS HTTP real:
+ *   - DEFINITIVA (retorna false p/ `incerta`): erro 4xx/payload rejeitado —
+ *     CONFIRMADAMENTE sem efeito remoto (nada foi criado).
+ *   - AMBÍGUA (retorna true p/ `incerta`): timeout, 5xx, rede, abort ou
+ *     resposta incompleta — NÃO sabemos se o recurso foi criado no MP.
+ * Erros SEM status numérico (falha de rede/timeout/abort) são AMBÍGUOS por
+ * padrão (nunca se assume que o efeito não ocorreu).
+ */
+export function falhaMpIncerta(e: unknown): boolean {
+  const status = Number((e as any)?.status);
+  if (Number.isInteger(status) && status >= 400 && status < 500) {
+    return false; // 4xx: rejeição CONFIRMADA, sem efeito remoto
+  }
+  return true; // 5xx, sem status (rede/timeout), resposta incompleta → ambíguo
+}
+
+export interface CriarPreferencePromocionalInput {
+  escritorioId: string;
+  plano: string;
+  /** Valor promocional em centavos — SEMPRE calculado no backend (promocao.ts). */
+  valorPromocionalCents: number;
+  payerEmail: string;
+  backUrl: string;
+  notificationUrl: string;
+  /** Chave estável por OPERAÇÃO (outbox): retries usam a mesma chave. */
+  idempotencyKey?: string;
+}
+
+export interface PreferenceCriada {
+  id: string;
+  initPoint: string;
+  status: string;
+  externalReference: string;
+}
+
+/**
+ * Cria a PREFERENCE (pagamento avulso) promocional no Mercado Pago.
+ * - `unit_price` = valor promocional (backend, em R$);
+ * - `external_reference` = `sj-promo:<escritorioId>` — marcador que a 7E usa
+ *   no webhook para identificar a 1ª compra promocional;
+ * - X-Idempotency-Key estável por operação (retries não duplicam preference).
+ */
+export async function criarPreferencePromocional(input: CriarPreferencePromocionalInput): Promise<PreferenceCriada> {
+  const cfg = planoAssinatura(input.plano);
+  if (!cfg) {
+    throw new Error(`Plano de assinatura inválido: ${input.plano}`);
+  }
+  // Defesa em profundidade: o valor promocional é validado aqui também.
+  if (!Number.isInteger(input.valorPromocionalCents) || input.valorPromocionalCents <= 0) {
+    throw new Error('Valor promocional inválido (deve ser calculado no backend).');
+  }
+  const valorReais = input.valorPromocionalCents / 100;
+  const externalReference = `${REFERENCIA_PROMOCIONAL_PREFIXO}${input.escritorioId}`;
+  const idempotencyKey = input.idempotencyKey ?? `sj-promo-checkout-${input.escritorioId}-${cfg.codigo}`;
+
+  const { ok, status, data } = await mpFetch('/checkout_urls', {
+    method: 'POST',
+    headers: { 'X-Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({
+      items: [{
+        id: `sj-plano-${cfg.codigo}-promo-1mes`,
+        title: `SmartJuris — Plano ${cfg.rotulo} (1º mês promocional)`,
+        description: `Assinatura SmartJuris ${cfg.rotulo} — primeira mensalidade com desconto promocional. A recorrência integral (R$ ${cfg.precoMensal.toFixed(2)}) começa no 2º mês.`,
+        quantity: 1,
+        unit_price: valorReais,
+        currency_id: 'BRL',
+      }],
+      payer: { email: input.payerEmail },
+      external_reference: externalReference,
+      back_urls: {
+        success: input.backUrl,
+        pending: input.backUrl,
+        failure: input.backUrl,
+      },
+      auto_return: 'approved',
+      notification_url: input.notificationUrl,
+      statement_descriptor: 'SMARTJURIS',
+      metadata: {
+        escritorio_id: input.escritorioId,
+        plano: cfg.codigo,
+        promocional: true,
+        valor_promocional_cents: input.valorPromocionalCents,
+      },
+    }),
+  });
+  if (!ok) {
+    throw new MpApiError(status, `Mercado Pago falhou ao criar preference promocional (${status}): ${JSON.stringify(data).slice(0, 500)}`);
+  }
+  // Resposta positiva só é aceita com os identificadores necessários para
+  // continuar o fluxo (fail-closed): sem id/init_point o resultado é AMBÍGUO
+  // (não sabemos se o recurso foi criado) — lança para o retry reconciliar.
+  if (!data?.id || !data.init_point) {
+    throw new MpApiError(status, `Mercado Pago retornou resposta incompleta ao criar preference promocional (${status}): sem id/init_point`);
+  }
+  return {
+    id: String(data.id),
+    initPoint: String(data.init_point),
+    status: String(data.status ?? ''),
+    externalReference: String(data.external_reference ?? ''),
+  };
+}
+
+/**
+ * Reconciliação/recuperação: busca no Mercado Pago a PREFERENCE promocional
+ * criada por uma chamada anterior cujo resultado foi AMBÍGUO (timeout/5xx/
+ * resposta incompleta) — retries recuperam em vez de duplicar o benefício.
+ * Usa o marcador `sj-promo:<escritorioId>` como external_reference.
+ *
+ * DISTINGUE os três casos (crítico para o anti-abuso):
+ *   - { status: 'erro', preference: null }        → busca INCONCLUSIVA (falha
+ *     de rede/5xx) — NÃO é ausência confirmada; quem chama NUNCA deve
+ *     desmarcar a promoção;
+ *   - { status: 'ok', preference: null }          → ausência CONFIRMADA (busca
+ *     OK, sem resultado) — seguro prosseguir/desmarcar conforme o fluxo;
+ *   - { status: 'ok', preference }                → preference ENCONTRADA (a
+ *     MAIS RECENTE, QUALQUER status). O chamador decide pelo `status`:
+ *     active/pending → recuperável (init_point); approved/outros → pagamento
+ *     já ocorreu (NUNCA tratado como ausência — bloqueia nova cobrança).
+ */
+export async function buscarPreferencePorReferencia(externalReference: string): Promise<
+  { status: 'erro'; preference: null } | { status: 'ok'; preference: any | null }
+> {
+  try {
+    const { ok, status, data } = await mpFetch(
+      `/checkout_urls/search?external_reference=${encodeURIComponent(externalReference)}&limit=10`,
+    );
+    if (!ok) {
+      console.warn(`[Billing] Falha ao reconciliar preference por external_reference (${status})`);
+      return { status: 'erro', preference: null };
+    }
+    const results: any[] = Array.isArray(data?.results) ? data.results : [];
+    if (results.length === 0) {
+      return { status: 'ok', preference: null };
+    }
+    results.sort((a, b) => String(b.date_created ?? '').localeCompare(String(a.date_created ?? '')));
+    return { status: 'ok', preference: results[0] ?? null };
+  } catch (e) {
+    console.warn('[Billing] Falha ao reconciliar preference por referência:', (e as Error).message);
+    return { status: 'erro', preference: null };
+  }
+}
+
+/**
+ * Consulta o init_point de uma PREFERENCE existente (retomada/retry do
+ * checkout promocional). Retorna null se o recurso não for acessível.
+ */
+export async function obterPreferenceInitPoint(preferenceId: string): Promise<string | null> {
+  try {
+    const { ok, status, data } = await mpFetch(`/checkout_urls/${encodeURIComponent(preferenceId)}`);
+    if (!ok) {
+      console.warn(`[Billing] Falha ao consultar preference (${status})`);
+      return null;
+    }
+    const initPoint = String(data.init_point ?? '');
+    return initPoint || null;
+  } catch (e) {
+    console.warn('[Billing] Falha ao consultar init_point da preference:', (e as Error).message);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Validação de assinatura do webhook (x-signature)
 // ---------------------------------------------------------------------------
 

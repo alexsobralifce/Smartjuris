@@ -18,6 +18,7 @@ import RootPainel from './components/RootPainel'
 import LandingPage from './components/LandingPage'
 import Agenda from './components/Agenda'
 import Assinatura from './components/Assinatura'
+import PromoAssinaturaModal from './components/PromoAssinaturaModal'
 import { api } from './api/client'
 import { useTheme } from './hooks/useTheme'
 
@@ -31,6 +32,7 @@ interface User {
   escritorioId?: string
   permissoes?: string[]
   precisaTrocarSenha?: boolean
+  primeiroLogin?: boolean
   tokensMes?: number | null
   limiteTokensMes?: number | null
 }
@@ -140,6 +142,7 @@ export default function App() {
   const [route, setRoute] = useState<Route>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sessionExpired, setSessionExpired] = useState(false)
+  const [showPromo, setShowPromo] = useState<boolean>(() => localStorage.getItem('smartjuris_promo_pendente') === '1')
   const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
@@ -224,6 +227,12 @@ export default function App() {
     setRoute('dashboard')
     setPrecisaTrocar(newUser.precisaTrocarSenha === true)
     setSessionExpired(false)
+    // Primeiro login → marca a promo pendente e exibe o modal (persiste até
+    // o usuário assinar ou dispensar explicitamente).
+    if (newUser.primeiroLogin === true) {
+      localStorage.setItem('smartjuris_promo_pendente', '1')
+      setShowPromo(true)
+    }
   }
 
   const handleTrocaSenhaSuccess = (newUser: User) => {
@@ -231,6 +240,17 @@ export default function App() {
     setUser(newUser)
     setPrecisaTrocar(false)
     setRoute('dashboard')
+  }
+
+  const handlePromoDismiss = () => {
+    localStorage.removeItem('smartjuris_promo_pendente')
+    setShowPromo(false)
+  }
+
+  const handlePromoNavigateAssinatura = () => {
+    localStorage.removeItem('smartjuris_promo_pendente')
+    setShowPromo(false)
+    setRoute('assinatura')
   }
 
   const handleLogout = () => {
@@ -508,6 +528,12 @@ export default function App() {
         {route === 'admin' && user?.role === 'root' && <RootPainel />}
         {route === 'admin' && user?.role === 'admin' && <AdminEscritorio />}
       </main>
+
+      <PromoAssinaturaModal
+        open={showPromo}
+        onDismiss={handlePromoDismiss}
+        onNavigateAssinatura={handlePromoNavigateAssinatura}
+      />
     </div>
   )
 }

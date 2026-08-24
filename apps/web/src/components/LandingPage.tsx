@@ -805,6 +805,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [emailPendente, setEmailPendente] = useState('')
   const [esqueciSenha, setEsqueciSenha] = useState(false)
   const [cadastroDados, setCadastroDados] = useState<CadastroValues>(CADASTRO_INICIAL)
+  const [ctaNotice, setCtaNotice] = useState('')
 
   const switchMode = (m: 'login' | 'signup') => {
     setMode(m)
@@ -812,6 +813,13 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
     setEmailPendente('')
     setEsqueciSenha(false)
     setCadastroDados(CADASTRO_INICIAL)
+    setCtaNotice('')
+  }
+
+  const handlePricingCta = () => {
+    setMode('login')
+    setCtaNotice('Você precisa de uma conta para assinar o SmartJuris. Entre ou cadastre-se abaixo.')
+    document.getElementById('auth-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -1038,15 +1046,18 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         </div>
 
         {/* Lado Direito: Formulário de Acesso Stance Swiss */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 12,
-          padding: isMobile ? '24px 20px' : '36px 32px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 8px 30px color-mix(in srgb, var(--color-foreground) 4%, transparent)'
-        }}>
+        <div
+          id="auth-form"
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 12,
+            padding: isMobile ? '24px 20px' : '36px 32px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 8px 30px color-mix(in srgb, var(--color-foreground) 4%, transparent)'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: FONT.cardTitle }}>🔐</span>
             <h2 style={{
@@ -1061,6 +1072,44 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               ? 'Digite suas credenciais de advogado ou administrador.'
               : 'Solicite o acesso do seu escritório. A aprovação é feita pelo administrador da plataforma.'}
           </p>
+
+          {/* Aviso de CTA vindo dos planos: visitante precisa de conta para assinar */}
+          {ctaNotice && (
+            <div style={{
+              background: 'var(--color-accent-light)',
+              border: '1px solid var(--color-accent)',
+              borderRadius: RADIUS.control,
+              padding: '12px 14px',
+              marginBottom: SPACE.lg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: SPACE.md,
+              flexWrap: 'wrap',
+              fontSize: FONT.base,
+              lineHeight: 1.5,
+              color: 'var(--color-foreground)'
+            }}>
+              <span style={{ fontWeight: 500, flex: 1, minWidth: 200 }}>⚠️ {ctaNotice}</span>
+              <button
+                type="button"
+                onClick={() => { setCtaNotice(''); setMode('signup') }}
+                style={{
+                  background: 'var(--color-accent)',
+                  color: 'var(--color-on-accent)',
+                  border: 'none',
+                  borderRadius: RADIUS.chip,
+                  padding: '8px 14px',
+                  fontSize: FONT.sm,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Criar conta
+              </button>
+            </div>
+          )}
 
           {/* Toggle Entrar / Criar conta */}
           <div style={{
@@ -1220,7 +1269,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
       <TestimonialsSection />
 
       {/* Seção 3: Planos e Preços Detalhados */}
-      <PricingSection />
+      <PricingSection onCtaClick={handlePricingCta} />
 
       {/* Footer Swiss */}
       <footer style={{

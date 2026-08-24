@@ -557,4 +557,33 @@ describe('4A — fluxo end-to-end (stack real, provedores mockados)', () => {
     const escritoriosEnvolvidos = new Set(opB.map((r: any) => r.ai_operations?.escritorioId ?? r.ai_operations?.escritorio_id));
     assert.equal(escritoriosEnvolvidos.size, 2, 'operações em escritórios distintos');
   });
+
+  test('PRIMEIRO LOGIN: 1ª autenticação devolve primeiroLogin:true; a 2ª, primeiroLogin:false', async () => {
+    const email = `e2e.pl.${suffix}@teste.local`;
+    const hash = await bcrypt.hash(SENHA, 10);
+    const [u] = await db.insert(s.usuarios).values([
+      { nome: 'E2E Primeiro Login', email, senha: hash, role: 'admin', escritorioId: escA, ativo: true, precisaTrocarSenha: false, emailVerificado: true },
+    ]).returning({ id: s.usuarios.id });
+    userIds.push(u.id); // cleanup do after() (logins + usuário)
+
+    // 1ª autenticação: ultimoLogin era NULL → primeiroLogin:true.
+    const res1 = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: SENHA }),
+    });
+    assert.equal(res1.status, 200, `primeiro login falhou: ${await res1.text()}`);
+    const body1 = await res1.json();
+    assert.equal(body1.user?.primeiroLogin, true, 'primeira autenticação reporta primeiroLogin:true');
+
+    // 2ª autenticação: ultimoLogin já preenchido pelo 1º login → primeiroLogin:false.
+    const res2 = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: SENHA }),
+    });
+    assert.equal(res2.status, 200, `segundo login falhou: ${await res2.text()}`);
+    const body2 = await res2.json();
+    assert.equal(body2.user?.primeiroLogin, false, 'segunda autenticação reporta primeiroLogin:false');
+  });
 });

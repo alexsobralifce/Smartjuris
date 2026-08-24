@@ -614,4 +614,30 @@ describe('Integração HTTP — Fase 2A (segurança documental)', { skip: !dbDis
       'auditoria da associação manual root'
     );
   });
+
+  test('17. Primeiro login: 1ª autenticação devolve primeiroLogin:true; a 2ª, primeiroLogin:false', async () => {
+    const email = `it.pl.${randomUUID().slice(0, 8)}@teste.local`;
+    const [u] = await db.insert(s.usuarios).values([
+      { nome: 'Primeiro Login IT', email, senha: await bcrypt.hash(SENHA, 10), role: 'admin', escritorioId: escA, ativo: true, precisaTrocarSenha: false, emailVerificado: true },
+    ]).returning({ id: s.usuarios.id });
+    userIds.push(u.id); // cleanup do after() (logins + usuário)
+
+    const loginComBody = async () => {
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: SENHA }),
+      });
+      assert.equal(res.status, 200, `login falhou para ${email}`);
+      return res.json() as Promise<any>;
+    };
+
+    // 1ª autenticação: ultimoLogin era NULL → primeiroLogin:true.
+    const body1 = await loginComBody();
+    assert.equal(body1.user?.primeiroLogin, true, 'primeira autenticação reporta primeiroLogin:true');
+
+    // 2ª autenticação: ultimoLogin já preenchido pelo 1º login → primeiroLogin:false.
+    const body2 = await loginComBody();
+    assert.equal(body2.user?.primeiroLogin, false, 'segunda autenticação reporta primeiroLogin:false');
+  });
 });

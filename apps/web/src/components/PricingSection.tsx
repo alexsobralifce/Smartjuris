@@ -102,9 +102,11 @@ function CheckIcon() {
 function PricingCard({
   plan,
   resumo,
+  onCtaClick,
 }: {
   plan: Plan
   resumo: ReturnType<typeof resumoPrecoPlano>
+  onCtaClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
 
@@ -295,6 +297,7 @@ function PricingCard({
 
       <Button
         variant={plan.highlight ? "primary" : "secondary"}
+        onClick={onCtaClick}
         style={{ width: "100%", padding: "11px", marginTop: SPACE.sm }}
       >
         {plan.cta}
@@ -303,7 +306,11 @@ function PricingCard({
   )
 }
 
-export default function PricingSection() {
+export default function PricingSection({
+  onCtaClick,
+}: {
+  onCtaClick?: () => void
+}) {
   const breakpoint = useBreakpoint()
   const isMobile = breakpoint === "mobile"
   const isTablet = breakpoint === "tablet"
@@ -407,7 +414,14 @@ export default function PricingSection() {
         >
           {PLANS.map((plan, idx) => {
             const resumo = resumoPrecoPlano(planosApi[idx], promocaoStatus)
-            return <PricingCard key={plan.name} plan={plan} resumo={resumo} />
+            return (
+              <PricingCard
+                key={plan.name}
+                plan={plan}
+                resumo={resumo}
+                onCtaClick={onCtaClick}
+              />
+            )
           })}
         </div>
 

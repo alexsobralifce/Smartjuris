@@ -195,6 +195,10 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       }
     }
 
+    // Primeiro login: `user.ultimoLogin` ainda carrega o valor PRÉ-login (null = nunca logou).
+    // Deve ser lido ANTES do `db.update(... ultimoLogin: new Date())` abaixo.
+    const primeiroLogin = user.ultimoLogin === null;
+
     // Limite efetivo de créditos mensais (override do usuário ou saldo do escritório)
     const limiteTokensMes = await getLimiteEfetivo(user.id, escritorioId);
 
@@ -247,6 +251,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         role: user.role,
         email: user.email,
         escritorioId: escritorioId ?? null,
+        primeiroLogin,
         permissoes,
         precisaTrocarSenha,
         tokensMes,

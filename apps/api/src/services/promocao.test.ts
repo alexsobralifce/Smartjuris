@@ -183,6 +183,65 @@ describe('7B — persistência do uso (anti-abuso)', () => {
     assert.equal(esc[0].promocaoUsada, true);
   });
 
+  test('7C anti-abuso: usou → cancelou → re-assinar NÃO reaplica a promoção', async () => {
+    // Escritório novo elegível.
+    const id = randomUUID();
+    await db.insert(escritorios).values({ id, nome: 'Anti-abuso 7C', plano: 'basico' });
+    try {
+      // 1) Usa a promoção (claim ok).
+      const claim = await marcarPromocaoUsada(id, 'basico');
+      assert.equal(claim.ok, true);
+
+      // 2) Simula o ciclo real: pagou, ativou, depois CANCELOU a assinatura.
+      await db.update(escritorios).set({
+        mercadoPagoId: 'mp-cancelado-7c',
+        assinaturaStatus: 'cancelada',
+        assinaturaPlano: 'basico',
+        promocaoUsada: true, // permanece marcado (nunca reaplica)
+      }).where(eq(escritorios.id, id));
+
+      // 3) Tenta RE-ASSINAR: elegibilidade bloqueada (usou a promoção).
+      const d = await decidirElegibilidade(id);
+      assert.equal(d.elegivel, false, 'cancelar e re-assinar não reaplica a promoção');
+      assert.equal(d.motivo, 'promocao-ja-usada');
+
+      // 4) O claim condicional também falha (promocao_usada=true).
+      const reClaim = await marcarPromocaoUsada(id, 'basico');
+      assert.equal(reClaim.ok, false, 'claim não reaplica após cancelamento');
+    } finally {
+      await client`DELETE FROM escritorios WHERE id = ${id}`.catch(() => {});
+    }
+  });
+
+  test('7C persistência REAL: estado persiste após cancelamento, lido em nova consulta', async () => {
+    const id = randomUUID();
+    await db.insert(escritorios).values({ id, nome: 'Persistencia 7C', plano: 'basico' });
+    try {
+      // Claim → estado marcado.
+      await marcarPromocaoUsada(id, 'basico');
+
+      // Ciclo real: paga, ativa, CANCELA (sem limpar o marcador).
+      await db.update(escritorios).set({
+        mercadoPagoId: 'mp-persist-7c',
+        assinaturaStatus: 'cancelada',
+      }).where(eq(escritorios.id, id));
+
+      // NOVA consulta (nova query — não usa variável em memória): o marcador
+      // persiste e a elegibilidade continua bloqueada.
+      const [esc] = await db.select().from(escritorios).where(eq(escritorios.id, id)).limit(1);
+      assert.equal(esc.promocaoUsada, true, 'promocao_usada persiste após cancelamento');
+      assert.equal(esc.promocaoPlano, 'basico');
+      assert.equal(esc.promocaoValorCents, 9000);
+      assert.ok(esc.promocaoAtivaEm instanceof Date, 'promocao_ativa_em persistido');
+
+      const d = await decidirElegibilidade(id);
+      assert.equal(d.elegivel, false);
+      assert.equal(d.motivo, 'promocao-ja-usada');
+    } finally {
+      await client`DELETE FROM escritorios WHERE id = ${id}`.catch(() => {});
+    }
+  });
+
   test('validade malformada → promoção desativada (fail-safe)', () => {
     const saved = process.env.PROMOCAO_VALIDADE;
     process.env.PROMOCAO_VALIDADE = 'nao-e-uma-data';

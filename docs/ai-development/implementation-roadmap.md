@@ -788,7 +788,8 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 - [x] CHECK constraints de `assinatura_status` e `assinatura_plano` (0028) rejeitam valores fora do catálogo
 - [x] checkoutSchema restringe plano a enum/allowlist server-side (preço resolvido só no backend)
 - [x] Webhook testado em integração: assinatura HMAC válida/inválida, replay ignorado (persistido), evento expirado rejeitado, fail-closed em produção, evento desconhecido, falha do MP, ativação/desativação (billingWebhook.test.ts)
-- [x] Checkout idempotente: assinatura ATIVA → 409; pendente do mesmo plano → devolve init_point real do MP (retomada); cancelamento remoto falho → interrompe (502, sem duplicidade)
+- [x] Webhook com reprocessamento de erros: evento em ERRO/MP_INDISPONIVEL pode ser reprocessado; deduplicação só consolida após sucesso
+- [x] Checkout idempotente: assinatura ATIVA → 409; pendente do mesmo plano → devolve init_point real do MP (retomada); cancelamento remoto falho → interrompe (502, sem duplicidade); advisory lock transacional por escritório serializa checkouts concorrentes
 - [x] Cancelar consistente: desativação local só após confirmação do provedor (falha remota → 502 sem desativar)
 - [x] Checkout real criado preapproval no MP (`init_point` retornado, status `pending`)
 - [x] Webhook endpoint processou consulta real do MP (preapproval pending → sem mudança de acesso)
@@ -878,6 +879,7 @@ Se payment.rejected / preapproval.paused → desativar escritório (ativo=false)
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-23 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 6F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | reauditoria: gate aprovado (ganhos TPM confirmados) |
+| 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7A | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 

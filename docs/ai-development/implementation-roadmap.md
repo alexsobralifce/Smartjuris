@@ -81,7 +81,7 @@ migrations validadas, quando aplicável
 | 7A | Integração Mercado Pago — assinatura recorrente (Checkout Pro + webhooks) | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7B | Feature Flags e Lógica de Elegibilidade/Promoção | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7C | Modelo de Dados e Persistência de Uso da Promoção | 7B | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
@@ -832,7 +832,7 @@ Adicionar estrutura de dados para rastrear o uso da promoção e evitar reutiliz
 - Promoção UNA vez por escritório: após usar, promocao_usada=true bloqueia nova aplicação.
 ### 7D — Checkout Promocional (1ª Compra Avulsa)
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_FAILED`
 
 **Dependência:** 7C aprovada(s).
 
@@ -1000,6 +1000,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 | 2026-08-24 | 7C | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7C | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 | 2026-08-24 | 7C | DeepSeek | Humano (CLI) | APPROVE | Sim | Aprovação manual: Aprovacao humana (baliza B4: 2 reprovacoes consecutivas): o BLOCKER e artefato de split de fases — a migration versionada 0036/0037 ja existe no repo e e validada por testes de banco limpo, upgrade legado, upgrade REAL, reaplicacao idempotente e constraints (migrationBilling.test.ts, 9 testes verdes desde a 7B); o HIGH desta rodada foi PASS pelo revisor (teste de persistencia real pos-cancelamento com nova query em promocao.test.ts). 422 testes da suite verdes. Rodar 3a vez reprovaria pelo mesmo motivo estrutural, desperdicando tokens. |
+| 2026-08-24 | 7D | DeepSeek | GPT-5.6 Luna | REJECT | Não | reprovado |
 
 ## Critério final
 

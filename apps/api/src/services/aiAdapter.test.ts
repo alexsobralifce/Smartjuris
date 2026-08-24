@@ -12,7 +12,7 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ErroGeracaoIA } from './analiseDocumental.js';
-import { deepseekClient, gerarOperacaoIA } from './ai.js';
+import { deepseekClient, deepseekModel, deepseekModelPro, gerarOperacaoIA } from './ai.js';
 
 const payloadBase = { operation: 'SIMPLE_PETITION', classification: 'SIMPLE', caseContext: 'STANDALONE_REQUEST' } as any;
 
@@ -49,9 +49,9 @@ describe('3B — adaptador real (gerarOperacaoIA)', () => {
     const rFlash = await gerarOperacaoIA({ operationId: 'x', payload: payloadBase, modelTier: 'FLASH' });
     assert.equal(rFlash.inputTokens, 123);
     assert.equal(rFlash.outputTokens, 45);
-    assert.ok(rFlash.modelUsed.includes('flash'), `modelo FLASH (${rFlash.modelUsed})`);
+    assert.equal(rFlash.modelUsed, deepseekModel, `modelo FLASH (${rFlash.modelUsed})`);
     const rPro = await gerarOperacaoIA({ operationId: 'x', payload: payloadBase, modelTier: 'PRO' });
-    assert.ok(rPro.modelUsed.includes('pro'), `modelo PRO (${rPro.modelUsed})`);
+    assert.equal(rPro.modelUsed, deepseekModelPro, `modelo PRO (${rPro.modelUsed})`);
   });
 
   test('4xx de cliente (400/429) → confirmadoSemProcessamento (autoriza fallback)', async () => {

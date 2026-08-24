@@ -171,6 +171,7 @@ export interface TabelaPrecos {
 export function loadPricing(env: NodeJS.ProcessEnv = process.env): TabelaPrecos {
   const usdCents = (v: string | undefined, padrao: number): number =>
     Math.round(Number(v ?? padrao) * CENTS_POR_DOLAR);
+  // Tabela interna de custo (controle/reserva) — mantém os valores originais.
   return {
     flash: {
       peak: {

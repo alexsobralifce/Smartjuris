@@ -1,13 +1,17 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 
+// Provedor de IA: Token Plan (Alibaba Model Studio / Bailian) — OpenAI-compat.
+// Substitui o DeepSeek oficial; endpoint e chave configuráveis por env.
 export const deepseekClient = new OpenAI({
-  baseURL: 'https://api.deepseek.com/v1',
+  baseURL: process.env.AI_BASE_URL || 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
   apiKey: process.env.DEEP_SEEK_API || '',
 });
 
-export const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
-export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'deepseek-v4-pro';
+// Modelos do Token Plan (Qwen): padrão = qwen3.7-plus (melhor custo/benefício
+// vs o antigo deepseek-v4-flash); complexas = qwen3.8-max (topo do plano).
+export const deepseekModel = process.env.DEEPSEEK_MODEL || 'qwen3.7-plus';
+export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'qwen3.8-max';
 
 // Seleção dinâmica de modelo por complexidade da peça:
 // peças complexas (Recurso/Contestação) usam o Pro; demais usam o Flash.

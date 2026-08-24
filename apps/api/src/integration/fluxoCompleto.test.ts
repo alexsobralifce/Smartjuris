@@ -69,7 +69,7 @@ process.env.DATABASE_URL = obterE2EDatabaseUrl();
 const { db, client } = await import('../db/client.js');
 const s = await import('../db/schema.js');
 const { runMigrations } = await import('../db/migrate.js');
-const { deepseekClient } = await import('../services/ai.js');
+const { deepseekClient, deepseekModel, deepseekModelPro } = await import('../services/ai.js');
 const { default: authRoutes } = await import('../routes/auth.js');
 const { default: processosRoutes } = await import('../routes/processos.js');
 const { default: documentosRoutes } = await import('../routes/documentos.js');
@@ -113,7 +113,7 @@ function mockStreamDeepSeek() {
     completions: {
       create: async (params: any) => {
         const modelo = String(params?.model ?? '');
-        if (modoProvedor === 'fallback-flash' && !modelo.includes('pro')) {
+        if (modoProvedor === 'fallback-flash' && modelo === deepseekModel) {
           // 4xx client (429) → CONFIRMAÇÃO estruturada de não processamento:
           // o orquestrador autoriza o fallback Flash→Pro (política 3B).
           throw Object.assign(new Error('rate limit do provedor (HTTP 429)'), { status: 429 });
@@ -509,7 +509,7 @@ describe('4A — fluxo end-to-end (stack real, provedores mockados)', () => {
       assert.ok(opPro, 'operação PRO de fallback criada');
       assert.equal(opPro.parentOperationId, opFlash.id, 'PRO vinculada à FLASH via parent_operation_id');
       assert.equal(opPro.status, 'succeeded', 'PRO liquidada');
-      assert.ok(String(opPro.modelUsed).toLowerCase().includes('pro'), `modelo Pro usado (${opPro.modelUsed})`);
+      assert.equal(opPro.modelUsed, deepseekModelPro, `modelo Pro usado (${opPro.modelUsed})`);
       assert.equal(Number(opPro.tokensIn), 120, 'uso real do PRO persistido (tokens_in)');
       assert.equal(Number(opPro.tokensOut), 30, 'uso real do PRO persistido (tokens_out)');
       const ledgerPro = await db.select().from(s.creditLedger).where(eq(s.creditLedger.operationId, opPro.id));

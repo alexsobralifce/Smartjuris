@@ -84,7 +84,7 @@ migrations validadas, quando aplicável
 | 7D | Checkout Promocional (1ª Compra Avulsa) | 7C | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 7G | Testes de Regressão e Validação Final | 7E, 7F | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 7G | Testes de Regressão e Validação Final | 7E, 7F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -878,7 +878,7 @@ Atualizar a interface do usuário para exibir a promoção de boas-vindas e adic
 - Painel de dev exibe indicador claro de uso da promoção.
 ### 7G — Testes de Regressão e Validação Final
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_APPROVED`
 
 **Dependência:** 7E, 7F aprovada(s).
 
@@ -1010,6 +1010,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 | 2026-08-24 | 7E | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-24 | 7G | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 
 ## Critério final
 

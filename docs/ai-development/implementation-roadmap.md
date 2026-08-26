@@ -85,7 +85,7 @@ migrations validadas, quando aplicável
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -900,7 +900,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 
 ### 8A — Documentos do Cliente
 
-**Estado:** `PLANNED`
+**Estado:** `CORRECTION_PENDING`
 
 **Dependência:** Independente (sem dependência de IA/créditos).
 
@@ -1031,6 +1031,7 @@ Permitir que o advogado vincule PDFs diretamente ao cadastro de um cliente: uplo
 | 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE_WITH_CONDITIONS | Não | condições pendentes |
 | 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 7G | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
+| 2026-08-26 | 8A | DeepSeek | PRE-FLIGHT (determinístico) | APPROVE_WITH_CONDITIONS | Não | Pré-condições locais falharam (testes/build). Auditor poupado para economizar tokens. |
 
 ## Critério final
 

@@ -13,6 +13,7 @@
 // ===========================================================================
 
 import { basename, relative } from 'node:path';
+import { createHash } from 'node:crypto';
 import { safeJoin, type Env } from './paths.js';
 import { type AutomationConfig, type RunSummary, type PhaseState, type ImplementerReport, type RunMode } from './contracts.js';
 import { type Executor, type ExecResult } from './executor.js';
@@ -287,7 +288,6 @@ export async function correctionAttemptCount(aiDevDir: string, phaseId: string):
 
 /** Hash estável da saída de evidência (05-tests.txt) — doom-loop detection. */
 export function hashSaidaComando(output: string): string {
-  const { createHash } = require('node:crypto') as typeof import('node:crypto');
   return createHash('sha256').update(output).digest('hex');
 }
 

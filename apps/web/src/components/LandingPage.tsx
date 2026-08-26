@@ -478,6 +478,18 @@ function CadastroForm({
         {loading ? 'Cadastrando…' : 'Concluir Cadastro →'}
       </Button>
 
+      <div style={{
+        marginTop: SPACE.md,
+        padding: SPACE.md,
+        background: 'var(--color-surface-2)',
+        borderRadius: RADIUS.control,
+        fontSize: FONT.sm,
+        color: 'var(--color-muted)',
+        lineHeight: 1.5,
+      }}>
+        <strong style={{ color: 'var(--color-foreground)' }}>Nota:</strong> Ao criar sua conta gratuita, os recursos avançados de IA (geração de peças, análise de documentos, busca de jurisprudência e revisão contratual) estarão limitados. Assine um plano para desbloquear acesso completo.
+      </div>
+
       <p style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5, margin: 0, textAlign: 'center' }}>
         Seus dados pessoais e do escritório são tratados em conformidade com a LGPD (Lei nº 13.709/2018) e utilizados exclusivamente para a prestação dos serviços da plataforma.
       </p>

@@ -19,6 +19,7 @@ import LandingPage from './components/LandingPage'
 import Agenda from './components/Agenda'
 import Assinatura from './components/Assinatura'
 import PromoAssinaturaModal from './components/PromoAssinaturaModal'
+import FeatureLocked from './components/FeatureLocked'
 import { api } from './api/client'
 import { useTheme } from './hooks/useTheme'
 
@@ -35,6 +36,8 @@ interface User {
   primeiroLogin?: boolean
   tokensMes?: number | null
   limiteTokensMes?: number | null
+  assinaturaStatus?: string
+  isDemo?: boolean
 }
 
 const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
@@ -208,6 +211,19 @@ export default function App() {
     return () => window.removeEventListener('nav-pecas', handleNav)
   }, [])
 
+  // Navegação genérica via evento customizado (ex.: banner de assinatura no
+  // Dashboard dispara `window.dispatchEvent(new CustomEvent('nav', { detail: 'assinatura' }))`).
+  useEffect(() => {
+    const handleNav = (e: Event) => {
+      const ev = e as CustomEvent<string>
+      if (typeof ev.detail === 'string' && nav.some(item => item.id === ev.detail)) {
+        setRoute(ev.detail as Route)
+      }
+    }
+    window.addEventListener('nav', handleNav)
+    return () => window.removeEventListener('nav', handleNav)
+  }, [])
+
   // Escuta o evento de sessão expirada disparado pelo authFetch (qualquer 401
   // em chamada autenticada). Ao receber, desloga e mostra a tela de expiração.
   useEffect(() => {
@@ -334,6 +350,15 @@ export default function App() {
       )
     }
   }
+
+  // Usuário não assinante (conta demo sem assinatura ativa): recursos de IA
+  // avançados (peças, base, decisões e contratos) ficam bloqueados. Root e
+  // admin são isentos (nunca veem o estado bloqueado).
+  const isNonSubscriber = user != null
+    && user.role !== 'root'
+    && user.role !== 'admin'
+    && user.isDemo === true
+    && user.assinaturaStatus !== 'ativa'
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-background)' }}>
@@ -514,14 +539,46 @@ export default function App() {
         {route === 'agenda' && <Agenda />}
         {route === 'processos' && <Processos />}
         {route === 'clientes' && <Clientes />}
-        {route === 'pecas' && <GeradorPecas />}
+        {route === 'pecas' && (
+          isNonSubscriber ? (
+            <FeatureLocked
+              title="Geração de Peças não disponível"
+              description="A criação automatizada de peças jurídicas com IA está disponível apenas para assinantes. Assine um plano para desbloquear este recurso."
+              onNavigateAssinatura={() => setRoute('assinatura')}
+            />
+          ) : <GeradorPecas />
+        )}
         {route === 'validacao' && <Validacao />}
         {route === 'jurimetria' && <Jurimetria />}
-        {route === 'decisoes' && <Decisoes />}
+        {route === 'decisoes' && (
+          isNonSubscriber ? (
+            <FeatureLocked
+              title="Busca de Jurisprudência limitada"
+              description="A consulta avançada de jurisprudência e decisões dos tribunais está disponível apenas para assinantes. Assine um plano para desbloquear este recurso."
+              onNavigateAssinatura={() => setRoute('assinatura')}
+            />
+          ) : <Decisoes />
+        )}
         {route === 'financeiro' && <Financeiro />}
-        {route === 'contratos' && <Contratos />}
+        {route === 'contratos' && (
+          isNonSubscriber ? (
+            <FeatureLocked
+              title="Revisão Contratual não disponível"
+              description="A análise automatizada de contratos e detecção de riscos com IA está disponível apenas para assinantes. Assine um plano para desbloquear este recurso."
+              onNavigateAssinatura={() => setRoute('assinatura')}
+            />
+          ) : <Contratos />
+        )}
         {route === 'crm' && <Crm />}
-        {route === 'base' && <Base />}
+        {route === 'base' && (
+          isNonSubscriber ? (
+            <FeatureLocked
+              title="Base de Conhecimento limitada"
+              description="O upload e gerenciamento de documentos para indexação vetorial está disponível apenas para assinantes. Assine um plano para desbloquear este recurso."
+              onNavigateAssinatura={() => setRoute('assinatura')}
+            />
+          ) : <Base />
+        )}
         {route === 'documentacao' && <Documentacao />}
         {route === 'tutorial' && <Tutorial />}
         {route === 'assinatura' && <Assinatura />}

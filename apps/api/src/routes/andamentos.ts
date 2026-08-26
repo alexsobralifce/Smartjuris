@@ -10,6 +10,7 @@ import { parseBody, formatZodError, andamentoSchema, uuidSchema } from '../valid
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
 import { redactPII } from '../services/pii.js';
+import { decidirTrava } from '../services/travaAssinatura.js';
 
 const router = Router();
 
@@ -56,12 +57,18 @@ router.post('/', aiRateLimiter, async (req, res) => {
 
     let resumoIA = '';
     if (tipo === 'Intimação' || tipo === 'Despacho') {
-      // Cota de tokens do modo demo: bloqueado pula o resumo de IA,
-      // mas NÃO bloqueia o registro manual do andamento.
-      const quota = await checkTokenQuota(req as AuthenticatedRequest);
-      if (quota.status === 'blocked') {
-        resumoIA = '🤖 Resumo IA: Limite de tokens do modo demonstração atingido. Resumo de IA não gerado neste mês.';
+      // Check subscription first — bloqueia o resumo de IA para escritórios
+      // self-service NÃO assinantes, mas NÃO bloqueia o registro manual do andamento.
+      const trava = await decidirTrava(escritorioId);
+      if (!trava.liberado && trava.aplica) {
+        resumoIA = '🤖 Resumo IA: Recurso disponível apenas para assinantes. Assine um plano para desbloquear.';
       } else {
+        // Cota de tokens do modo demo: bloqueado pula o resumo de IA,
+        // mas NÃO bloqueia o registro manual do andamento.
+        const quota = await checkTokenQuota(req as AuthenticatedRequest);
+        if (quota.status === 'blocked') {
+          resumoIA = '🤖 Resumo IA: Limite de tokens do modo demonstração atingido. Resumo de IA não gerado neste mês.';
+        } else {
         try {
           // Redact PII before sending to the LLM (descricao original continues stored in DB)
           const safeDescricao = redactPII(descricao);
@@ -81,8 +88,9 @@ router.post('/', aiRateLimiter, async (req, res) => {
             completion_tokens: (completion as any)?.usage?.completion_tokens,
           });
         } catch (aiErr) {
-          console.warn('Erro ao gerar resumo de IA:', aiErr);
-          resumoIA = `🤖 Resumo IA: Intimação cadastrada. Ação recomendada: Análise dos autos para providências cabíveis.`;
+            console.warn('Erro ao gerar resumo de IA:', aiErr);
+            resumoIA = `🤖 Resumo IA: Intimação cadastrada. Ação recomendada: Análise dos autos para providências cabíveis.`;
+          }
         }
       }
     }

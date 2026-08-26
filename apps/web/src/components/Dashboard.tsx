@@ -44,6 +44,20 @@ export default function Dashboard() {
     }
   })
 
+  // Usuário não assinante (conta demo sem assinatura ativa): mostra aviso de
+  // recursos avançados limitados. Admin/root são isentos do aviso.
+  const [isNonSubscriber] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('smartjuris_user')
+      if (!raw) return false
+      const u = JSON.parse(raw)
+      if (u?.role === 'root' || u?.role === 'admin') return false
+      return u?.isDemo === true && u?.assinaturaStatus !== 'ativa'
+    } catch {
+      return false
+    }
+  })
+
   // Usuário logado (nome/e-mail) para a saudação dinâmica — lido da sessão cacheada.
   const [usuarioAtual] = useState<{ nome: string; email: string }>(() => {
     try {
@@ -160,6 +174,41 @@ export default function Dashboard() {
               ⚠️ Não foi possível carregar os dados do painel.
             </div>
             <Button variant="danger" size="sm" onClick={() => setReloadKey(k => k + 1)}>Tentar novamente</Button>
+          </div>
+        )}
+
+        {/* Aviso de recursos avançados limitados para não assinantes */}
+        {isNonSubscriber && (
+          <div style={{
+            background: 'var(--color-warning-light)',
+            border: '1px solid var(--color-warning)',
+            borderRadius: RADIUS.control,
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 220, flex: 1 }}>
+              <span style={{ fontSize: FONT.lg, flexShrink: 0, marginTop: 1 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: FONT.md, fontWeight: 700, color: 'var(--color-warning)', marginBottom: 2 }}>
+                  Recursos avançados limitados
+                </div>
+                <div style={{ fontSize: FONT.base, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+                  Recursos de IA (geração de peças, base de conhecimento, busca de jurisprudência e revisão contratual)
+                  estão limitados para não assinantes. Assine um plano para desbloquear acesso completo.
+                </div>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent('nav', { detail: 'assinatura' }))}
+              style={{ flexShrink: 0 }}
+            >
+              Assinar Agora →
+            </Button>
           </div>
         )}
 

@@ -256,6 +256,18 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
     res.cookie(COOKIE_NAME, token, cookieOptions);
 
+    // Expõe o status de assinatura/isDemo do escritório (para a trava de IA no front).
+    let assinaturaStatus: string = 'nenhuma';
+    let isDemo: boolean = false;
+    if (escritorioId) {
+      const [esc] = await db.select({
+        assinaturaStatus: escritorios.assinaturaStatus,
+        isDemo: escritorios.isDemo,
+      }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
+      assinaturaStatus = esc?.assinaturaStatus || 'nenhuma';
+      isDemo = esc?.isDemo ?? false;
+    }
+
     res.json({
       user: {
         id: user.id,
@@ -268,6 +280,8 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         precisaTrocarSenha,
         tokensMes,
         limiteTokensMes,
+        assinaturaStatus,
+        isDemo,
       },
     });
   } catch (error) {
@@ -862,9 +876,15 @@ router.get('/me', authMiddleware, refreshSession, async (req: AuthenticatedReque
   if (!req.user) {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
-  const [tokensMes, limiteTokensMes] = await Promise.all([
+  const [tokensMes, limiteTokensMes, escritorioInfo] = await Promise.all([
     req.user.id ? getTokenUsageMes(req.user.id) : Promise.resolve(0),
     getLimiteEfetivo(req.user.id, req.user.escritorioId),
+    req.user.escritorioId
+      ? db.select({
+          assinaturaStatus: escritorios.assinaturaStatus,
+          isDemo: escritorios.isDemo,
+        }).from(escritorios).where(eq(escritorios.id, req.user.escritorioId)).limit(1).then((rows) => rows[0])
+      : Promise.resolve(undefined),
   ]);
   res.json({
     user: {
@@ -877,6 +897,8 @@ router.get('/me', authMiddleware, refreshSession, async (req: AuthenticatedReque
       precisaTrocarSenha: req.user.precisaTrocarSenha ?? false,
       tokensMes,
       limiteTokensMes,
+      assinaturaStatus: escritorioInfo?.assinaturaStatus || 'nenhuma',
+      isDemo: escritorioInfo?.isDemo ?? false,
     },
   });
 });

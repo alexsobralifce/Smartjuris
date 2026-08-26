@@ -31,6 +31,7 @@ import { requireRoot, requireAdmin } from './middlewares/roleGuard.js';
 import { rejectRoot } from './middlewares/rejectRoot.js';
 import { forcePasswordChange } from './middlewares/forcePasswordChange.js';
 import { requireModule } from './middlewares/moduleGuard.js';
+import { requireAssinaturaAtiva } from './middlewares/requireAssinatura.js';
 import { globalApiLimiter } from './middlewares/rateLimit.js';
 import { client } from './db/client.js';
 import { initLogCapture } from './services/logger.js';
@@ -103,10 +104,10 @@ app.use('/api/pecas', authMiddleware, refreshSession, rejectRoot, forcePasswordC
 app.use('/api/clientes', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, clientesRoutes);
 app.use('/api/financeiro', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('financeiro'), financeiroRoutes);
 app.use('/api/andamentos', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, andamentosRoutes);
-app.use('/api/documentos', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, documentosRoutes);
-app.use('/api/rag', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('pecas'), ragRoutes);
+app.use('/api/documentos', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireAssinaturaAtiva(), documentosRoutes);
+app.use('/api/rag', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('pecas'), requireAssinaturaAtiva(), ragRoutes);
 app.use('/api/jurimetria', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireModule('jurimetria'), jurimetriaRoutes);
-app.use('/api/jurisprudencias', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, jurisprudenciasRoutes);
+app.use('/api/jurisprudencias', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, requireAssinaturaAtiva(), jurisprudenciasRoutes);
 app.use('/api/agenda', authMiddleware, refreshSession, rejectRoot, forcePasswordChange, agendaRoutes);
 
 app.get('/api/health', (req, res) => {

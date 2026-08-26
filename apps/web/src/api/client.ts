@@ -10,6 +10,8 @@ export type User = {
   precisaTrocarSenha: boolean;
   tokensMes?: number | null;
   limiteTokensMes?: number | null;
+  assinaturaStatus?: string; // 'nenhuma' | 'pendente' | 'ativa' | 'atrasada' | 'cancelada'
+  isDemo?: boolean;
 };
 
 export type Court = {

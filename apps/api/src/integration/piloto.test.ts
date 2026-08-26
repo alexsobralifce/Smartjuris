@@ -14,23 +14,25 @@ import cookieParser from 'cookie-parser';
 
 process.env.REQUIRE_EMAIL_OTP = 'false';
 
-// Fake Ollama (embeddings) para uploads determinísticos.
+// Fake Token Plan (embeddings) para uploads determinísticos — mock do endpoint
+// OpenAI-compat de embeddings (POST /embeddings).
 import http from 'node:http';
-const ollamaServer = http.createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/api/embeddings') {
+const embeddingsServer = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/embeddings') {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ embedding: Array(1024).fill(0.01) }));
+      res.end(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.01) }] }));
     });
     return;
   }
   res.writeHead(404);
   res.end();
 });
-await new Promise<void>((r) => ollamaServer.listen(0, '127.0.0.1', r));
-process.env.OLLAMA_URL = `http://127.0.0.1:${(ollamaServer.address() as import('node:net').AddressInfo).port}`;
+await new Promise<void>((r) => embeddingsServer.listen(0, '127.0.0.1', r));
+process.env.AI_BASE_URL = `http://127.0.0.1:${(embeddingsServer.address() as import('node:net').AddressInfo).port}`;
+process.env.DEEP_SEEK_API = 'sk-fake-embeddings-token-plan';
 
 const { db, client } = await import('../db/client.js');
 const s = await import('../db/schema.js');
@@ -167,7 +169,7 @@ before(async () => {
 });
 
 after(async () => {
-  ollamaServer.close();
+  embeddingsServer.close();
   restaurarEnv();
   {
     await db.delete(s.auditLog).where(inArray(s.auditLog.actorId, userIds)).catch(() => {});
@@ -757,35 +759,40 @@ describe('4B — bloqueios do piloto (HTTP)', () => {
     }
   });
 
-  test('UPLOAD piloto com FALHA na indexação: compensação total (sem doc/chunks órfãos) e retry liberado até o teto', async () => {
+  test('UPLOAD piloto com FALHA na indexação: documento salvo como failed (201 + warning, sem 502) e retry liberado até o teto', async () => {
     const token = await login(`pilot.${suffix}@teste.local`, 'PilotoSenha#2026');
-    const ollamaOriginal = process.env.OLLAMA_URL;
+    const baseOriginal = process.env.AI_BASE_URL;
     process.env.PILOTO_ATIVO = 'true';
     process.env.PILOTO_MAX_ESCRITORIOS = '5000';
-    process.env.PILOTO_MAX_DOCUMENTOS = '3'; // teto 3 (escritório sem docs)
+    process.env.PILOTO_MAX_DOCUMENTOS = '3'; // teto 3 (escritório com 1 doc do teste "sem piloto")
     try {
-      // (a) Embeddings indisponíveis → 502 + compensação total.
+      // (a) Embeddings indisponíveis → 201 + warning; documento SALVO com
+      //     status failed (sem busca vetorial), NENHUM chunk persistido.
       const docsAntes = await db.select({ id: s.documentos.id }).from(s.documentos).where(eq(s.documentos.escritorioId, escIds[0]));
       const chsAntes = await db.select({ id: s.chunks.id }).from(s.chunks).where(eq(s.chunks.escritorioId, escIds[0]));
-      process.env.OLLAMA_URL = 'http://127.0.0.1:1';
+      process.env.AI_BASE_URL = 'http://127.0.0.1:1'; // endpoint de embeddings inalcançável
       const up = await uploadPdf(token, `fail-${suffix}.pdf`, gerarPdf(['Contrato de prestacao de servicos juridicos para teste de falha de indexacao com conteudo longo o suficiente.']), { colecao: 'piloto' });
-      assert.equal(up.status, 502, 'indexação falhou → 502 (embeddings indisponíveis)');
+      assert.equal(up.status, 201, 'embeddings indisponíveis → 201 (documento salvo sem busca vetorial)');
+      assert.match(up.json.warning ?? '', /sem indexação vetorial/, 'resposta inclui warning de indexação não realizada');
+      assert.equal(up.json.indexedStatus, 'failed', 'documento persistido com status failed');
+      assert.equal(Number(up.json.chunks), 0, 'nenhum chunk indexado');
       const docsDepois = await db.select({ id: s.documentos.id }).from(s.documentos).where(eq(s.documentos.escritorioId, escIds[0]));
-      assert.equal(docsDepois.length, docsAntes.length, 'nenhum documento órfão NOVO após falha de indexação (slot liberado)');
+      assert.equal(docsDepois.length, docsAntes.length + 1, 'documento NOVO persistido (não é órfão nem é removido)');
       const chsDepois = await db.select({ id: s.chunks.id }).from(s.chunks).where(eq(s.chunks.escritorioId, escIds[0]));
-      assert.equal(chsDepois.length, chsAntes.length, 'nenhum chunk órfão NOVO após falha de indexação');
+      assert.equal(chsDepois.length, chsAntes.length, 'nenhum chunk órfão NOVO (embeddings indisponíveis não persistem chunks)');
 
       // (b) Retry com embeddings OK: o MESMO escritório ainda pode uploadar
-      //     (o slot da falha não foi consumido permanentemente).
-      process.env.OLLAMA_URL = ollamaOriginal ?? `http://127.0.0.1:${(ollamaServer.address() as import('node:net').AddressInfo).port}`;
+      //     (o documento failed consome o slot, mas o teto 3 ainda comporta o retry).
+      process.env.AI_BASE_URL = baseOriginal ?? `http://127.0.0.1:${(embeddingsServer.address() as import('node:net').AddressInfo).port}`;
       const retry = await uploadPdf(token, `retry-${suffix}.pdf`, gerarPdf(['Contrato de prestacao de servicos juridicos para retry apos falha com conteudo longo suficiente para indexacao.']), { colecao: 'piloto' });
-      assert.equal(retry.status, 201, 'retry de upload funciona após a compensação (slot liberado)');
+      assert.equal(retry.status, 201, 'retry de upload funciona após falha de embeddings (teto não excedido)');
+      assert.notEqual(retry.json.indexedStatus, 'failed', 'retry indexado normalmente');
     } finally {
       delete process.env.PILOTO_ATIVO;
       delete process.env.PILOTO_MAX_ESCRITORIOS;
       delete process.env.PILOTO_MAX_DOCUMENTOS;
-      if (ollamaOriginal === undefined) delete process.env.OLLAMA_URL;
-      else process.env.OLLAMA_URL = ollamaOriginal;
+      if (baseOriginal === undefined) delete process.env.AI_BASE_URL;
+      else process.env.AI_BASE_URL = baseOriginal;
     }
   });
 

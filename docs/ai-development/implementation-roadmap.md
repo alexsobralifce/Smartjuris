@@ -86,7 +86,7 @@ migrations validadas, quando aplicável
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 8B | Limite de storage 1GB por escritório | 8A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
+| 8B | Limite de storage 1GB por escritório | 8A | `AUDIT_FAILED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -905,7 +905,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 
 ### 8B — Limite de storage 1GB por escritório
 
-**Estado:** `PLANNED`
+**Estado:** `AUDIT_FAILED`
 
 **Dependência:** 8A (Documentos do Cliente)
 
@@ -1039,6 +1039,7 @@ Limitar o storage total de documentos por escritório a 1GB (1.073.741.824 bytes
 | 2026-08-24 | 7F | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-24 | 7G | DeepSeek | GPT-5.6 Luna | APPROVE | Sim | gate aprovado |
 | 2026-08-26 | 8A | DeepSeek | PRE-FLIGHT (determinístico) | APPROVE_WITH_CONDITIONS | Não | Pré-condições locais falharam (testes/build). Auditor poupado para economizar tokens. |
+| 2026-08-26 | 8B | DeepSeek | PRE-FLIGHT (determinístico) | REJECT | Não | Nenhuma alteração detectada; pre-flight e auditoria foram poupados. |
 
 ## Critério final
 

@@ -4,7 +4,7 @@
 // Stack REAL (Express + Postgres local + orquestrador 2F + classificador
 // 2B/2C + SSE 3C + idempotência 3D), mockando APENAS:
 //   • DeepSeek (deepseekClient.chat) → stream SSE fake com usage REAL;
-//   • Ollama (embeddings) → servidor HTTP falso em OLLAMA_URL.
+//   • Token Plan (embeddings) → servidor HTTP falso (POST /embeddings).
 //
 // Cenários:
 //   1. Feliz encadeado: login → upload/indexação → processo → classificação →
@@ -31,23 +31,24 @@ import cookieParser from 'cookie-parser';
 // 0. Ambiente determinístico (login sem OTP).
 process.env.REQUIRE_EMAIL_OTP = 'false';
 
-// 1. Fake Ollama (embeddings) ANTES de qualquer import que use embedding.
-const ollamaServer = http.createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/api/embeddings') {
+// 1. Fake Token Plan (embeddings) ANTES de qualquer import que use embedding.
+const embeddingsServer = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/embeddings') {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ embedding: Array(1024).fill(0.01) }));
+      res.end(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.01) }] }));
     });
     return;
   }
   res.writeHead(404);
   res.end();
 });
-await new Promise<void>((r) => ollamaServer.listen(0, '127.0.0.1', r));
-const ollamaPort = (ollamaServer.address() as AddressInfo).port;
-process.env.OLLAMA_URL = `http://127.0.0.1:${ollamaPort}`;
+await new Promise<void>((r) => embeddingsServer.listen(0, '127.0.0.1', r));
+const embeddingsPort = (embeddingsServer.address() as AddressInfo).port;
+process.env.AI_BASE_URL = `http://127.0.0.1:${embeddingsPort}`;
+process.env.DEEP_SEEK_API = 'sk-fake-embeddings-token-plan';
 
 // 2. JWT_SECRET do .env raiz (mesmo padrão da suíte 3C).
 import { readFileSync } from 'node:fs';
@@ -252,7 +253,7 @@ before(async () => {
 });
 
 after(async () => {
-  ollamaServer.close();
+  embeddingsServer.close();
   let falhaCleanup: unknown = null;
   try {
     // Cleanup COMPLETO em ordem filha→pai, SEM engolir erros: qualquer falha
@@ -303,7 +304,7 @@ after(async () => {
 
 describe('4A — fluxo end-to-end (stack real, provedores mockados)', () => {
   test('CENÁRIO ENCADEADO: login→upload→processo→geração SSE→persistência→validação→exportação→débito real', async () => {
-    // 1. Upload + indexação (fake Ollama).
+    // 1. Upload + indexação (embeddings via Token Plan mockado).
     const up = await uploadPdf(tokenA, `peticao-${suffix}.pdf`, gerarPdf(['Contrato de prestação de serviços de consultoria jurídica firmado em 2026.']), {
       colecao: 'teste-e2e',
       area: 'Cível',
@@ -572,8 +573,9 @@ describe('4A — fluxo end-to-end (stack real, provedores mockados)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password: SENHA }),
     });
-    assert.equal(res1.status, 200, `primeiro login falhou: ${await res1.text()}`);
-    const body1 = await res1.json();
+    const res1Body = await res1.text();
+    assert.equal(res1.status, 200, `primeiro login falhou: ${res1Body}`);
+    const body1 = JSON.parse(res1Body);
     assert.equal(body1.user?.primeiroLogin, true, 'primeira autenticação reporta primeiroLogin:true');
 
     // 2ª autenticação: ultimoLogin já preenchido pelo 1º login → primeiroLogin:false.
@@ -582,8 +584,9 @@ describe('4A — fluxo end-to-end (stack real, provedores mockados)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password: SENHA }),
     });
-    assert.equal(res2.status, 200, `segundo login falhou: ${await res2.text()}`);
-    const body2 = await res2.json();
+    const res2Body = await res2.text();
+    assert.equal(res2.status, 200, `segundo login falhou: ${res2Body}`);
+    const body2 = JSON.parse(res2Body);
     assert.equal(body2.user?.primeiroLogin, false, 'segunda autenticação reporta primeiroLogin:false');
   });
 });

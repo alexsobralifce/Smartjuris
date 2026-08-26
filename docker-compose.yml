@@ -17,15 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    # Remove the comment below to auto-pull the embedding model on start if needed
-    # command: bash -c "ollama serve & sleep 5 && ollama pull nomic-embed-text && wait"
-
   redis:
     image: redis:alpine
     ports:
@@ -33,4 +24,3 @@ services:
 
 volumes:
   postgres_data:
-  ollama_data:

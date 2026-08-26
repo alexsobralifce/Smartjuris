@@ -11,7 +11,7 @@ Monorepo pnpm (workspaces) — Backend Express + Drizzle ORM + PostgreSQL (pgvec
 
 - Frontend Web: `http://localhost:5173` (Vite, HMR) — em produção: container `serve` no Railway.
 - Backend API: `http://localhost:3001` (Express, `tsx watch`) — em produção: container Express no Railway.
-- Banco local via `docker-compose.yml`: PostgreSQL pgvector:16 (porta **5433**), Ollama (11434) e Redis (6379).
+- Banco local via `docker-compose.yml`: PostgreSQL pgvector:16 (porta **5433**) e Redis (6379).
 
 ---
 
@@ -20,7 +20,7 @@ Monorepo pnpm (workspaces) — Backend Express + Drizzle ORM + PostgreSQL (pgvec
 **SmartJuris (LexOS Edition)** é uma plataforma SaaS de gestão jurídica inteligente, multi-tenant, com IA nativa. Unifica contencioso, consultivo, financeiro, relacionamento com clientes e operação da plataforma em um único sistema, com:
 
 - **Gestão de processos** com Matter Dashboard, linha do tempo e resumo de intimações por IA (BGE-M3 + Qwen via Token Plan).
-- **Geração de peças** com RAG vetorial (pgvector + BGE-M3 via Ollama) e Qwen via Token Plan (tier FLASH padrão, fallback PRO), com **fila de validação humana auditável** (crivo ético OAB) e exportação PDF/DOCX.
+- **Geração de peças** com RAG vetorial (pgvector + text-embedding-v3 via Token Plan) e Qwen via Token Plan (tier FLASH padrão, fallback PRO), com **fila de validação humana auditável** (crivo ético OAB) e exportação PDF/DOCX.
 - **Catálogo compartilhado de IA** (`@lexia/shared`): planos canônicos (ESSENTIAL/PROFESSIONAL/OFFICE) e 7 operações de IA (créditos, modelo FLASH/PRO, limites de tokens/páginas/resultados) — fonte única consumida por classifier e usage.
 - **Jurimetria preditiva**, **financeiro & timesheet faturável**, **scanner de revisão contratual**, **CRM/funil** e **base de conhecimento vetorial**.
 - **Cadastro self-service** de advogado + escritório (aprovado pelo root) e **consulta de jurisprudência ao vivo** em tribunais.
@@ -90,7 +90,7 @@ Fonte única de verdade para planos e operações de IA — consumida por `class
 - **Classificador** (`services/classifier.ts`): classifica operação → modelo FLASH/PRO, créditos e limites, a partir do catálogo compartilhado.
 - **Custo/cota** (`services/usage.ts`): rastreia tokens (pico/fora-pico), precificação por modelo, limites por operação e cota mensal (`checkTokenQuota`). Tier FLASH/PRO derivado do NOME do modelo (`precoDoModelo`: `pro`/`max` → PRO; demais → FLASH) — vale para reserva (tier canônico) e liquidação (modelo real).
 - **Resumos de intimações** (`routes/andamentos.ts`): resumo em 2 frases com ação recomendada e prazo fatal, com redação de PII antes do envio (`services/pii.ts`).
-- **Embeddings**: `services/embedding.ts` gera BGE-M3 via Ollama (com timeout configurável).
+- **Embeddings**: `services/embedding.ts` gera vetores via Token Plan (text-embedding-v3, 1024 dims, timeout configurável).
 - **Jurisprudência**: `services/jurisprudencias.ts` integra a Jurisprudências.ai Live API (`/courts`, `/search`, `/lookup`).
 - **E-mail**: `services/email.ts` envia código OTP, boas-vindas e notificações ao root via Resend ou SMTP (Nodemailer).
 
@@ -149,7 +149,7 @@ Fonte única de verdade para planos e operações de IA — consumida por `class
 ├── package.json                # Workspace root pnpm
 ├── pnpm-workspace.yaml         # packages: apps/*, packages/*, tools/*
 ├── railway.json                # Configuração do Railway (builder NIXPACKS)
-└── docker-compose.yml          # Postgres pgvector:16, Ollama e Redis (ambiente local)
+└── docker-compose.yml          # Postgres pgvector:16 e Redis (ambiente local)
 ```
 
 ---
@@ -246,7 +246,7 @@ Persistência relacional e vetorial no PostgreSQL com extensão `vector`. Todas 
 - `crypto.ts` — Criptografia AES-256-GCM de campos sensíveis (`encryptField`/`decryptField`, prefixo `enc:v1:`).
 - `documentExport.ts` — Exportação de peças em PDF e DOCX (`renderPdf`/`renderDocx`).
 - `email.ts` — Envio transacional via Resend ou SMTP (Nodemailer): OTP, boas-vindas, notificação ao root.
-- `embedding.ts` — Embeddings BGE-M3 via Ollama (timeout configurável).
+- `embedding.ts` — Embeddings text-embedding-v3 via Token Plan (timeout configurável).
 - `jurisprudencias.ts` — Integração com Jurisprudências.ai Live API (`listCourts`, `searchDecisions`, `lookupDecision`).
 - `letterhead.ts` — Timbre/cabeçalho do escritório (cidade, OAB) para peças exportadas.
 - `modelosPeca.ts` — Playbooks de teses (`MODELOS_PECA`) por tipo/área + `buscarModelo`.
@@ -306,7 +306,7 @@ Regras de UI: máx. 2 colunas em formulários (1 no mobile); mobile-first adapt�
 
 ## Variáveis de Ambiente (backup em `.env.example`)
 
-**Backend (`process.env.*`):** `PORT`, `CORS_ORIGINS`, `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV`, `DATA_ENCRYPTION_KEY`, `DEEP_SEEK_API` (chave do Token Plan), `AI_BASE_URL` (endpoint OpenAI-compat do plano; fallback `DEEPSEEK_BASE_URL`; default Token Plan), `DEEPSEEK_MODEL` (default `qwen3.7-plus`), `DEEPSEEK_MODEL_PRO` (default `qwen3.8-max`), `QWEN_ENABLE_THINKING` (default `false` — raciocínio Qwen desligado para economizar o plano), `DEEPSEEK_INPUT_COST_PEAK`/`OFFPEAK` (0.44/0.22), `DEEPSEEK_OUTPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `DEEPSEEK_PRO_INPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `DEEPSEEK_PRO_OUTPUT_COST_PEAK`/`OFFPEAK` (3.96/1.98), `USD_BRL_RATE`, `OLLAMA_URL`, `EMBEDDING_TIMEOUT_MS`, `JURISPRUDENCIAS_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SERVICE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_CONNECTION_TIMEOUT_MS`, `SMTP_GREETING_TIMEOUT_MS`, `SMTP_SOCKET_TIMEOUT_MS`, `ROOT_NOTIFICATION_EMAIL`, `ROOT_EMAIL`, `ROOT_PASSWORD`, `ROOT_AUTH_EMAIL`, `ROOT_AUTH_PASSWORD`, `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, `REQUIRE_EMAIL_OTP` (default `false`), `ANTHROPIC_API_KEY`.
+**Backend (`process.env.*`):** `PORT`, `CORS_ORIGINS`, `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV`, `DATA_ENCRYPTION_KEY`, `DEEP_SEEK_API` (chave do Token Plan), `AI_BASE_URL` (endpoint OpenAI-compat do plano; fallback `DEEPSEEK_BASE_URL`; default Token Plan), `DEEPSEEK_MODEL` (default `qwen3.7-plus`), `DEEPSEEK_MODEL_PRO` (default `qwen3.8-max`), `QWEN_ENABLE_THINKING` (default `false` — raciocínio Qwen desligado para economizar o plano), `DEEPSEEK_INPUT_COST_PEAK`/`OFFPEAK` (0.44/0.22), `DEEPSEEK_OUTPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `DEEPSEEK_PRO_INPUT_COST_PEAK`/`OFFPEAK` (1.32/0.66), `DEEPSEEK_PRO_OUTPUT_COST_PEAK`/`OFFPEAK` (3.96/1.98), `USD_BRL_RATE`, `EMBEDDING_TIMEOUT_MS`, `JURISPRUDENCIAS_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SERVICE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_CONNECTION_TIMEOUT_MS`, `SMTP_GREETING_TIMEOUT_MS`, `SMTP_SOCKET_TIMEOUT_MS`, `ROOT_NOTIFICATION_EMAIL`, `ROOT_EMAIL`, `ROOT_PASSWORD`, `ROOT_AUTH_EMAIL`, `ROOT_AUTH_PASSWORD`, `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, `REQUIRE_EMAIL_OTP` (default `false`), `ANTHROPIC_API_KEY`.
 
 **Web (`import.meta.env.*`):** `VITE_API_URL` (URL base da API).
 

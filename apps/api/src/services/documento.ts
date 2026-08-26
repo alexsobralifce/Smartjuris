@@ -26,7 +26,7 @@ export interface DocumentoUploadInput {
   clienteId?: string | null;
   usuarioId?: string | null;
   chunkTexts: string[];
-  /** Injetável para testes (padrão: embedding BGE-M3 via Ollama). */
+  /** Injetável para testes (padrão: generateEmbedding — Token Plan). */
   gerarEmbedding?: (texto: string, usuarioId?: string) => Promise<number[]>;
 }
 
@@ -40,9 +40,10 @@ export interface DocumentoUploadResult {
 
 /**
  * Persiste o documento (status `processing`), gera os chunks com o escopo do
- * documento e atualiza o status final. Se NENHUM chunk for indexado, remove o
- * registro e lança erro (o serviço de embeddings está indisponível). Falha
- * parcial é registrada em `failed_chunks` e o documento vai para `failed`.
+ * documento e atualiza o status final. Falha total de embeddings NÃO remove o
+ * registro: o documento é mantido como `failed` (o upload continua funcionando
+ * mesmo sem serviço de embeddings — apenas sem busca vetorial). Falha parcial é
+ * registrada em `failed_chunks` e o documento vai para `failed`.
  */
 export async function processarUploadDocumento(input: DocumentoUploadInput): Promise<DocumentoUploadResult> {
   const [novo] = await db.insert(documentos).values({
@@ -96,10 +97,25 @@ export async function indexarChunksDoDocumento(documentoId: string, input: Docum
   }
 
   if (indexedCount === 0) {
-    // Nenhum chunk indexado (ex.: embeddings indisponíveis): remove o registro
-    // enganoso em vez de deixar um documento "processing" para sempre.
-    await db.delete(documentos).where(eq(documentos.id, documentoId));
-    throw new Error('Falha ao indexar o documento: serviço de embeddings indisponível.');
+    // Nenhum chunk indexado (ex.: serviço de embeddings indisponível): o
+    // documento é MANTIDO persistido com status `failed` — o upload continua
+    // funcionando, apenas sem busca vetorial.
+    // Não lança erro nem remove o registro (pode ser reindexado depois).
+    const [atualizado] = await db.update(documentos).set({
+      chunks: 0,
+      failedChunks: totalChunks,
+      indexedStatus: 'failed',
+      indexedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(documentos.id, documentoId)).returning();
+
+    return {
+      documento: atualizado,
+      totalChunks,
+      chunksIndexed: 0,
+      failedChunks: totalChunks,
+      status: 'failed',
+    };
   }
 
   const status: 'indexed' | 'failed' = failedChunks > 0 ? 'failed' : 'indexed';

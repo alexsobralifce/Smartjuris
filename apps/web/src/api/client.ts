@@ -205,10 +205,14 @@ export const api = {
   },
   documentos: {
     list: () => authFetch('/api/documentos').then(r => r.json()),
+    // Fase 8A — documentos de um cliente específico (escopo validado no backend).
+    listByCliente: (clienteId: string) => authFetch(`/api/documentos?clienteId=${encodeURIComponent(clienteId)}`).then(r => r.json()),
     upload: (formData: FormData) => authFetch('/api/documentos/upload', {
       method: 'POST',
       body: formData
     }),
+    // Fase 8A — exclusão (somente admin, escopo validado no backend).
+    delete: (id: string) => authFetch(`/api/documentos/${id}`, { method: 'DELETE' }),
   },
   jurimetria: {
     stats: () => authFetch('/api/jurimetria/stats').then(r => r.json()),

@@ -136,6 +136,9 @@ export const documentos = pgTable('documentos', {
   // (indexed_status='unscoped') até associação manual pelo root.
   escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
   processoId: uuid('processo_id').references((): AnyPgColumn => processos.id),
+  // Fase 8A — vínculo opcional a um cliente do MESMO escritório (validado na
+  // rota); os chunks herdam o escopo do documento de origem.
+  clienteId: uuid('cliente_id').references((): AnyPgColumn => clientes.id),
   totalPages: integer('total_pages'),
   indexedStatus: text('indexed_status').notNull().default('pending'), // pending|processing|indexed|failed|unscoped
   failedChunks: integer('failed_chunks').notNull().default(0),
@@ -155,6 +158,8 @@ export const chunks = pgTable('chunks', {
   // pelo cliente) e só é recuperável dentro do mesmo escritório.
   escritorioId: uuid('escritorio_id').references((): AnyPgColumn => escritorios.id),
   processoId: uuid('processo_id').references((): AnyPgColumn => processos.id),
+  // Fase 8A — o chunk herda o cliente_id do documento de origem (mesmo escopo).
+  clienteId: uuid('cliente_id').references((): AnyPgColumn => clientes.id),
 }, (table) => ({
   embeddingIndex: index('embedding_index').using('hnsw', table.embedding.op('vector_cosine_ops')),
 }));

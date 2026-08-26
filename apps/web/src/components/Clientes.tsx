@@ -108,6 +108,140 @@ export default function Clientes() {
 
   const formRef = useRef<HTMLFormElement>(null)
 
+  // Fase 8A — Documentos do Cliente (detalhe/edição)
+  const [selected, setSelected] = useState<any | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [docs, setDocs] = useState<any[]>([])
+  const [docsLoading, setDocsLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadLabel, setUploadLabel] = useState('')
+  const [docToDelete, setDocToDelete] = useState<any | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Somente admin pode excluir documentos (backend também valida).
+  let isAdmin = false
+  try {
+    const me = JSON.parse(localStorage.getItem('smartjuris_user') || '{}')
+    isAdmin = me?.role === 'admin'
+  } catch { /* cache ausente */ }
+
+  const formatDateTime = (v?: string | null) => {
+    if (!v) return '—'
+    try {
+      return new Date(v).toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    } catch {
+      return '—'
+    }
+  }
+
+  const statusMeta = (s: string) => {
+    switch (s) {
+      case 'indexed':    return { label: 'Indexado',    bg: 'var(--color-success-light)', color: 'var(--color-success)' }
+      case 'failed':     return { label: 'Falhou',      bg: 'var(--color-danger-light)',  color: 'var(--color-danger)' }
+      case 'processing': return { label: 'Processando', bg: 'var(--color-warning-light)', color: 'var(--color-warning)' }
+      case 'pending':    return { label: 'Pendente',    bg: 'var(--color-warning-light)', color: 'var(--color-warning)' }
+      case 'unscoped':   return { label: 'Sem escopo',  bg: 'var(--color-surface-2)',     color: 'var(--color-muted)' }
+      default:           return { label: s || '—',      bg: 'var(--color-surface-2)',     color: 'var(--color-muted)' }
+    }
+  }
+
+  const openDetail = async (c: any) => {
+    setSelected(c)
+    setDetailOpen(true)
+    setDocs([])
+    setDocsLoading(true)
+    try {
+      const data = await api.documentos.listByCliente(c.id)
+      setDocs(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error(e)
+      setDocs([])
+      addToast('error', 'Não foi possível carregar os documentos do cliente.')
+    } finally {
+      setDocsLoading(false)
+    }
+  }
+
+  const closeDetail = () => {
+    setDetailOpen(false)
+    setSelected(null)
+    setDocToDelete(null)
+  }
+
+  const loadDocs = async () => {
+    if (!selected) return
+    setDocsLoading(true)
+    try {
+      const data = await api.documentos.listByCliente(selected.id)
+      setDocs(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error(e)
+      addToast('error', 'Não foi possível carregar os documentos do cliente.')
+    } finally {
+      setDocsLoading(false)
+    }
+  }
+
+  const handleUploadDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite re-selecionar o mesmo arquivo depois
+    if (!file || !selected) return
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      addToast('error', 'Somente arquivos PDF são permitidos.')
+      return
+    }
+    setUploading(true)
+    setUploadProgress(5)
+    setUploadLabel('Enviando e indexando documento...')
+    const timer = window.setInterval(() => {
+      setUploadProgress(p => Math.min(p + 8, 90))
+    }, 160)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('colecao', 'clientes')
+      formData.append('clienteId', selected.id)
+      const res = await api.documentos.upload(formData)
+      window.clearInterval(timer)
+      if (!res.ok) {
+        setUploadProgress(0)
+        addToast('error', await getErrorMessage(res, 'Erro ao anexar documento.'))
+      } else {
+        setUploadProgress(100)
+        setUploadLabel('Documento anexado e indexado!')
+        addToast('success', 'Documento anexado e indexado com sucesso!')
+        loadDocs()
+      }
+    } catch (err) {
+      window.clearInterval(timer)
+      setUploadProgress(0)
+      console.error(err)
+      addToast('error', 'Erro ao anexar documento.')
+    } finally {
+      window.setTimeout(() => { setUploading(false); setUploadProgress(0) }, 400)
+    }
+  }
+
+  const confirmDeleteDoc = async () => {
+    if (!docToDelete) return
+    try {
+      const res = await api.documentos.delete(docToDelete.id)
+      if (!res.ok) {
+        addToast('error', await getErrorMessage(res, 'Erro ao excluir documento.'))
+        return
+      }
+      addToast('success', 'Documento excluído com sucesso.')
+      setDocToDelete(null)
+      loadDocs()
+    } catch (e) {
+      console.error(e)
+      addToast('error', 'Erro ao excluir documento.')
+    }
+  }
+
   const loadClientes = async () => {
     setLoading(true)
     try {
@@ -309,7 +443,7 @@ export default function Clientes() {
               <EmptyRow colSpan={6} message="Nenhum cliente cadastrado." />
             ) : (
               clientesPagination.pageItems.map(c => (
-                <Tr key={c.id}>
+                <Tr key={c.id} onClick={() => openDetail(c)} style={{ cursor: 'pointer' }}>
                   <Td>
                     <span style={{ fontSize: FONT.xs, fontWeight: 700, padding: '3px 8px', borderRadius: RADIUS.chip, background: c.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: 'var(--color-on-primary)' }}>
                       {c.tipo}
@@ -328,13 +462,22 @@ export default function Clientes() {
                     {c.cidade ? `${c.cidade}/${c.uf}` : '—'}
                   </Td>
                   <Td>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      ariaLabel="Excluir cliente"
-                      title="Excluir cliente"
-                      onClick={() => handleDeleteCliente(c.id)}
-                    >×</Button>
+                    <div style={{ display: 'flex', gap: SPACE.xs }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        ariaLabel="Documentos do cliente"
+                        title="Documentos do cliente"
+                        onClick={(e) => { e.stopPropagation(); openDetail(c); }}
+                      >📄</Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        ariaLabel="Excluir cliente"
+                        title="Excluir cliente"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCliente(c.id); }}
+                      >×</Button>
+                    </div>
                   </Td>
                 </Tr>
               ))
@@ -492,6 +635,140 @@ export default function Clientes() {
             />
           </Field>
         </form>
+      </Modal>
+
+      {/* Fase 8A — Detalhe do Cliente + Documentos do Cliente */}
+      <Modal
+        open={detailOpen}
+        onClose={closeDetail}
+        title={selected ? `Cliente — ${selected.nome}` : 'Detalhes do Cliente'}
+        width={860}
+        footer={<Button variant="secondary" onClick={closeDetail}>Fechar</Button>}
+      >
+        {selected && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.xl }}>
+            {/* Resumo do cliente */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: SPACE.lg, padding: SPACE.lg, background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card }}>
+              <div>
+                <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>Tipo</div>
+                <span style={{ fontSize: FONT.xs, fontWeight: 700, padding: '3px 8px', borderRadius: RADIUS.chip, background: selected.tipo === 'PF' ? 'var(--color-primary)' : 'var(--color-accent)', color: 'var(--color-on-primary)' }}>{selected.tipo}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>CPF / CNPJ</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.md }}>{selected.cpfCnpj}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>Contato</div>
+                <div style={{ fontSize: FONT.md }}>{selected.email || '—'}</div>
+                <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)' }}>{selected.telefone || '—'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: FONT.xs, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 4 }}>Endereço</div>
+                <div style={{ fontSize: FONT.md }}>{selected.cidade ? `${selected.cidade}/${selected.uf}` : '—'}</div>
+              </div>
+            </div>
+
+            {/* Seção Documentos do Cliente */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: SPACE.lg, flexWrap: 'wrap', gap: SPACE.md }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: FONT.md }}>Documentos do Cliente</div>
+                  <div style={{ color: 'var(--color-muted)', fontSize: FONT.sm, marginTop: 2 }}>
+                    {docs.length} documento(s) anexado(s) e indexado(s) na base RAG (PDF)
+                  </div>
+                </div>
+                <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>+ Anexar Documento</Button>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                style={{ display: 'none' }}
+                onChange={handleUploadDoc}
+              />
+
+              {(uploading || uploadProgress > 0) && (
+                <div style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: RADIUS.card, padding: '14px 20px', marginBottom: SPACE.lg,
+                }}>
+                  <div style={{ fontWeight: 600, fontSize: FONT.md, marginBottom: 10 }}>Enviando documento...</div>
+                  <div style={{ height: 5, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden', marginBottom: SPACE.sm }}>
+                    <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 3, transition: 'width 0.3s ease' }} />
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: 'var(--color-muted)' }}>{uploadLabel}</div>
+                </div>
+              )}
+
+              <TableShell>
+                <Table style={{ minWidth: 640 }}>
+                  <THeadRow>
+                    {['Nome', 'Tamanho', 'Área', 'Status de Indexação', 'Data de Upload', 'Ações'].map(h => (
+                      <Th key={h}>{h}</Th>
+                    ))}
+                  </THeadRow>
+                  <tbody>
+                    {docsLoading ? (
+                      <EmptyRow colSpan={6} message="Carregando documentos..." />
+                    ) : docs.length === 0 ? (
+                      <EmptyRow colSpan={6} message="Nenhum documento anexado a este cliente ainda." />
+                    ) : (
+                      docs.map(d => {
+                        const st = statusMeta(d.indexedStatus)
+                        return (
+                          <Tr key={d.id}>
+                            <Td style={{ fontWeight: 600 }}>{d.nome}</Td>
+                            <Td style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-muted)' }}>{d.tamanho}</Td>
+                            <Td>{d.area || '—'}</Td>
+                            <Td>
+                              <span style={{ fontSize: FONT.xs, fontWeight: 700, padding: '3px 8px', borderRadius: RADIUS.chip, background: st.bg, color: st.color }}>
+                                {st.label}
+                              </span>
+                            </Td>
+                            <Td style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-muted)', fontSize: FONT.sm }}>
+                              {formatDateTime(d.createdAt || d.indexado)}
+                            </Td>
+                            <Td>
+                              {isAdmin && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  ariaLabel="Excluir documento"
+                                  title="Excluir documento"
+                                  onClick={() => setDocToDelete(d)}
+                                >🗑️</Button>
+                              )}
+                            </Td>
+                          </Tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </Table>
+              </TableShell>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Fase 8A — Confirmação de exclusão de documento */}
+      <Modal
+        open={!!docToDelete}
+        onClose={() => setDocToDelete(null)}
+        title="Excluir documento"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDocToDelete(null)}>Cancelar</Button>
+            <Button variant="danger" onClick={confirmDeleteDoc}>Excluir</Button>
+          </>
+        }
+      >
+        <p style={{ fontSize: FONT.md, lineHeight: 1.6, margin: 0 }}>
+          Tem certeza que deseja excluir <strong>{docToDelete?.nome}</strong>?
+          Os chunks indexados na base RAG também serão removidos. Esta ação não pode ser desfeita.
+        </p>
       </Modal>
 
       {/* Componente Toast de Mensageria Flutuante */}

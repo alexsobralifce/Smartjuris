@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { documentos, chunks, documentosGerados } from '../db/schema.js';
+import { documentos, chunks, documentosGerados, clientes } from '../db/schema.js';
 import multer from 'multer';
 import pdfParse from 'pdf-parse';
 import { generateEmbedding } from '../services/embedding.js';
@@ -15,7 +15,8 @@ import {
 } from '../services/documento.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
-import { parseBody, formatZodError, colecaoSchema } from '../validation/schemas.js';
+import { requireRole } from '../middlewares/roleGuard.js';
+import { parseBody, formatZodError, colecaoSchema, uuidSchema } from '../validation/schemas.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
 
@@ -50,15 +51,43 @@ function handleUploadError(err: unknown, _req: Request, res: Response, next: Nex
   next(err);
 }
 
+/** Valida que um cliente pertence ao escritório (usado no upload e na
+ *  listagem por cliente — Fase 8A). Cliente inexistente ou de outro
+ *  escritório retorna false. */
+async function validarClienteDoEscritorio(
+  clienteId: string | null | undefined,
+  escritorioId: string
+): Promise<boolean> {
+  if (!clienteId) return true;
+  const rows = await db.select({ id: clientes.id }).from(clientes)
+    .where(and(eq(clientes.id, clienteId), eq(clientes.escritorioId, escritorioId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
 // GET / — lista SOMENTE os documentos do escritório autenticado.
 // Documentos sem escopo (quarentena 'unscoped') nunca aparecem aqui.
+// Fase 8A: `?clienteId=` filtra por cliente (validado no MESMO escritório).
 router.get('/', async (req, res) => {
   try {
     const escritorioId = tenantScopeEscritorioId(req as AuthenticatedRequest);
     if (!escritorioId) {
       return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
     }
-    const data = await listarDocumentosDoEscritorio(escritorioId);
+    const clienteId = typeof req.query.clienteId === 'string' && req.query.clienteId
+      ? req.query.clienteId
+      : undefined;
+    if (clienteId) {
+      const pertence = await validarClienteDoEscritorio(clienteId, escritorioId);
+      if (!pertence) {
+        await recordAudit(req, 'LISTAR_DOCUMENTOS_BLOQUEADO', {
+          alvoId: clienteId,
+          detalhes: { motivo: 'cliente-de-outro-escritorio' },
+        });
+        return res.status(403).json({ error: 'Cliente informado não pertence ao escritório do usuário.' });
+      }
+    }
+    const data = await listarDocumentosDoEscritorio(escritorioId, clienteId);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar documentos' });
@@ -92,7 +121,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
-    const { colecao, area, processoId } = parsed.data;
+    const { colecao, area, processoId, clienteId } = parsed.data;
 
     // 3/10. processoId (se enviado) deve pertencer ao MESMO escritório.
     if (processoId) {
@@ -103,6 +132,18 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
           detalhes: { motivo: 'processo-de-outro-escritorio' },
         });
         return res.status(403).json({ error: 'Processo informado não pertence ao escritório do usuário.' });
+      }
+    }
+
+    // Fase 8A — clienteId (se enviado) deve pertencer ao MESMO escritório.
+    if (clienteId) {
+      const pertence = await validarClienteDoEscritorio(clienteId, escritorioId);
+      if (!pertence) {
+        await recordAudit(req, 'UPLOAD_DOCUMENTO_BLOQUEADO', {
+          alvoId: clienteId,
+          detalhes: { motivo: 'cliente-de-outro-escritorio' },
+        });
+        return res.status(403).json({ error: 'Cliente informado não pertence ao escritório do usuário.' });
       }
     }
 
@@ -152,6 +193,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
       totalPages,
       escritorioId,
       processoId: processoId ?? null,
+      clienteId: clienteId ?? null,
       usuarioId: (req as any).user?.id ?? null,
       chunkTexts: rawChunks,
       gerarEmbedding: async (texto: string, usuarioId?: string) => generateEmbedding(texto, usuarioId),
@@ -174,6 +216,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
           chunks: 0,
           escritorioId,
           processoId: processoId ?? null,
+          clienteId: clienteId ?? null,
           area: area ?? null,
           usuarioId: (req as any).user?.id ?? null,
           totalPages,
@@ -211,6 +254,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
         failedChunks: resultado.failedChunks,
         totalPages,
         processoId: processoId ?? null,
+        clienteId: clienteId ?? null,
         status: resultado.status,
       },
     });
@@ -247,5 +291,37 @@ async function removerDocumentoPiloto(documentoId: string): Promise<void> {
   await db.delete(chunks).where(eq(chunks.documentoId, documentoId));
   await db.delete(documentos).where(eq(documentos.id, documentoId));
 }
+
+// Fase 8A — DELETE /:id — apenas admin; o documento deve pertencer ao
+// escritório autenticado. Chunks são removidos ANTES do documento (FK).
+router.delete('/:id', requireRole('admin'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!uuidSchema.safeParse(id).success) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
+    const escritorioId = tenantScopeEscritorioId(req as AuthenticatedRequest);
+    if (!escritorioId) {
+      return res.status(403).json({ error: 'Usuário sem escritório vinculado.' });
+    }
+    const [existente] = await db.select().from(documentos).where(eq(documentos.id, id)).limit(1);
+    if (!existente) {
+      return res.status(404).json({ error: 'Documento não encontrado.' });
+    }
+    if (existente.escritorioId !== escritorioId) {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+    // Ordem de remoção respeitando FKs (sem CASCADE no schema): dependentes
+    // primeiro (documentos_gerados e chunks), depois o documento.
+    await db.delete(documentosGerados).where(eq(documentosGerados.documentoId, id));
+    await db.delete(chunks).where(eq(chunks.documentoId, id));
+    await db.delete(documentos).where(eq(documentos.id, id));
+    await recordAudit(req, 'DELETE_DOCUMENTO', { alvoId: id });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting documento:', error);
+    res.status(500).json({ error: 'Erro ao excluir documento.' });
+  }
+});
 
 export default router;

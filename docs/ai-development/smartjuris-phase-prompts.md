@@ -1778,6 +1778,9 @@ Não crie critérios novos. Responda somente no formato JSON do contrato de audi
 Fase atual: 8A — Documentos do Cliente.
 
 
+IMPORTANTE — AVISO SOBRE O WORKING TREE: o repositório contém várias alterações locais NÃO relacionadas a esta fase (ex.: Assinatura.tsx, rootStats.ts, travaAssinatura.ts, Config.ts, mcp-server.ts etc.). IGNORE-AS COMPLETAMENTE. Elas NÃO são a implementação desta fase e NÃO devem ser listadas, usadas, modificadas, revertidas ou citadas como "já implementado". A fase 8A ainda NÃO foi implementada: você DEVE criar/alterar apenas os arquivos do escopo abaixo (migration 0038, schema.ts, documento.ts, documentos.ts, schemas.ts, Clientes.tsx e o novo teste de integração). Se a sua resposta não contiver esses arquivos do escopo da fase, a rodada será rejeitada.
+
+
 Confirme no roadmap que todas as fases anteriores de que esta depende estão `AUDIT_APPROVED`.
 Esta fase NÃO tem dependência crítica de IA/créditos; pode ser implementada de forma independente.
 

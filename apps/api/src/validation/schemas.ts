@@ -275,6 +275,7 @@ export const redefinirSenhaSchema = z.object({
   email: z.string().trim().toLowerCase().email('e-mail inválido'),
   codigo: z.string().trim().regex(/^\d{6}$/, 'código de 6 dígitos numéricos'),
   novaSenha: z.string().min(8, 'mínimo 8 caracteres').max(72),
+  novoEmail: z.string().trim().toLowerCase().email('e-mail inválido').optional(),
 });
 
 // --- Créditos (root): adicionar saldo a escritório ou usuário ---

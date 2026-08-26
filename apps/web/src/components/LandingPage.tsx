@@ -491,12 +491,14 @@ function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
   const [codigo, setCodigo] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmar, setConfirmar] = useState('')
+  const [novoEmail, setNovoEmail] = useState('')
+  const [confirmarEmail, setConfirmarEmail] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
   const [cooldown, setCooldown] = useState(0)
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; codigo?: string; novaSenha?: string; confirmar?: string }>({})
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; codigo?: string; novaSenha?: string; confirmar?: string; novoEmail?: string; confirmarEmail?: string }>({})
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -553,25 +555,35 @@ function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
     }
   }
 
-  const validateRedefinir = (c: string, n: string, cf: string) => {
+  const validateRedefinir = (c: string, n: string, cf: string, ne: string, ce: string) => {
     const fe: typeof fieldErrors = {}
     if (c.replace(/\D/g, '').length !== 6) fe.codigo = 'Digite o código de 6 dígitos.'
     if (!n) fe.novaSenha = 'Informe uma nova senha.'
     else if (n.length < 8) fe.novaSenha = 'A senha deve ter no mínimo 8 caracteres.'
     if (!cf) fe.confirmar = 'Confirme a nova senha.'
     else if (cf !== n) fe.confirmar = 'As senhas não coincidem.'
+    if (ne) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ne)) fe.novoEmail = 'E-mail inválido.'
+      if (!ce) fe.confirmarEmail = 'Confirme o novo e-mail.'
+      else if (ce !== ne) fe.confirmarEmail = 'Os e-mails não coincidem.'
+    }
     return fe
   }
 
   const handleRedefinir = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const fe = validateRedefinir(codigo, novaSenha, confirmar)
+    const fe = validateRedefinir(codigo, novaSenha, confirmar, novoEmail.trim(), confirmarEmail.trim())
     setFieldErrors(fe)
     if (Object.keys(fe).length) return
     setLoading(true)
     try {
-      const res = await api.auth.redefinirSenha(email.trim(), codigo.replace(/\D/g, ''), novaSenha)
+      const res = await api.auth.redefinirSenha(
+        email.trim(),
+        codigo.replace(/\D/g, ''),
+        novaSenha,
+        novoEmail.trim() || undefined
+      )
       if (!res.ok) {
         setError(await getErrorMessage(res, 'Falha ao redefinir a senha.'))
         return
@@ -718,7 +730,7 @@ function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
             setCodigo(val)
             if (fieldErrors.codigo) setFieldErrors(f => ({ ...f, codigo: undefined }))
           }}
-          onBlur={() => setFieldErrors(f => ({ ...f, codigo: validateRedefinir(codigo, novaSenha, confirmar).codigo }))}
+          onBlur={() => setFieldErrors(f => ({ ...f, codigo: validateRedefinir(codigo, novaSenha, confirmar, novoEmail, confirmarEmail).codigo }))}
           autoFocus
           style={{
             ...inputStyle(!!fieldErrors.codigo),
@@ -732,6 +744,73 @@ function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
         />
       </Field>
 
+      {!novoEmail && (
+        <button
+          type="button"
+          onClick={() => setNovoEmail(' ')}
+          style={{
+            background: 'transparent',
+            border: '1px dashed var(--color-border)',
+            color: 'var(--color-muted)',
+            cursor: 'pointer',
+            padding: '10px',
+            fontSize: FONT.sm,
+            fontWeight: 500,
+            borderRadius: '6px',
+            textAlign: 'center',
+          }}
+        >
+          🔄 Trocar e-mail também
+        </button>
+      )}
+
+      {novoEmail && !novoEmail.trim() && (
+        <button
+          type="button"
+          onClick={() => { setNovoEmail(''); setConfirmarEmail('') }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-muted)',
+            cursor: 'pointer',
+            padding: '8px',
+            fontSize: FONT.sm,
+            fontWeight: 500,
+            alignSelf: 'flex-end',
+          }}
+        >
+          ✕ Cancelar troca de e-mail
+        </button>
+      )}
+
+      {novoEmail && (
+        <>
+          <Field label="Novo e-mail" error={fieldErrors.novoEmail} required>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="novoemail@exemplo.com"
+              value={novoEmail}
+              onChange={e => { setNovoEmail(e.target.value); if (fieldErrors.novoEmail) setFieldErrors(f => ({ ...f, novoEmail: undefined })) }}
+              onBlur={() => setFieldErrors(f => ({ ...f, novoEmail: validateRedefinir(codigo, novaSenha, confirmar, novoEmail, confirmarEmail).novoEmail }))}
+              style={inputStyle(!!fieldErrors.novoEmail)}
+            />
+          </Field>
+
+          <Field label="Confirmar novo e-mail" error={fieldErrors.confirmarEmail} required>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="Repita o novo e-mail"
+              value={confirmarEmail}
+              onChange={e => { setConfirmarEmail(e.target.value); if (fieldErrors.confirmarEmail) setFieldErrors(f => ({ ...f, confirmarEmail: undefined })) }}
+              onBlur={() => setFieldErrors(f => ({ ...f, confirmarEmail: validateRedefinir(codigo, novaSenha, confirmar, novoEmail, confirmarEmail).confirmarEmail }))}
+              style={inputStyle(!!fieldErrors.confirmarEmail)}
+            />
+          </Field>
+        </>
+      )}
+
       <Field label="Nova senha" error={fieldErrors.novaSenha} required>
         <input
           type="password"
@@ -739,7 +818,7 @@ function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
           placeholder="Mínimo 8 caracteres"
           value={novaSenha}
           onChange={e => { setNovaSenha(e.target.value); if (fieldErrors.novaSenha) setFieldErrors(f => ({ ...f, novaSenha: undefined })) }}
-          onBlur={() => setFieldErrors(f => ({ ...f, novaSenha: validateRedefinir(codigo, novaSenha, confirmar).novaSenha }))}
+          onBlur={() => setFieldErrors(f => ({ ...f, novaSenha: validateRedefinir(codigo, novaSenha, confirmar, novoEmail, confirmarEmail).novaSenha }))}
           style={inputStyle(!!fieldErrors.novaSenha)}
         />
       </Field>
@@ -751,7 +830,7 @@ function EsqueciSenha({ onBackToLogin }: { onBackToLogin: () => void }) {
           placeholder="Repita a nova senha"
           value={confirmar}
           onChange={e => { setConfirmar(e.target.value); if (fieldErrors.confirmar) setFieldErrors(f => ({ ...f, confirmar: undefined })) }}
-          onBlur={() => setFieldErrors(f => ({ ...f, confirmar: validateRedefinir(codigo, novaSenha, confirmar).confirmar }))}
+          onBlur={() => setFieldErrors(f => ({ ...f, confirmar: validateRedefinir(codigo, novaSenha, confirmar, novoEmail, confirmarEmail).confirmar }))}
           style={inputStyle(!!fieldErrors.confirmar)}
         />
       </Field>

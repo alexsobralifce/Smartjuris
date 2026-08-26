@@ -748,7 +748,7 @@ router.post('/redefinir-senha', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
-    const { email, codigo, novaSenha } = parsed.data;
+    const { email, codigo, novaSenha, novoEmail } = parsed.data;
 
     // Busca o código ativo mais recente de recuperação
     const [registroCodigo] = await db.select()
@@ -789,19 +789,53 @@ router.post('/redefinir-senha', async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
-    const senhaHash = await bcrypt.hash(novaSenha, 12);
-    await db.update(usuarios)
-      .set({ senha: senhaHash, precisaTrocarSenha: false })
-      .where(eq(usuarios.id, user.id));
+    // Se um novo e-mail foi informado, garante que ele não esteja em uso por outro usuário
+    if (novoEmail) {
+      const [usuarioComEmail] = await db.select({ id: usuarios.id })
+        .from(usuarios)
+        .where(eq(usuarios.email, novoEmail))
+        .limit(1);
 
-    // Marca o código como utilizado
-    await db.update(codigosVerificacao)
-      .set({ utilizado: true })
-      .where(eq(codigosVerificacao.id, registroCodigo.id));
+      if (usuarioComEmail) {
+        return res.status(409).json({ error: 'Este e-mail já está em uso.' });
+      }
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 12);
+
+    // Usa transação para garantir atomicidade entre atualização do usuário e invalidação do código
+    await db.transaction(async (tx) => {
+      if (novoEmail) {
+        await tx.update(usuarios)
+          .set({ senha: senhaHash, precisaTrocarSenha: false, email: novoEmail })
+          .where(eq(usuarios.id, user.id));
+      } else {
+        await tx.update(usuarios)
+          .set({ senha: senhaHash, precisaTrocarSenha: false })
+          .where(eq(usuarios.id, user.id));
+      }
+
+      // Marca o código como utilizado
+      await tx.update(codigosVerificacao)
+        .set({ utilizado: true })
+        .where(eq(codigosVerificacao.id, registroCodigo.id));
+    });
+
+    // Auditoria de mudança de e-mail
+    if (novoEmail) {
+      await recordAudit(req, 'EMAIL_CHANGE', {
+        alvoId: user.id,
+        alvoEmail: email,
+        detalhes: {
+          emailAntigo: email,
+          emailNovo: novoEmail,
+        },
+      });
+    }
 
     await recordAudit(req, 'PASSWORD_RESET_SELF', {
       alvoId: user.id,
-      alvoEmail: email,
+      alvoEmail: novoEmail || email,
     });
 
     res.json({

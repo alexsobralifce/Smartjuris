@@ -357,19 +357,77 @@ export async function sendRootNewUserNotificationEmail(params: {
  */
 export async function sendWelcomeEmail(to: string, nome: string, escritorio: string): Promise<EmailResult> {
   const body = `
-    <span class="badge">Novo Cadastro</span>
-    <h2 style="margin: 0 0 16px; color: #1a2744; font-size: 20px;">Bem-vindo ao SmartJuris, ${nome}!</h2>
-    <p>Seu cadastro para o escritório <strong>${escritorio}</strong> foi recebido com sucesso em nossa plataforma.</p>
-    <p>O SmartJuris oferece motor de RAG para redação automatizada de peças, linha do tempo com resumo de intimações por IA, jurimetria preditiva e busca unificada de jurisprudência em 16 tribunais.</p>
+    <span class="badge" style="background: #f5edd6; color: #92400e; border-color: #e6cf8f;">Bem-vindo ao SmartJuris</span>
+    <h2 style="margin: 0 0 12px; color: #1a2744; font-size: 22px;">Olá, ${nome}! Sua conta está quase pronta 🎉</h2>
+    <p style="margin: 0 0 8px;">Ficamos muito felizes em receber <strong>${nome}</strong> — e o escritório <strong>${escritorio}</strong> — na plataforma SmartJuris.</p>
+    <p>Seu cadastro foi recebido com sucesso. Enquanto o acesso é liberado pelo administrador, saiba o que preparamos para impulsionar a sua rotina jurídica com inteligência artificial:</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 22px 0; font-size: 14px;">
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">⚖️</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top; border-bottom: 1px solid #eeede9;">
+          <strong style="color: #1a2744;">Motor RAG de Redação</strong><br>
+          <span style="color: #555;">Gere peças jurídicas com IA com base na sua jurisprudência e documentos, com fila de validação humana.</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">📊</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top; border-bottom: 1px solid #eeede9;">
+          <strong style="color: #1a2744;">Jurimetria Preditiva</strong><br>
+          <span style="color: #555;">Analytics de taxa de êxito por área e calculadora preditiva de risco para decisões mais seguras.</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">📜</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top; border-bottom: 1px solid #eeede9;">
+          <strong style="color: #1a2744;">Linha do Tempo Inteligente</strong><br>
+          <span style="color: #555;">Resumo de intimações por IA com ação recomendada e prazos fatais, direto no seu Matter Dashboard.</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">🔎</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top; border-bottom: 1px solid #eeede9;">
+          <strong style="color: #1a2744;">Jurisprudência em 16 Tribunais</strong><br>
+          <span style="color: #555;">Busca unificada e ao vivo de decisões para fundamentar suas teses com precisão.</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">🗂️</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top; border-bottom: 1px solid #eeede9;">
+          <strong style="color: #1a2744;">Gestão de Processos</strong><br>
+          <span style="color: #555;">Matter Dashboard completo para acompanhar cada caso, com time line, documentos e prazos em um só lugar.</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">💰</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top; border-bottom: 1px solid #eeede9;">
+          <strong style="color: #1a2744;">Financeiro com Timesheet</strong><br>
+          <span style="color: #555;">Controle de honorários, despesas e horas faturáveis com cronômetro de timesheet.</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; vertical-align: top;"><span style="font-size: 20px;">📈</span></td>
+        <td style="padding: 10px 0 10px 12px; vertical-align: top;">
+          <strong style="color: #1a2744;">CRM & Funil de Vendas</strong><br>
+          <span style="color: #555;">Pipeline kanban de Lead à Contrato com alerta automático de conflito de interesses.</span>
+        </td>
+      </tr>
+    </table>
+
     <div style="background: #f4f3f0; border-left: 3px solid #c8a84b; padding: 14px 18px; margin: 20px 0; border-radius: 0 4px 4px 0;">
-      <p style="margin: 0; font-size: 14px;"><strong>Status da Conta:</strong> Seu e-mail foi confirmado e seu escritório está em processo de liberação pelo administrador da plataforma. Você receberá um aviso assim que o acesso for ativado.</p>
+      <p style="margin: 0; font-size: 14px;"><strong>Status da Conta:</strong> Seu e-mail foi confirmado e o escritório <strong>${escritorio}</strong> está em processo de liberação pelo administrador da plataforma. Você receberá um aviso assim que o acesso for ativado.</p>
     </div>
-    <p>Se tiver qualquer dúvida, nosso suporte técnico está à disposição.</p>
+
+    <p style="margin: 16px 0 4px; font-size: 15px;">Comece agora mesmo a futura gestão do seu escritório:</p>
+    <p style="text-align: center; margin: 24px 0;">
+      <a href="https://smartjuris-web-production.up.railway.app" class="button">Acessar o SmartJuris e explorar os recursos →</a>
+    </p>
+    <p style="font-size: 13px; color: #7a7870; text-align: center;">Se tiver qualquer dúvida, nosso suporte técnico está à sua disposição. Estamos aqui para te ajudar a crescer. 💛</p>
   `;
 
   return sendEmail({
     to,
-    subject: `Bem-vindo ao SmartJuris — ${escritorio}`,
+    subject: `Bem-vindo ao SmartJuris, ${nome}! Seu escritório ${escritorio} chegou na era da IA 🚀`,
     html: emailWrapper('Bem-vindo ao SmartJuris', body),
   });
 }

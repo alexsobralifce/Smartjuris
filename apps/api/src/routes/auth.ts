@@ -243,7 +243,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     await db.update(usuarios).set({ ultimoLogin: new Date() }).where(eq(usuarios.id, user.id));
 
     // Primeiro login: envia email de boas-vindas com as funcionalidades do SmartJuris
-    if (primeiroLogin) {
+    if (primeiroLogin && escritorioId) {
       const [escritorioNome] = await db
         .select({ nome: escritorios.nome })
         .from(escritorios)

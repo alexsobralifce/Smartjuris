@@ -2054,3 +2054,84 @@ Responda somente neste formato JSON:
   "advanceAllowed": false
 }
 ```
+
+# 8B — Limite de storage 1GB por escritório
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 8B — Limite de storage 1GB por escritório.
+
+Dependência: 8A (AUDIT_APPROVED).
+
+## Objetivo
+
+Limitar o storage total de documentos por escritório a 1GB (1.073.741.824 bytes).
+
+## Escopo técnico
+
+### 1. Migration (`apps/api/src/db/migrations/0039_storage_bytes.sql`)
+- Adicionar coluna `size_bytes bigint NOT NULL DEFAULT 0` em `documentos`
+- Índice `idx_documentos_escritorio_size` em `documentos(escritorio_id, size_bytes)` para queries de soma
+
+### 2. Schema Drizzle (`apps/api/src/db/schema.ts`)
+- Adicionar `sizeBytes: bigint('size_bytes').notNull().default(0)` na tabela `documentos`
+
+### 3. Service (`apps/api/src/services/documento.ts`)
+- Exportar constante `STORAGE_LIMIT_BYTES = 1_073_741_824`
+- Nova função `calcularStorageEscritorio(escritorioId: string): Promise<number>` que soma `size_bytes` de todos os documentos do escritório
+- Em `processarUploadDocumento`: aceitar `sizeBytes` no input e persistir no insert
+- Em `indexarChunksDoDocumento`: não precisa mudar (size_bytes é do documento, não dos chunks)
+
+### 4. Rota upload (`apps/api/src/routes/documentos.ts`)
+- ANTES de processar o upload: calcular `storageAtual + req.file.size`
+- Se exceder `STORAGE_LIMIT_BYTES` → 403 `{ error: 'Limite de storage de 1GB atingido.', code: 'STORAGE_LIMIT_EXCEEDED' }`
+- Registrar auditoria `UPLOAD_DOCUMENTO_BLOQUEADO` com motivo `storage-limit-exceeded`
+- Passar `sizeBytes: req.file.size` para `processarUploadDocumento` e para o caminho piloto
+
+### 5. Rota GET (`apps/api/src/routes/documentos.ts`)
+- Adicionar ao response: `{ documentos: [...], storageUsado: number, storageLimite: STORAGE_LIMIT_BYTES }`
+- Quando `clienteId` filtrado, `storageUsado` é do escritório inteiro (não do cliente)
+
+### 6. Frontend (`apps/web/src/components/Clientes.tsx`)
+- Na seção "Documentos do Cliente", adicionar barra de progresso: "X MB / 1 GB" com cor dinâmica (verde < 70%, amarelo 70-90%, vermelho > 90%)
+- Quando exceder: desabilitar botão "Anexar Documento" com tooltip explicativo
+
+### 7. API client (`apps/web/src/api/client.ts`)
+- Atualizar retorno de `documentos.list()` e `documentos.listByCliente()` para incluir `storageUsado` e `storageLimite`
+
+## Restrições
+- Não altere multer (15MB por arquivo continua igual)
+- Não altere classificador, catálogo, créditos, reserva
+- Documentos legados sem `size_bytes` contam como 0
+
+## Testes (`apps/api/src/integration/storageDocumentos.test.ts`)
+1. Upload dentro do limite → 201 + `size_bytes` persistido
+2. Upload que excede 1GB → 403 `STORAGE_LIMIT_EXCEEDED` + auditoria
+3. Deleção libera espaço → upload seguinte funciona
+4. GET retorna `storageUsado` e `storageLimite`
+5. Upload com `clienteId` + storage check → ambos validados
+
+Adicione o arquivo ao script `"test"` em `apps/api/package.json`.
+
+## Entrega
+Diff, migration, testes, build.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 8B — Limite de storage 1GB por escritório.
+
+Verifique:
+1. MIGRATION — `size_bytes bigint DEFAULT 0` + índice; sem alterar colunas existentes
+2. SCHEMA — `sizeBytes` bigint notNull default 0
+3. SERVICE — `STORAGE_LIMIT_BYTES = 1_073_741_824`; `calcularStorageEscritorio` soma todos; `processarUploadDocumento` aceita e persiste `sizeBytes`
+4. ROTA UPLOAD — valida `storageAtual + novo > limite` ANTES de processar; 403 com auditoria; passa `sizeBytes` ao service
+5. ROTA GET — retorna `{ documentos, storageUsado, storageLimite }`
+6. FRONTEND — barra de uso com cores dinâmicas; botão desabilitado quando cheio
+7. TENANCY — `calcularStorageEscritorio` filtra por `escritorio_id`; nunca soma documentos de outro escritório
+8. TESTES — 5 cenários cobertos; build verde
+
+Responda no formato JSON do contrato de auditoria.
+```

@@ -85,7 +85,8 @@ migrations validadas, quando aplicável
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `IMPLEMENTING` | DeepSeek | GPT-5.6 Luna |
+| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 8B | Limite de storage 1GB por escritório | 8A | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -900,22 +901,28 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 
 ### 8A — Documentos do Cliente
 
-**Estado:** `IMPLEMENTING`
+**Estado:** `AUDIT_APPROVED`
 
-**Dependência:** Independente (sem dependência de IA/créditos).
+### 8B — Limite de storage 1GB por escritório
+
+**Estado:** `PLANNED`
+
+**Dependência:** 8A (Documentos do Cliente)
 
 **Objetivo:**
 
-Permitir que o advogado vincule PDFs diretamente ao cadastro de um cliente: upload, listagem e remoção de documentos a partir do detalhe do cliente na tela `Clientes.tsx`.
+Limitar o storage total de documentos por escritório a 1GB (1.073.741.824 bytes). Bloquear uploads que excedam o limite, mostrar uso atual no frontend.
 
 **Critério de aprovação:**
 
-- Migration com `cliente_id` nullable aplicada sem regressão.
-- Tenancy validada em upload, listagem e deleção.
-- Documentos de outro escritório jamais retornados.
-- Somente admin pode deletar.
-- Build verde (api + web).
-- Suíte de testes verde.
+- Migration 0039 com `size_bytes bigint DEFAULT 0` em `documentos`
+- Schema Drizzle atualizado com `sizeBytes`
+- Service com `calcularStorageEscritorio()` e constante `STORAGE_LIMIT_BYTES`
+- Rota upload valida `storageAtual + tamanhoNovo > 1GB` → 403
+- Rota GET `/` retorna `storageUsado` no response
+- Frontend mostra barra de uso (X MB / 1 GB)
+- 5 testes: dentro do limite, excede, deleção libera, GET retorna storage, upload com clienteId
+- Build verde (api + web)
 
 ## Histórico de auditoria
 

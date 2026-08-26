@@ -242,6 +242,18 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     });
     await db.update(usuarios).set({ ultimoLogin: new Date() }).where(eq(usuarios.id, user.id));
 
+    // Primeiro login: envia email de boas-vindas com as funcionalidades do SmartJuris
+    if (primeiroLogin) {
+      const [escritorioNome] = await db
+        .select({ nome: escritorios.nome })
+        .from(escritorios)
+        .where(eq(escritorios.id, escritorioId))
+        .limit(1);
+
+      sendWelcomeEmail(email, user.nome, escritorioNome?.nome || 'SmartJuris')
+        .catch((err) => console.error('[Auth] Erro ao enviar boas-vindas:', err));
+    }
+
     res.cookie(COOKIE_NAME, token, cookieOptions);
 
     res.json({
@@ -582,9 +594,7 @@ router.post('/verificar-codigo', async (req, res) => {
         cnpj: escritorio?.cnpj || undefined,
       }).catch((err) => console.error('[Auth] Erro ao notificar root por e-mail:', err));
 
-      // Envia confirmação de cadastro recebido ao advogado
-      sendWelcomeEmail(email, userAtualizado.nome, escritorio?.nome || 'Escritório')
-        .catch((err) => console.error('[Auth] Erro ao enviar boas-vindas:', err));
+      // Email de boas-vindas será enviado no primeiro login (não aqui)
     }
 
     await recordAudit(req, 'VERIFICACAO_EMAIL_SUCESSO', {

@@ -58,6 +58,7 @@ Monorepo pnpm (workspaces) — Backend Express + Drizzle ORM + PostgreSQL (pgvec
 - **Roles**: `root` (operações da plataforma), `admin` (gestão do escritório, vê todos os módulos), `user` (advogado, permissões granulares por módulo via `permissoes_usuario`).
 - **Sessão**: JWT httpOnly (cookie `smartjuris_token`), sessão deslizante (`refreshSession` renova em cada requisição), tela de sessão expirada, troca de senha forçada (`forcePasswordChange`) e revogação por JTI em memória.
 - **Tenancy**: `tenantScope` filtra por `escritorio_id` (admin = escritório; user = escritório + autoria; **root é bloqueado nas rotas de negócio via `rejectRoot`**).
+- **Nomes de usuários são intocáveis**: nunca altere, renomeie, traduza ou normalize o `nome` de usuários (`usuarios.nome`) — nem em código, migration, seed, testes ou dados de produção/demo. Nomes de usuário são dados pessoais do usuário final e não devem ser modificados por nenhum fluxo, script ou automação.
 - **Auditoria**: `recordAudit` grava em `audit_log` (quem, quando, o quê, IP) para ações sensíveis (login, peças, escritórios, reset de senha, créditos, exportação, etc.).
 
 ---

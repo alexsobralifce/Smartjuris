@@ -227,15 +227,13 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
         return doc.id;
       });
       // Indexação FORA do lock (embeddings são lentos; não seguram o advisory lock).
-      // COMPENSAÇÃO (piloto): falha de indexação (total ou parcial) NUNCA deixa
-      // documento/chunks órfãos nem consome o teto permanentemente — remove
-      // chunks + documento reservado e o erro vira 502 (embeddings).
+      // Embeddings indisponíveis (status 'failed'): NÃO remove o documento nem
+      // lança erro — o documento fica salvo sem busca vetorial (201 + warning).
+      // O catch abaixo cobre apenas ERROS REAIS (não-embeddings): aí sim a
+      // compensação remove chunks + documento reservado (sem órfãos nem teto
+      // consumido permanentemente por um documento que nem existe direito).
       try {
         resultado = await indexarChunksDoDocumento(documentoId, baseUpload);
-        if (resultado.status === 'failed') {
-          await removerDocumentoPiloto(documentoId);
-          throw new Error('Falha ao indexar o documento: serviço de embeddings indisponível.');
-        }
       } catch (err) {
         await removerDocumentoPiloto(documentoId).catch(() => {});
         throw err;
@@ -266,7 +264,18 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
       titulo: req.file.originalname,
     });
 
-    res.status(201).json({ ...resultado.documento, chunksIndexed: resultado.chunksIndexed });
+    // Embeddings indisponíveis (Token Plan): o documento é salvo normalmente,
+    // apenas sem busca vetorial — avisa o cliente em vez de falhar o upload
+    // (sem 502, sem deleção).
+    const warning = resultado.status === 'failed'
+      ? 'Documento salvo sem indexação vetorial (serviço de embeddings indisponível).'
+      : undefined;
+
+    res.status(201).json({
+      ...resultado.documento,
+      chunksIndexed: resultado.chunksIndexed,
+      ...(warning ? { warning } : {}),
+    });
   } catch (error) {
     // Fase 4B — teto do piloto atingido → 403 com código (não é falha interna).
     const { ErroPilotoLimite } = await import('../services/pilotMode.js');

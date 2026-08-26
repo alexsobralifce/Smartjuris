@@ -6,7 +6,7 @@
 // middlewares/montagem de server.ts para as rotas em teste).
 //
 // Mocks utilizados (apenas serviços externos, como autorizado):
-//   • Ollama/embeddings → servidor HTTP falso em OLLAMA_URL (POST /api/embeddings),
+//   • Token Plan/embeddings → servidor HTTP falso (POST /embeddings),
 //     com falha injetável por marcador de texto ("FALHAEMBEDDING") para o
 //     cenário de falha parcial.
 //   • DeepSeek → mutação da instância do cliente OpenAI (deepseekClient.chat)
@@ -29,32 +29,33 @@ import bcrypt from 'bcryptjs';
 //    sobrescrever variáveis já definidas — dotenv não faz override).
 // ---------------------------------------------------------------------------
 
-// Servidor falso de embeddings (Ollama) — precisa estar de pé antes de setar
-// a env, porque generateEmbedding lê OLLAMA_URL em tempo de chamada.
-const ollamaServer = http.createServer((req, res) => {
+// Servidor falso de embeddings do Token Plan — precisa estar de pé antes de
+// setar a env, porque generateEmbedding lê AI_BASE_URL em tempo de chamada.
+const embeddingsServer = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => { body += c.toString('utf8'); });
   req.on('end', () => {
-    if (req.method === 'POST' && req.url === '/api/embeddings') {
-      let prompt = '';
-      try { prompt = (JSON.parse(body) as { prompt?: string })?.prompt ?? ''; } catch { /* body inválido */ }
-      if (prompt.includes('FALHAEMBEDDING')) {
+    if (req.method === 'POST' && req.url === '/embeddings') {
+      let input = '';
+      try { input = (JSON.parse(body) as { input?: string })?.input ?? ''; } catch { /* body inválido */ }
+      if (input.includes('FALHAEMBEDDING')) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'embedding falhou (fake)' }));
         return;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ embedding: Array(1024).fill(0.01) }));
+      res.end(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.01) }] }));
       return;
     }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'não encontrado' }));
   });
 });
-await new Promise<void>((r) => ollamaServer.listen(0, '127.0.0.1', r));
-const ollamaPort = (ollamaServer.address() as AddressInfo).port;
+await new Promise<void>((r) => embeddingsServer.listen(0, '127.0.0.1', r));
+const embeddingsPort = (embeddingsServer.address() as AddressInfo).port;
 
-process.env.OLLAMA_URL = `http://127.0.0.1:${ollamaPort}`;
+process.env.AI_BASE_URL = `http://127.0.0.1:${embeddingsPort}`;
+process.env.DEEP_SEEK_API = 'sk-fake-embeddings-token-plan';
 process.env.REQUIRE_EMAIL_OTP = 'false';
 
 // ---------------------------------------------------------------------------
@@ -302,7 +303,7 @@ after(async () => {
     for (const escId of escIds) await db.delete(s.escritorios).where(eq(s.escritorios.id, escId)).catch(() => {});
   }
   await new Promise<void>((r) => server.close(() => r()));
-  await new Promise<void>((r) => ollamaServer.close(() => r()));
+  await new Promise<void>((r) => embeddingsServer.close(() => r()));
   await client.end({ timeout: 5 });
 });
 

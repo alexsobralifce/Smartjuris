@@ -8,7 +8,7 @@
 
 import { db } from '../db/client.js';
 import { documentos, chunks, processos, escritorios } from '../db/schema.js';
-import { and, eq, isNull, or, sql, desc, cosineDistance, type SQL } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, sql, desc, cosineDistance, type SQL } from 'drizzle-orm';
 import { generateEmbedding } from './embedding.js';
 
 export type IndexedStatus = 'pending' | 'processing' | 'indexed' | 'failed' | 'unscoped';
@@ -21,6 +21,9 @@ export interface DocumentoUploadInput {
   totalPages: number | null;
   escritorioId: string;
   processoId?: string | null;
+  // Fase 8A — vínculo opcional a um cliente do MESMO escritório (validado na
+  // rota antes de chegar aqui). Os chunks herdam o escopo do documento.
+  clienteId?: string | null;
   usuarioId?: string | null;
   chunkTexts: string[];
   /** Injetável para testes (padrão: embedding BGE-M3 via Ollama). */
@@ -49,6 +52,7 @@ export async function processarUploadDocumento(input: DocumentoUploadInput): Pro
     chunks: 0,
     escritorioId: input.escritorioId,
     processoId: input.processoId ?? null,
+    clienteId: input.clienteId ?? null,
     area: input.area ?? null,
     usuarioId: input.usuarioId ?? null,
     totalPages: input.totalPages,
@@ -83,6 +87,7 @@ export async function indexarChunksDoDocumento(documentoId: string, input: Docum
         metadata,
         escritorioId: input.escritorioId,
         processoId: input.processoId ?? null,
+        clienteId: input.clienteId ?? null,
       });
       indexedCount += 1;
     } catch {
@@ -137,8 +142,20 @@ export function validarEscritorioInformadoNoBody(
   return { ok: false, motivo: 'escritorio_id é derivado do contexto autenticado e não pode ser diferente.' };
 }
 
-/** Lista APENAS os documentos do escritório (quarentena/unscoped excluída). */
-export async function listarDocumentosDoEscritorio(escritorioId: string) {
+/** Lista APENAS os documentos do escritório (quarentena/unscoped excluída).
+ *  Fase 8A: `clienteId` opcional filtra por cliente — o escopo do escritório
+ *  é SEMPRE aplicado, mesmo com o filtro de cliente (nenhum documento sem
+ *  escopo é retornado). */
+export async function listarDocumentosDoEscritorio(escritorioId: string, clienteId?: string | null) {
+  if (clienteId) {
+    return db.select().from(documentos)
+      .where(and(
+        eq(documentos.escritorioId, escritorioId),
+        eq(documentos.clienteId, clienteId),
+        ne(documentos.indexedStatus, 'unscoped'),
+      ))
+      .orderBy(desc(documentos.indexado));
+  }
   return db.select().from(documentos)
     .where(eq(documentos.escritorioId, escritorioId))
     .orderBy(desc(documentos.indexado));

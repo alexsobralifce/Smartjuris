@@ -85,7 +85,7 @@ migrations validadas, quando aplicável
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
-| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `CORRECTION_PENDING` | DeepSeek | GPT-5.6 Luna |
+| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `IMPLEMENTING` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -900,7 +900,7 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 
 ### 8A — Documentos do Cliente
 
-**Estado:** `CORRECTION_PENDING`
+**Estado:** `IMPLEMENTING`
 
 **Dependência:** Independente (sem dependência de IA/créditos).
 

@@ -118,6 +118,8 @@ export const colecaoSchema = z.object({
   area: z.string().optional(),
   // Vínculo opcional a um processo do MESMO escritório (validado na rota).
   processoId: z.string().uuid().optional().nullable(),
+  // Fase 8A — vínculo opcional a um cliente do MESMO escritório (validado na rota).
+  clienteId: z.string().uuid().optional().nullable(),
 });
 
 // --- Root: associação manual de documento sem escopo (quarentena) a um escritório ---

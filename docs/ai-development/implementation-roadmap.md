@@ -85,6 +85,7 @@ migrations validadas, quando aplicável
 | 7E | Webhook da 1ª Compra e Assinatura Definitiva | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7F | Frontend - Exibição da Promoção e Painel de Dev | 7D | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
 | 7G | Testes de Regressão e Validação Final | 7E, 7F | `AUDIT_APPROVED` | DeepSeek | GPT-5.6 Luna |
+| 8A | Documentos do Cliente — upload e listagem vinculados ao cadastro de cliente | — | `PLANNED` | DeepSeek | GPT-5.6 Luna |
 
 ## Fases detalhadas
 
@@ -896,6 +897,25 @@ Garantir que o fluxo sem promoção permanece inalterado e que todos os testes e
 - [x] Planos mapeados corretamente: basico→ESSENTIAL(R$180/20cr), intermediario→PROFESSIONAL(R$300/50cr), avancado→OFFICE(R$500/100cr)
 - [x] Resiliência de resolução de escritório por external_reference ou preapproval_id
 - [x] .env.example documenta todas variáveis MP
+
+### 8A — Documentos do Cliente
+
+**Estado:** `PLANNED`
+
+**Dependência:** Independente (sem dependência de IA/créditos).
+
+**Objetivo:**
+
+Permitir que o advogado vincule PDFs diretamente ao cadastro de um cliente: upload, listagem e remoção de documentos a partir do detalhe do cliente na tela `Clientes.tsx`.
+
+**Critério de aprovação:**
+
+- Migration com `cliente_id` nullable aplicada sem regressão.
+- Tenancy validada em upload, listagem e deleção.
+- Documentos de outro escritório jamais retornados.
+- Somente admin pode deletar.
+- Build verde (api + web).
+- Suíte de testes verde.
 
 ## Histórico de auditoria
 

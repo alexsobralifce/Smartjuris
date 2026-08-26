@@ -1769,3 +1769,285 @@ Críticos (avaliar APENAS estes):
 
 Não crie critérios novos. Responda somente no formato JSON do contrato de auditoria.
 ```
+
+# 8A — Documentos do Cliente
+
+## DeepSeek — implementação
+
+```text
+Fase atual: 8A — Documentos do Cliente.
+
+
+Confirme no roadmap que todas as fases anteriores de que esta depende estão `AUDIT_APPROVED`.
+Esta fase NÃO tem dependência crítica de IA/créditos; pode ser implementada de forma independente.
+
+
+---
+
+
+## Objetivo
+
+
+Permitir que o advogado vincule documentos (PDFs) diretamente ao cadastro de um cliente no SmartJuris.
+O fluxo deve funcionar tanto no momento do cadastro quanto na edição de um cliente já existente.
+
+
+---
+
+
+## Escopo técnico obrigatório
+
+
+### 1. Migration (backend)
+
+
+Crie a migration `apps/api/src/db/migrations/0038_cliente_documentos.sql`.
+
+
+A migration deve:
+- Adicionar a coluna `cliente_id uuid REFERENCES clientes(id)` na tabela `documentos` (nullable — compatibilidade com documentos já existentes sem cliente vinculado).
+- Adicionar um índice simples em `documentos(cliente_id)` para eficiência nas listagens.
+- Não alterar nenhuma coluna existente; apenas adicionar.
+
+
+Atualize o schema Drizzle em `apps/api/src/db/schema.ts`:
+- Adicione o campo `clienteId` na tabela `documentos` como referência FK para `clientes.id` (nullable).
+
+
+---
+
+
+### 2. Rota de upload (backend — `apps/api/src/routes/documentos.ts`)
+
+
+No endpoint `POST /api/documentos/upload`, o frontend já pode enviar `processoId` (campo existente).
+Adicione suporte ao campo `clienteId` (opcional) no body da requisição, com as mesmas proteções de tenancy do `processoId`:
+
+
+- Se `clienteId` informado: validar que o cliente pertence ao mesmo `escritorio_id` do usuário autenticado. Cliente de outro escritório → 403 + auditoria `UPLOAD_DOCUMENTO_BLOQUEADO` com motivo `cliente-de-outro-escritorio`.
+- `clienteId` é passado para `processarUploadDocumento` e persistido no campo `cliente_id` da tabela `documentos`.
+- Nunca aceitar `clienteId` como fonte de escopar o escritório — apenas validar o vínculo.
+
+
+Adicione o campo `clienteId` no schema de validação Zod centralizado em `apps/api/src/validation/schemas.ts` (campo `colecaoSchema` ou schema equivalente).
+
+
+---
+
+
+### 3. Rota de listagem (backend — `apps/api/src/routes/documentos.ts` e `apps/api/src/services/documento.ts`)
+
+
+Crie uma rota filtrada:
+  `GET /api/documentos?clienteId=<uuid>`
+
+
+Comportamento:
+- Se `clienteId` informado: lista apenas os documentos daquele cliente dentro do escritório autenticado.
+- Se não informado: mantém o comportamento atual (lista todos os documentos do escritório).
+- Documentos em quarentena (`indexed_status = 'unscoped'`) jamais aparecem, nem com filtro de cliente.
+- Validar que o cliente pertence ao escritório autenticado antes de filtrar.
+
+
+Atualize `listarDocumentosDoEscritorio` em `services/documento.ts` para aceitar o parâmetro `clienteId?: string` como filtro opcional.
+
+
+---
+
+
+### 4. Rota de deleção de documento (backend — `apps/api/src/routes/documentos.ts`)
+
+
+Adicione o endpoint:
+  `DELETE /api/documentos/:id`
+
+
+Comportamento:
+- Somente `admin` pode deletar (use o middleware `roleGuard(['admin'])` existente).
+- Verificar que o documento pertence ao escritório autenticado (tenancy).
+- Deletar chunks associados (tabela `chunks`) antes de deletar o documento (integridade referencial).
+- Registrar auditoria `DELETE_DOCUMENTO` com `alvoId` = id do documento.
+- Retornar 204 em sucesso.
+
+
+---
+
+
+### 5. Frontend — tela de Clientes (`apps/web/src/components/Clientes.tsx`)
+
+
+Na visualização de detalhe de um cliente (quando o advogado clica para ver ou editar um cliente), adicione uma seção "Documentos do Cliente" com:
+
+
+**5.1 Listagem de documentos vinculados:**
+- Tabela com colunas: Nome, Tamanho, Área, Status de indexação e Data de upload.
+- Buscar via `GET /api/documentos?clienteId=<id>` ao abrir o detalhe.
+- Exibir estado de carregamento (spinner) e estado vazio com texto "Nenhum documento vinculado a este cliente." e ícone.
+
+
+**5.2 Upload de novo documento:**
+- Botão "Anexar Documento" que abre um input `type="file"` aceita apenas PDF.
+- Ao selecionar o arquivo, enviar `POST /api/documentos/upload` com:
+  - `file`: o PDF selecionado
+  - `colecao`: valor fixo `"clientes"` (coleção dedicada a documentos de clientes)
+  - `clienteId`: o UUID do cliente em detalhe
+- Exibir barra de progresso ou indicador visual durante o upload.
+- Ao concluir: exibir toast de sucesso e recarregar a lista de documentos do cliente.
+- Em caso de erro: exibir toast com a mensagem da API.
+- Limite de 15 MB já é aplicado no backend; o frontend deve validar o tipo (PDF) antes de enviar.
+
+
+**5.3 Exclusão de documento (somente admin):**
+- Para usuários com role `admin`, exibir um ícone de lixeira em cada linha da tabela.
+- Ao clicar, exibir um modal de confirmação: "Tem certeza que deseja remover este documento? Esta ação não pode ser desfeita."
+- Confirmar → `DELETE /api/documentos/:id` → toast de sucesso + recarregar lista.
+
+
+**5.4 Experiência visual:**
+- A seção de documentos deve seguir o design system existente (`PageContainer`, `TableShell`, `Table`, `Button`, `EmptyRow`, `Toast`).
+- Animações/transições nos itens são bem-vindas mas não obrigatórias.
+- Não quebre o layout atual do formulário de edição de clientes.
+
+
+---
+
+
+### 6. Restrições de escopo (NÃO faça nada disso)
+
+
+- Não altere o fluxo de geração de peças, classificador, catálogo compartilhado, créditos, reserva ou SSE.
+- Não altere a tela Base RAG (`Base.tsx`) — apenas a tela de Clientes (`Clientes.tsx`).
+- Não crie uma rota dedicada de "documentos por cliente" em endpoint diferente do existente; use query param no endpoint existente.
+- Não altere a autenticação, JWT ou sistema de roles.
+- Não adicione colunas além de `cliente_id` na tabela `documentos`.
+- Não altere o sistema de chunks, embeddings ou indexação — os documentos de clientes passam pelo mesmo pipeline de indexação existente.
+
+
+---
+
+
+### 7. Testes obrigatórios
+
+
+**Testes de integração HTTP (adicionar em `apps/api/src/integration/`):**
+
+
+- Upload de documento com `clienteId` válido → persiste `cliente_id` e retorna 201.
+- Upload de documento com `clienteId` de outro escritório → retorna 403 + auditoria `UPLOAD_DOCUMENTO_BLOQUEADO`.
+- Upload de documento sem `clienteId` → mantém comportamento original (compatibilidade regressiva).
+- Listagem sem filtro → retorna todos os documentos do escritório (sem documentos de outros escritórios).
+- Listagem com `clienteId` → retorna somente os documentos do cliente dentro do escritório.
+- Listagem com `clienteId` de outro escritório → retorna 403.
+- Deleção de documento por admin → 204, chunks removidos, auditoria gravada.
+- Tentativa de deleção por `user` → 403.
+- Tentativa de deletar documento de outro escritório → 403.
+
+
+**Build:**
+- `pnpm build` em `apps/api` deve estar verde.
+- `pnpm build` em `apps/web` deve estar verde.
+
+
+**Testes existentes:**
+- Suíte completa deve permanecer verde (sem regressões).
+
+**IMPORTANTE (lista fixa de testes):**
+- O script `"test"` em `apps/api/package.json` usa uma LISTA FIXA de arquivos de teste (sem glob). Ao criar o novo arquivo de integração (ex.: `src/integration/clienteDocumentos.test.ts`), ADICIONE-O explicitamente à lista do script `"test"` em `apps/api/package.json`, senão ele não será executado pela suíte oficial (`pnpm --filter @lexia/api test`). Mantenha `NODE_ENV=test EMAIL_DISABLED=true` no script (protege a cota do Resend — nunca enviar e-mail real em testes).
+
+
+---
+
+
+## Entrega
+
+
+Entregue:
+1. Diff completo dos arquivos alterados.
+2. Número da migration criada.
+3. Resultado da suíte de testes (novos + regressão).
+4. Resultado do build TypeScript (api + web).
+5. Lista de limitações e riscos encontrados.
+
+
+Aguarde revisão antes de avançar.
+```
+
+## GPT-5.6 Luna — revisão
+
+```text
+Fase: 8A — Documentos do Cliente.
+
+
+Analise o diff, os testes executados e os builds.
+
+
+Verifique:
+
+
+1. MIGRATION
+   - A migration apenas adiciona `cliente_id` (nullable) em `documentos` e o índice correspondente.
+   - Nenhuma coluna existente foi alterada ou removida.
+   - O schema Drizzle foi atualizado de forma consistente com a migration SQL.
+   - O número sequencial da migration é o próximo disponível.
+
+
+2. TENANCY (crítico)
+   - O `clienteId` informado no upload é validado: pertence ao mesmo `escritorio_id` do usuário autenticado.
+   - A listagem filtrada por `clienteId` valida o vínculo com o escritório antes de filtrar.
+   - Documentos de outro escritório jamais aparecem, nem com filtro de cliente.
+   - Documentos em quarentena (`unscoped`) não aparecem na listagem filtrada.
+   - Tentativa de upload com `clienteId` de outro escritório gera auditoria `UPLOAD_DOCUMENTO_BLOQUEADO`.
+
+
+3. ROTA DE UPLOAD
+   - O `clienteId` é aceito como campo opcional, não obrigatório (regressão: upload sem cliente deve continuar funcionando).
+   - O `clienteId` é validado via Zod antes de ser usado.
+   - O `escritorio_id` do documento continua derivado do contexto autenticado (nunca do body).
+
+
+4. ROTA DE LISTAGEM
+   - O filtro por `clienteId` é opcional: sem ele, o comportamento original é preservado.
+   - Com `clienteId`, somente documentos daquele cliente e daquele escritório são retornados.
+
+
+5. ROTA DE DELEÇÃO
+   - Somente `admin` pode deletar.
+   - Tenancy verificada antes da deleção.
+   - Chunks associados são removidos antes do documento.
+   - Auditoria `DELETE_DOCUMENTO` gravada.
+
+
+6. FRONTEND
+   - A seção de documentos usa o design system existente (sem estilos ad-hoc fora do padrão).
+   - Upload envia `colecao = "clientes"` e `clienteId`.
+   - Exclusão disponível apenas para admin.
+   - Erros da API são exibidos como toast.
+   - Nenhuma alteração foi feita em componentes fora de `Clientes.tsx`.
+
+
+7. ESCOPO
+   - Classificador, catálogo, créditos, reserva, SSE, geração de peças e Base RAG não foram alterados.
+   - Somente `Clientes.tsx` foi alterado no frontend.
+   - Nenhuma rota nova foi criada fora do padrão descrito.
+
+
+8. TESTES
+   - Os cenários de upload com/sem `clienteId`, listagem filtrada, acesso cruzado, deleção e permissões foram cobertos.
+   - Suíte de regressão permanece verde.
+
+
+9. BUILDS
+   - `apps/api` e `apps/web` compilaram sem erros TypeScript.
+
+
+Responda somente neste formato JSON:
+
+
+{
+  "verdict": "APPROVE | APPROVE_WITH_CONDITIONS | REJECT",
+  "findings": [],
+  "requiredFixes": [],
+  "missingTests": [],
+  "advanceAllowed": false
+}
+```

@@ -496,6 +496,7 @@ async function seed() {
       colecao: def.colecao,
       tamanho: def.tamanho,
       chunks: def.chunks.length,
+      sizeBytes: 0,
     }).returning();
     docIdMap[def.nome] = doc.id;
 

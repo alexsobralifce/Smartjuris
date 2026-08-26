@@ -89,6 +89,7 @@ async function inserirDocumento(opts: {
     escritorioId: opts.escId ?? null,
     processoId: null,
     totalPages: opts.totalPages ?? null,
+    sizeBytes: 0,
     indexedStatus: opts.status ?? 'indexed',
     failedChunks: 0,
   }).returning();
@@ -215,6 +216,7 @@ test('07. upload salva total_pages', { skip: !dbDisponivel }, async () => {
     tamanho: '1 MB',
     totalPages: 12,
     escritorioId: escA,
+    sizeBytes: 1024,
     chunkTexts: ['texto do documento um'],
     gerarEmbedding: embeddingFake,
   });
@@ -231,6 +233,7 @@ test('08. upload salva indexed_status', { skip: !dbDisponivel }, async () => {
     tamanho: '1 MB',
     totalPages: 3,
     escritorioId: escA,
+    sizeBytes: 2048,
     chunkTexts: ['texto um', 'texto dois'],
     gerarEmbedding: embeddingFake,
   });
@@ -249,6 +252,7 @@ test('09. falha parcial atualiza failed_chunks e status failed', { skip: !dbDisp
     tamanho: '1 MB',
     totalPages: 5,
     escritorioId: escA,
+    sizeBytes: 4096,
     chunkTexts: ['OK1', 'FALHA2', 'OK3', 'FALHA4', 'OK5'],
     gerarEmbedding: async (texto) => {
       if (texto.startsWith('FALHA')) throw new Error('embedding falhou');
@@ -276,6 +280,7 @@ test('10. novo chunk herda o escritório e o processo do documento', { skip: !db
     totalPages: 2,
     escritorioId: escA,
     processoId: procA,
+    sizeBytes: 512,
     chunkTexts: ['texto com herança de escopo'],
     gerarEmbedding: embeddingFake,
   });

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, date, uuid, integer, jsonb, index, numeric, boolean, uniqueIndex, AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, date, uuid, integer, jsonb, index, numeric, boolean, uniqueIndex, bigint, AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
 
@@ -140,6 +140,9 @@ export const documentos = pgTable('documentos', {
   // rota); os chunks herdam o escopo do documento de origem.
   clienteId: uuid('cliente_id').references((): AnyPgColumn => clientes.id),
   totalPages: integer('total_pages'),
+  // Fase 8B — tamanho em bytes do arquivo original (limite de 1 GB por
+  // escritório; total via SUM(size_bytes) por escritorio_id).
+  sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull().default(0),
   indexedStatus: text('indexed_status').notNull().default('pending'), // pending|processing|indexed|failed|unscoped
   failedChunks: integer('failed_chunks').notNull().default(0),
   indexedAt: timestamp('indexed_at', { withTimezone: true }),

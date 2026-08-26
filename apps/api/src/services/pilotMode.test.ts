@@ -130,8 +130,8 @@ describe('4B — piloto controlado (config e limites)', { skip: !dbDisponivel },
     ]).returning({ id: s.escritorios.id });
     escIds.push(esc.id);
     await db.insert(s.documentos).values([
-      { nome: 'a.pdf', colecao: 'piloto', tamanho: '0.01 MB', indexado: new Date(), chunks: 1, escritorioId: esc.id },
-      { nome: 'b.pdf', colecao: 'piloto', tamanho: '0.01 MB', indexado: new Date(), chunks: 1, escritorioId: esc.id },
+      { nome: 'a.pdf', colecao: 'piloto', tamanho: '0.01 MB', indexado: new Date(), chunks: 1, sizeBytes: 0, escritorioId: esc.id },
+      { nome: 'b.pdf', colecao: 'piloto', tamanho: '0.01 MB', indexado: new Date(), chunks: 1, sizeBytes: 0, escritorioId: esc.id },
     ]);
 
     process.env.PILOTO_ATIVO = 'true';

@@ -308,7 +308,7 @@ describe('4B — bloqueios do piloto (HTTP)', () => {
     ]).returning({ id: s.usuarios.id });
     userIds.push(adminDocs.id);
     await db.insert(s.documentos).values([
-      { nome: 'base.pdf', colecao: 'piloto', tamanho: '0.01 MB', indexado: new Date(), chunks: 1, escritorioId: escDocs.id },
+      { nome: 'base.pdf', colecao: 'piloto', tamanho: '0.01 MB', indexado: new Date(), chunks: 1, sizeBytes: 1024, escritorioId: escDocs.id },
     ]);
     const tokenDocs = await login(`pilot.docs.${suffix}@teste.local`, 'PilotoSenha#2026');
 

@@ -170,6 +170,13 @@ function cookieDoLogin(res: Response): string | null {
   return c ? c.split(';')[0].slice('smartjuris_token='.length) : null;
 }
 
+/** Fase 8B — GET /api/documentos agora retorna { documentos, storageUsado,
+ *  storageLimite }; este unwrap mantém os cenários antigos (array) e aceita a
+ *  nova forma. */
+function unwrapListaDocumentos(body: any): any[] {
+  return Array.isArray(body) ? body : (body?.documentos ?? []);
+}
+
 async function login(email: string, password: string): Promise<string> {
   const res = await fetch(`${baseUrl}/api/auth/login`, {
     method: 'POST',
@@ -332,7 +339,7 @@ describe('Integração HTTP — Fase 2A (segurança documental)', { skip: !dbDis
       headers: { Cookie: `smartjuris_token=${tokenA}` },
     });
     assert.equal(res.status, 200);
-    const lista = await res.json();
+    const lista = unwrapListaDocumentos(await res.json());
     assert.ok(Array.isArray(lista));
     assert.ok(lista.some((d: any) => d.nome === 'contrato-escA.pdf'), 'documento de A presente');
     assert.ok(!lista.some((d: any) => d.nome === 'contrato-escB.pdf'), 'documento de B NÃO pode aparecer para A');
@@ -352,7 +359,7 @@ describe('Integração HTTP — Fase 2A (segurança documental)', { skip: !dbDis
       headers: { Cookie: `smartjuris_token=${tokenB}` },
     });
     assert.equal(res.status, 200);
-    const lista = await res.json();
+    const lista = unwrapListaDocumentos(await res.json());
     assert.ok(lista.some((d: any) => d.nome === 'contrato-escB.pdf'), 'documento de B presente');
     assert.ok(!lista.some((d: any) => d.nome === 'contrato-escA.pdf'), 'documento de A NÃO pode aparecer para B');
   });
@@ -422,6 +429,7 @@ describe('Integração HTTP — Fase 2A (segurança documental)', { skip: !dbDis
       escritorioId: null,
       processoId: null,
       totalPages: 3,
+      sizeBytes: 0,
       indexedStatus: 'unscoped',
       failedChunks: 0,
     }).returning({ id: s.documentos.id });
@@ -440,7 +448,7 @@ describe('Integração HTTP — Fase 2A (segurança documental)', { skip: !dbDis
       const res = await fetch(`${baseUrl}/api/documentos`, {
         headers: { Cookie: `smartjuris_token=${token}` },
       });
-      const lista = await res.json();
+      const lista = unwrapListaDocumentos(await res.json());
       assert.ok(!lista.some((d: any) => d.id === legado.id), 'documento sem escopo invisível para usuário');
     }
   });
@@ -474,9 +482,9 @@ describe('Integração HTTP — Fase 2A (segurança documental)', { skip: !dbDis
     assert.equal(chunkRow.escritorioId, escA, 'chunk herdou o escritório na associação');
 
     // Agora A enxerga e B não.
-    const listaA = await (await fetch(`${baseUrl}/api/documentos`, { headers: { Cookie: `smartjuris_token=${tokenA}` } })).json();
+    const listaA = unwrapListaDocumentos(await (await fetch(`${baseUrl}/api/documentos`, { headers: { Cookie: `smartjuris_token=${tokenA}` } })).json());
     assert.ok(listaA.some((d: any) => d.id === legado.id), 'A passa a enxergar após associação');
-    const listaB = await (await fetch(`${baseUrl}/api/documentos`, { headers: { Cookie: `smartjuris_token=${tokenB}` } })).json();
+    const listaB = unwrapListaDocumentos(await (await fetch(`${baseUrl}/api/documentos`, { headers: { Cookie: `smartjuris_token=${tokenB}` } })).json());
     assert.ok(!listaB.some((d: any) => d.id === legado.id), 'B continua sem enxergar');
 
     // Extras: erros esperados da rota root.

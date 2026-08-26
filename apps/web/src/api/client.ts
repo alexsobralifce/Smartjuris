@@ -60,6 +60,14 @@ export type AgendaItem = {
   origem: 'processo' | 'andamento' | 'peca' | 'financeiro' | 'cliente' | 'manual'
 }
 
+// Fase 8B — resposta de GET /api/documentos: lista de documentos + storage do
+// escritório (bytes usados e limite de 1 GB).
+export type DocumentosListResponse = {
+  documentos: any[]
+  storageUsado: number
+  storageLimite: number
+}
+
 const qs = (params: Record<string, string | undefined>) => {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
   return entries.length ? '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&') : '';
@@ -204,9 +212,10 @@ export const api = {
     export: (id: string, format: 'pdf' | 'docx') => downloadApiFile(`/api/pecas/${id}/export?format=${format}`, `peca-${id}.${format}`),
   },
   documentos: {
-    list: () => authFetch('/api/documentos').then(r => r.json()),
+    // Fase 8B — GET /api/documentos retorna { documentos, storageUsado, storageLimite }.
+    list: (): Promise<DocumentosListResponse> => authFetch('/api/documentos').then(r => r.json()),
     // Fase 8A — documentos de um cliente específico (escopo validado no backend).
-    listByCliente: (clienteId: string) => authFetch(`/api/documentos?clienteId=${encodeURIComponent(clienteId)}`).then(r => r.json()),
+    listByCliente: (clienteId: string): Promise<DocumentosListResponse> => authFetch(`/api/documentos?clienteId=${encodeURIComponent(clienteId)}`).then(r => r.json()),
     upload: (formData: FormData) => authFetch('/api/documentos/upload', {
       method: 'POST',
       body: formData

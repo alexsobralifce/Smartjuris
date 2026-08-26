@@ -118,6 +118,9 @@ export default function Clientes() {
   const [uploadLabel, setUploadLabel] = useState('')
   const [docToDelete, setDocToDelete] = useState<any | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Fase 8B — storage do escritório (barra de progresso + trava de upload).
+  const [storageUsado, setStorageUsado] = useState(0)
+  const [storageLimite, setStorageLimite] = useState(0)
 
   // Somente admin pode excluir documentos (backend também valida).
   let isAdmin = false
@@ -148,6 +151,16 @@ export default function Clientes() {
     }
   }
 
+  // Fase 8B — métricas de storage: % usado e cor dinâmica (verde < 70%,
+  // amarelo 70–90%, vermelho > 90%). Trava o upload quando o limite é atingido.
+  const storagePct = storageLimite > 0 ? Math.min(100, (storageUsado / storageLimite) * 100) : 0
+  const storageColor = storagePct < 70
+    ? 'var(--color-success)'
+    : storagePct <= 90
+      ? 'var(--color-warning)'
+      : 'var(--color-danger)'
+  const storageFull = storageLimite > 0 && storageUsado >= storageLimite
+
   const openDetail = async (c: any) => {
     setSelected(c)
     setDetailOpen(true)
@@ -155,10 +168,14 @@ export default function Clientes() {
     setDocsLoading(true)
     try {
       const data = await api.documentos.listByCliente(c.id)
-      setDocs(Array.isArray(data) ? data : [])
+      setDocs(Array.isArray(data) ? data : (data?.documentos ?? []))
+      setStorageUsado(Number(data?.storageUsado ?? 0))
+      setStorageLimite(Number(data?.storageLimite ?? 0))
     } catch (e) {
       console.error(e)
       setDocs([])
+      setStorageUsado(0)
+      setStorageLimite(0)
       addToast('error', 'Não foi possível carregar os documentos do cliente.')
     } finally {
       setDocsLoading(false)
@@ -176,7 +193,9 @@ export default function Clientes() {
     setDocsLoading(true)
     try {
       const data = await api.documentos.listByCliente(selected.id)
-      setDocs(Array.isArray(data) ? data : [])
+      setDocs(Array.isArray(data) ? data : (data?.documentos ?? []))
+      setStorageUsado(Number(data?.storageUsado ?? 0))
+      setStorageLimite(Number(data?.storageLimite ?? 0))
     } catch (e) {
       console.error(e)
       addToast('error', 'Não foi possível carregar os documentos do cliente.')
@@ -677,8 +696,27 @@ export default function Clientes() {
                     {docs.length} documento(s) anexado(s) e indexado(s) na base RAG (PDF)
                   </div>
                 </div>
-                <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>+ Anexar Documento</Button>
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || storageFull}
+                  title={storageFull ? 'Limite de storage de 1 GB atingido.' : undefined}
+                >+ Anexar Documento</Button>
               </div>
+
+              {/* Fase 8B — barra de storage do escritório (1 GB) */}
+              {storageLimite > 0 && (
+                <div style={{ marginBottom: SPACE.lg, padding: '12px 16px', background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: RADIUS.card }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: SPACE.sm }}>
+                    <div style={{ fontSize: FONT.sm, fontWeight: 600, color: 'var(--color-foreground)' }}>Storage do Escritório</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.sm, color: storageFull ? 'var(--color-danger)' : 'var(--color-muted)' }}>
+                      {(storageUsado / (1024 * 1024)).toFixed(1)} MB / 1 GB
+                    </div>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${storagePct}%`, height: '100%', background: storageColor, borderRadius: 3, transition: 'width 0.3s ease' }} />
+                  </div>
+                </div>
+              )}
 
               <input
                 ref={fileInputRef}

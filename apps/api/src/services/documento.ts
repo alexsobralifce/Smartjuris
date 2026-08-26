@@ -13,6 +13,9 @@ import { generateEmbedding } from './embedding.js';
 
 export type IndexedStatus = 'pending' | 'processing' | 'indexed' | 'failed' | 'unscoped';
 
+/** Limite de storage por escritório: 1 GB binário (1.073.741.824 bytes). */
+export const STORAGE_LIMIT_BYTES = 1_073_741_824;
+
 export interface DocumentoUploadInput {
   nome: string;
   colecao: string;
@@ -25,6 +28,8 @@ export interface DocumentoUploadInput {
   // rota antes de chegar aqui). Os chunks herdam o escopo do documento.
   clienteId?: string | null;
   usuarioId?: string | null;
+  // Fase 8B — tamanho em bytes do arquivo original (limite de 1 GB por escritório).
+  sizeBytes: number;
   chunkTexts: string[];
   /** Injetável para testes (padrão: generateEmbedding — Token Plan). */
   gerarEmbedding?: (texto: string, usuarioId?: string) => Promise<number[]>;
@@ -57,6 +62,7 @@ export async function processarUploadDocumento(input: DocumentoUploadInput): Pro
     area: input.area ?? null,
     usuarioId: input.usuarioId ?? null,
     totalPages: input.totalPages,
+    sizeBytes: input.sizeBytes,
     indexedStatus: 'processing',
     failedChunks: 0,
     updatedAt: new Date(),
@@ -175,6 +181,17 @@ export async function listarDocumentosDoEscritorio(escritorioId: string, cliente
   return db.select().from(documentos)
     .where(eq(documentos.escritorioId, escritorioId))
     .orderBy(desc(documentos.indexado));
+}
+
+/** Soma o storage (bytes) de TODOS os documentos do escritório — usado no
+ *  check do upload e na barra de storage do frontend. `SUM(bigint)` volta como
+ *  string do driver; `Number()` normaliza. */
+export async function calcularStorageEscritorio(escritorioId: string): Promise<number> {
+  const rows = await db
+    .select({ total: sql<bigint>`COALESCE(SUM(size_bytes), 0)` })
+    .from(documentos)
+    .where(eq(documentos.escritorioId, escritorioId));
+  return Number(rows[0]?.total ?? 0);
 }
 
 // ---------------------------------------------------------------------------

@@ -75,9 +75,9 @@ before(async () => {
   // Documentos do escritório A: 1 indexado (20 págs), 1 processando (10 págs),
   // e 1 SEM escopo (quarentena) — que NÃO pode entrar nas contagens.
   const docs = await db.insert(s.documentos).values([
-    { nome: `doc-a.pdf ${suffix}`, colecao: 'Jurisprudência', tamanho: '1MB', chunks: 2, escritorioId: ea.id, totalPages: 20, indexedStatus: 'indexed', failedChunks: 0 },
-    { nome: `doc-a2.pdf ${suffix}`, colecao: 'Legislação', tamanho: '2MB', chunks: 1, escritorioId: ea.id, totalPages: 10, indexedStatus: 'processing', failedChunks: 0 },
-    { nome: `doc-unscoped.pdf ${suffix}`, colecao: 'Legislação', tamanho: '3MB', chunks: 0, escritorioId: null, totalPages: 999, indexedStatus: 'unscoped', failedChunks: 0 },
+    { nome: `doc-a.pdf ${suffix}`, colecao: 'Jurisprudência', tamanho: '1MB', chunks: 2, escritorioId: ea.id, totalPages: 20, sizeBytes: 0, indexedStatus: 'indexed', failedChunks: 0 },
+    { nome: `doc-a2.pdf ${suffix}`, colecao: 'Legislação', tamanho: '2MB', chunks: 1, escritorioId: ea.id, totalPages: 10, sizeBytes: 0, indexedStatus: 'processing', failedChunks: 0 },
+    { nome: `doc-unscoped.pdf ${suffix}`, colecao: 'Legislação', tamanho: '3MB', chunks: 0, escritorioId: null, totalPages: 999, sizeBytes: 0, indexedStatus: 'unscoped', failedChunks: 0 },
   ]).returning({ id: s.documentos.id });
   documentoIds.push(...docs.map((d) => d.id));
 
@@ -310,7 +310,7 @@ describe('2C — builder do payload real', { skip: !dbDisponivel }, () => {
     // Defesa em profundidade: mesmo com escritorio_id setado, um documento
     // marcado como 'unscoped' deve ser excluído de contagens E do RAG.
     const [docInconsistente] = await db.insert(s.documentos).values([
-      { nome: `doc-inconsistente.pdf ${suffix}`, colecao: 'Legislação', tamanho: '1MB', chunks: 0, escritorioId: escA.id, totalPages: 500, indexedStatus: 'unscoped', failedChunks: 0 },
+      { nome: `doc-inconsistente.pdf ${suffix}`, colecao: 'Legislação', tamanho: '1MB', chunks: 0, escritorioId: escA.id, totalPages: 500, sizeBytes: 0, indexedStatus: 'unscoped', failedChunks: 0 },
     ]).returning({ id: s.documentos.id });
     documentoIds.push(docInconsistente.id);
     // Chunk desse documento (também com escopo) — não pode contar como RAG.
@@ -422,7 +422,7 @@ describe('2C — builder do payload real', { skip: !dbDisponivel }, () => {
     // apontando para ele. A consulta de RAG de A não pode contá-lo (defesa em
     // profundidade exige documentos.escritorioId = escritorioId).
     const [docB] = await db.insert(s.documentos).values([
-      { nome: `doc-b-elegivel.pdf ${suffix}`, colecao: 'Jurisprudência', tamanho: '1MB', chunks: 0, escritorioId: escB.id, totalPages: 5, indexedStatus: 'indexed', failedChunks: 0 },
+      { nome: `doc-b-elegivel.pdf ${suffix}`, colecao: 'Jurisprudência', tamanho: '1MB', chunks: 0, escritorioId: escB.id, totalPages: 5, sizeBytes: 0, indexedStatus: 'indexed', failedChunks: 0 },
     ]).returning({ id: s.documentos.id });
     documentoIds.push(docB.id);
     // Chunk com escopo de A apontando para documento de B (dado inconsistente).

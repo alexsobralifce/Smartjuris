@@ -38,7 +38,9 @@ export default function Base() {
 
   const reload = async () => {
     try {
-      const docs = await api.documentos.list()
+      // Fase 8B — GET /api/documentos retorna { documentos, storageUsado, storageLimite }.
+      const body = await api.documentos.list() as any
+      const docs = Array.isArray(body) ? body : (body?.documentos ?? [])
       setDocumentos(Array.isArray(docs) ? docs : [])
     } catch (e) {
       console.error(e)

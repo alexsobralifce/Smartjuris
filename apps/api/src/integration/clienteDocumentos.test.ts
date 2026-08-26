@@ -175,6 +175,9 @@ async function listarDocumentos(token: string, query = ''): Promise<{ status: nu
   const text = await res.text();
   let json: any = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* inválido */ }
+  // Fase 8B — GET / retorna { documentos, storageUsado, storageLimite }; o
+  // unwrap preserva os cenários (array) já existentes.
+  if (json && !Array.isArray(json) && Array.isArray(json.documentos)) json = json.documentos;
   return { status: res.status, json, text };
 }
 

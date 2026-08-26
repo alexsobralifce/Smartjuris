@@ -243,49 +243,57 @@ em face de Empresa XYZ S.A., pessoa jurídica de direito privado, pelos fatos e 
       nome: 'Lei_8213_1991_Beneficios_Previdenciarios.pdf',
       colecao: 'Legislação Previdenciária',
       tamanho: '1.8 MB',
-      chunks: 920
+      chunks: 920,
+      sizeBytes: 1887436
     },
     {
       nome: 'Lei_8212_1991_Custeio_Seguridade_Social.pdf',
       colecao: 'Legislação Previdenciária',
       tamanho: '1.4 MB',
-      chunks: 640
+      chunks: 640,
+      sizeBytes: 1468006
     },
     {
       nome: 'Decreto_3048_1999_Regulamento_Previdencia_RPS.pdf',
       colecao: 'Legislação Previdenciária',
       tamanho: '3.2 MB',
-      chunks: 1480
+      chunks: 1480,
+      sizeBytes: 3355443
     },
     {
       nome: 'IN_128_2022_INSS_Processo_Administrativo.pdf',
       colecao: 'Legislação Previdenciária',
       tamanho: '4.1 MB',
-      chunks: 2100
+      chunks: 2100,
+      sizeBytes: 4299167
     },
     {
       nome: 'Sumulas_TNU_e_CRPS_Previdenciario.pdf',
       colecao: 'Jurisprudência Previdenciária',
       tamanho: '1.2 MB',
-      chunks: 530
+      chunks: 530,
+      sizeBytes: 1258291
     },
     {
       nome: 'CPC_Lei_13105_2015_Compilado.pdf',
       colecao: 'Legislação Federal',
       tamanho: '3.5 MB',
-      chunks: 1420
+      chunks: 1420,
+      sizeBytes: 3670016
     },
     {
       nome: 'CLT_Compilada_Atualizada_2026.pdf',
       colecao: 'Legislação Federal',
       tamanho: '2.4 MB',
-      chunks: 1150
+      chunks: 1150,
+      sizeBytes: 2516582
     },
     {
       nome: 'Súmulas_TST_STF_STJ_Atualizadas.pdf',
       colecao: 'Jurisprudência',
       tamanho: '1.1 MB',
-      chunks: 680
+      chunks: 680,
+      sizeBytes: 1153434
     }
   ]);
 

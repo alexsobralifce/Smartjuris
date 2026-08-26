@@ -296,6 +296,7 @@ async function garantirDocumentoDemo(demoId: string, demo: DocumentoDemo): Promi
     escritorioId: demoId,
     processoId: demo.processoId,
     totalPages: null,
+    sizeBytes: 0,
     indexedStatus: 'indexed',
     failedChunks: 0,
     updatedAt: new Date(),

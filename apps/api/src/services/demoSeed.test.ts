@@ -146,6 +146,7 @@ test('seed 06. legado demo sem escopo é corrigido; documento de usuário com me
     chunks: 0,
     escritorioId: null,
     processoId: null,
+    sizeBytes: 0,
     indexedStatus: 'unscoped',
     failedChunks: 0,
   }).returning();
@@ -158,6 +159,7 @@ test('seed 06. legado demo sem escopo é corrigido; documento de usuário com me
     chunks: 0,
     escritorioId: escB,
     processoId: null,
+    sizeBytes: 0,
     indexedStatus: 'indexed',
     failedChunks: 0,
   }).returning();

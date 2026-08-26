@@ -208,6 +208,7 @@ describe('3B — fallback Flash/Pro', { skip: !dbDisponivel }, () => {
       tamanho: '1 MB',
       chunks: 1,
       totalPages: 10,
+      sizeBytes: 0,
       indexedStatus: 'indexed',
       escritorioId: escApertado.id,
       processoId: proc.id,

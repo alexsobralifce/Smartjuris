@@ -12,6 +12,8 @@ import {
   validarProcessoDoEscritorio,
   validarEscritorioInformadoNoBody,
   listarDocumentosDoEscritorio,
+  calcularStorageEscritorio,
+  STORAGE_LIMIT_BYTES,
 } from '../services/documento.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
@@ -88,7 +90,10 @@ router.get('/', async (req, res) => {
       }
     }
     const data = await listarDocumentosDoEscritorio(escritorioId, clienteId);
-    res.json(data);
+    // Fase 8B — storage do escritório inteiro (limite de 1 GB), para a barra
+    // de progresso do frontend.
+    const storageUsado = await calcularStorageEscritorio(escritorioId);
+    res.json({ documentos: data, storageUsado, storageLimite: STORAGE_LIMIT_BYTES });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar documentos' });
   }
@@ -147,6 +152,19 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
       }
     }
 
+    // Fase 8B — limite de storage de 1 GB por escritório (checado ANTES de
+    // persistir qualquer coisa: storageAtual + tamanho do novo arquivo).
+    const storageAtual = await calcularStorageEscritorio(escritorioId);
+    if (storageAtual + req.file.size > STORAGE_LIMIT_BYTES) {
+      await recordAudit(req, 'UPLOAD_DOCUMENTO_BLOQUEADO', {
+        detalhes: { motivo: 'storage-limit-exceeded' },
+      });
+      return res.status(403).json({
+        error: 'Limite de storage de 1 GB por escritório atingido.',
+        code: 'STORAGE_LIMIT_EXCEEDED',
+      });
+    }
+
     // Fase 4B — piloto controlado: teto de documentos por escritório (upload).
     const { excedeLimiteDocumentosPiloto } = await import('../services/pilotMode.js');
     if (await excedeLimiteDocumentosPiloto(escritorioId)) {
@@ -195,6 +213,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
       processoId: processoId ?? null,
       clienteId: clienteId ?? null,
       usuarioId: (req as any).user?.id ?? null,
+      sizeBytes: req.file.size,
       chunkTexts: rawChunks,
       gerarEmbedding: async (texto: string, usuarioId?: string) => generateEmbedding(texto, usuarioId),
     };
@@ -220,6 +239,7 @@ router.post('/upload', aiRateLimiter, upload.single('file'), handleUploadError, 
           area: area ?? null,
           usuarioId: (req as any).user?.id ?? null,
           totalPages,
+          sizeBytes: arquivo!.size,
           indexedStatus: 'processing',
           failedChunks: 0,
           updatedAt: new Date(),

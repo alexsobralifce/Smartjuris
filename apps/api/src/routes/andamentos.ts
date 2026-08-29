@@ -3,7 +3,7 @@ import { db } from '../db/client.js';
 import { andamentos, processos } from '../db/schema.js';
 import { eq, desc, and } from 'drizzle-orm';
 import { tenantScope, tenantScopeEscritorioId } from '../middlewares/tenantGuard.js';
-import { deepseekClient, deepseekModel, deepseekModelPro, opcoesQwen } from '../services/ai.js';
+import { deepseekClient, modeloPorTier, opcoesQwen, ehErroRetryableParaFallback } from '../services/ai.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { parseBody, formatZodError, andamentoSchema, uuidSchema } from '../validation/schemas.js';
@@ -74,16 +74,19 @@ router.post('/', aiRateLimiter, async (req, res) => {
           const safeDescricao = redactPII(descricao);
           const prompt = `Você é um assistente jurídico sênior. Resuma a seguinte intimação/despacho em 2 frases curtas, destacando a AÇÃO RECOMENDADA ao advogado e o prazo fatal:\n\n${safeDescricao}`;
           let completion: any;
-          let modelUsado = deepseekModel;
+          let modelUsado = modeloPorTier('FLASH');
           try {
-            completion = await deepseekClient.chat.completions.create({ model: deepseekModel, ...opcoesQwen(deepseekModel), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
+            completion = await deepseekClient.chat.completions.create({ model: modelUsado, ...opcoesQwen(modelUsado), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
           } catch (err: any) {
+            // Só reexecuta em Pro para falhas RETRYABLE (429/5xx/rede). Erros
+            // de cliente (400/401/403/408) e abort NÃO repetem no tier Pro.
+            if (!ehErroRetryableParaFallback(err)) throw err;
             console.warn('[Andamentos] Modelo padrão falhou, tentando Pro:', err?.message);
-            modelUsado = deepseekModelPro;
-            completion = await deepseekClient.chat.completions.create({ model: deepseekModelPro, ...opcoesQwen(deepseekModelPro), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
+            modelUsado = modeloPorTier('PRO');
+            completion = await deepseekClient.chat.completions.create({ model: modelUsado, ...opcoesQwen(modelUsado), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
           }
           resumoIA = `🤖 Resumo IA: ${completion.choices[0]?.message?.content || 'Intimação registrada.'}`;
-          await trackTokenUsage((req as any).user?.id, 'resumo_andamento', modelUsado, {
+          await trackTokenUsage((req as any).user?.id, 'resumo_andamento', completion.model ?? modelUsado, {
             prompt_tokens: (completion as any)?.usage?.prompt_tokens,
             completion_tokens: (completion as any)?.usage?.completion_tokens,
           });

@@ -5,7 +5,7 @@ import { processos, clientes, usuarios, escritorios } from '../db/schema.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { decryptField } from '../services/crypto.js';
-import { deepseekClient, deepseekModel, deepseekModelPro, selecionarModeloDeepSeek, opcoesQwen } from '../services/ai.js';
+import { deepseekClient, modeloPorTier, opcoesQwen } from '../services/ai.js';
 import {
   validarProcessoDoEscritorio,
   buscarChunksPorEmbedding,
@@ -26,16 +26,16 @@ async function criarStreamComFallback(
   params: Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming, 'model'>,
   signal: AbortSignal
 ) {
-  const principal = selecionarModeloDeepSeek(isComplex);
-  const reserva = isComplex ? deepseekModel : deepseekModelPro;
-  try {
-    const stream = await deepseekClient.chat.completions.create({ ...params, model: principal, ...opcoesQwen(principal) }, { signal });
-    return { stream, modelUsado: principal };
-  } catch (err: any) {
-    console.warn(`[RAG] ${principal} falhou, tentando ${reserva}:`, err?.message);
-    const stream = await deepseekClient.chat.completions.create({ ...params, model: reserva, ...opcoesQwen(reserva) }, { signal });
-    return { stream, modelUsado: reserva };
-  }
+  // O fallback de PROVEDOR (Token Plan <-> OpenCode Go) já é feito pelo
+  // wrapper de deepseekClient.chat.completions.create (services/ai.ts) — não
+  // há fallback de tier aqui (a reexecução Flash→Pro fica no orquestrador 3B).
+  const modelUsado = modeloPorTier(isComplex ? 'PRO' : 'FLASH');
+  const stream = await deepseekClient.chat.completions.create(
+    { ...params, model: modelUsado, ...opcoesQwen(modelUsado) },
+    { signal },
+  );
+  // O wrapper anota o modelo EFETIVO no stream quando o reserva é usado.
+  return { stream, modelUsado: (stream as any)?.model ?? modelUsado };
 }
 
 router.get('/modelos', async (_req, res) => {

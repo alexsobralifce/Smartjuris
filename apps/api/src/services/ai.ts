@@ -1,22 +1,173 @@
 import OpenAI from 'openai';
-import { z } from 'zod';
 
 // Provedor de IA: Token Plan (Alibaba Model Studio / Bailian) — OpenAI-compat.
 // Substitui o DeepSeek oficial; endpoint e chave configuráveis por env.
 // `AI_BASE_URL` é o nome canônico no código; `DEEPSEEK_BASE_URL` também é
 // aceito por compatibilidade com o .env existente.
-export const deepseekClient = new OpenAI({
-  baseURL:
+
+/** URL base do Token Plan (fonte única: `AI_BASE_URL` → `DEEPSEEK_BASE_URL`). */
+export function tokenPlanBaseUrl(): string {
+  return (
     process.env.AI_BASE_URL ||
     process.env.DEEPSEEK_BASE_URL ||
-    'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
-  apiKey: process.env.DEEP_SEEK_API || '',
+    'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1'
+  );
+}
+
+/** Chave de API do Token Plan (fonte única). */
+export function tokenPlanApiKey(): string {
+  return process.env.DEEP_SEEK_API || process.env.DEEPSEEK_API_KEY || '';
+}
+
+export const deepseekClient = new OpenAI({
+  baseURL: tokenPlanBaseUrl(),
+  apiKey: tokenPlanApiKey(),
+});
+
+export const opencodeClient = new OpenAI({
+  baseURL: process.env.OPENCODE_BASE_URL || 'https://api.opencode.ai/v1',
+  apiKey: process.env.OPENCODE_API_KEY || '',
 });
 
 // Modelos do Token Plan (Qwen): padrão = qwen3.7-plus (melhor custo/benefício
 // vs o antigo deepseek-v4-flash); complexas = qwen3.8-max (topo do plano).
 export const deepseekModel = process.env.DEEPSEEK_MODEL || 'qwen3.7-plus';
 export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'qwen3.8-max';
+
+// Modelos OpenCode Go (Fallback/Reserva)
+export const opencodeModel = process.env.OPENCODE_MODEL_FLASH || 'deepseek-v4-flash';
+export const opencodeModelPro = process.env.OPENCODE_MODEL_PRO || 'deepseek-v4-pro';
+
+/** Tier do modelo pelo NOME (mesma inferência de `precoDoModelo` em usage.ts):
+ *  `pro`/`max` → PRO; demais → FLASH. Usado pelo roteamento do fallback —
+ *  independe de qual constante o chamador passou. */
+export function ehModeloPro(model: string): boolean {
+  const nome = model.toLowerCase();
+  return nome.includes('pro') || nome.includes('max');
+}
+
+/** Modelo do Token Plan por tier (FONTE ÚNICA FLASH/PRO → modelo). */
+export function modeloPorTier(tier: 'FLASH' | 'PRO'): string {
+  return tier === 'PRO' ? deepseekModelPro : deepseekModel;
+}
+
+/** Modelo do OpenCode Go por tier. */
+function modeloReservaPorTier(tier: 'FLASH' | 'PRO'): string {
+  return tier === 'PRO' ? opencodeModelPro : opencodeModel;
+}
+
+export type ProvedorCreate = (params: any, options?: any) => Promise<any>;
+
+export interface ProvedorAlvo {
+  client: ProvedorCreate;
+  model: string;
+}
+
+/**
+ * Erros do CLIENTE (4xx exceto 429) são config/conteúdo — NÃO transbordam.
+ * Transbordam apenas 429 (créditos/cota do provedor esgotados) e 5xx/rede
+ * (provedor inacessível) — alinhado à política fail-closed (3B).
+ */
+export function ehErroRetryableParaFallback(err: unknown): boolean {
+  const e = err as { status?: number; name?: string; code?: string } | null;
+  // Abort do cliente (desconexão SSE) NUNCA transborda — independente de
+  // qualquer campo de status que o erro possa carregar.
+  if (e?.name === 'AbortError' || e?.code === 'ABORT_ERR') return false;
+  const status = typeof e?.status === 'number' ? e.status : undefined;
+  if (typeof status === 'number') {
+    // 429 (cota/créditos do provedor) e 5xx (falha do provedor) transbordam.
+    // 4xx (incluindo 408) é da solicitação/cliente → NÃO transborda.
+    return status === 429 || status >= 500;
+  }
+  // Sem status (rede/timeout) → transborda.
+  return true;
+}
+
+/** Anota o modelo EFETIVAMENTE usado na resposta (respeitando o `model` já
+ *  devolvido pelo provedor), para que chamadores registrem telemetria precisa.
+ *  Para streams, o objeto é anotado antes de retornar (mesma tier — custo
+ *  idêntico; apenas o NOME do modelo vencedor fica rastreável). */
+function anotarModeloUsado(data: any, model: string): any {
+  try {
+    if (data && typeof data === 'object' && data.model == null) {
+      data.model = model;
+    }
+  } catch {
+    // resposta imutável/stream congelado — segue sem anotação (best-effort)
+  }
+  return data;
+}
+
+/**
+ * Fallback bidirecional entre provedores (Token Plan <-> OpenCode Go).
+ * Se o provedor PRINCIPAL falhar por motivo RETRYABLE (ex.: HTTP 429 —
+ * créditos do plano esgotados), a chamada transborda para o RESERVA com o
+ * MESMO tier. Erros de cliente (4xx não-429) não transbordam. Núcleo puro.
+ */
+export async function executarComFallback(
+  params: any,
+  options: any | undefined,
+  principal: ProvedorAlvo,
+  reserva: ProvedorAlvo,
+): Promise<any> {
+  const preparar = (alvo: ProvedorAlvo) => {
+    const p = { ...params, model: alvo.model };
+    // `enable_thinking` só existe para modelos Qwen; provedores puros (ex.:
+    // OpenCode Go) rejeitam parâmetros desconhecidos no corpo.
+    if (!alvo.model.toLowerCase().startsWith('qwen')) {
+      delete p.enable_thinking;
+    }
+    return p;
+  };
+  try {
+    return anotarModeloUsado(await principal.client(preparar(principal), options), principal.model);
+  } catch (errMain) {
+    if (!ehErroRetryableParaFallback(errMain)) {
+      // 4xx de cliente (400/401/403/404...) é problema de configuração ou
+      // conteúdo — repetir no reserva só mascararia o erro real.
+      throw errMain;
+    }
+    console.warn(
+      `[AI Service] Provedor principal (${principal.model}) falhou. Tentando reserva (${reserva.model})...`,
+      errMain,
+    );
+    try {
+      return anotarModeloUsado(await reserva.client(preparar(reserva), options), reserva.model);
+    } catch (errFallback) {
+      console.error('[AI Service] Ambos os provedores falharam.', errFallback);
+      throw errFallback;
+    }
+  }
+}
+
+const originalCreate = deepseekClient.chat.completions.create.bind(deepseekClient.chat.completions);
+const opencodeCreate = opencodeClient.chat.completions.create.bind(opencodeClient.chat.completions);
+
+/** Resolve os alvos principal/reserva a partir do modelo pedido e da
+ *  preferência de provedor (`PREFER_OPENCODE=true` inverte a ordem).
+ *  Os creates reais são injetáveis por padrão — testes passam fakes. */
+export function montarProvedores(
+  params: { model?: string },
+  preferOpencode: boolean,
+  tokenPlanCreate: ProvedorCreate = originalCreate,
+  opencodeCreateFn: ProvedorCreate = opencodeCreate,
+): { principal: ProvedorAlvo; reserva: ProvedorAlvo } {
+  const tier = ehModeloPro(params.model ?? '') ? 'PRO' : 'FLASH';
+  const tokenPlan: ProvedorAlvo = { client: tokenPlanCreate, model: modeloPorTier(tier) };
+  const opencode: ProvedorAlvo = { client: opencodeCreateFn, model: modeloReservaPorTier(tier) };
+  return preferOpencode
+    ? { principal: opencode, reserva: tokenPlan }
+    : { principal: tokenPlan, reserva: opencode };
+}
+
+// Proxy para fallback duplo (Token Plan <-> OpenCode Go): TODA chamada ao
+// deepseekClient transborda para o reserva quando o principal falha.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+deepseekClient.chat.completions.create = async function (params: any, options?: any) {
+  const { principal, reserva } = montarProvedores(params, process.env.PREFER_OPENCODE === 'true');
+  return executarComFallback(params, options, principal, reserva);
+};
 
 // Raciocínio explícito (reasoning tokens) dos modelos Qwen: o "pensamento" do
 // modelo é COBRADO como tokens de saída e consome o saldo do plano muito
@@ -29,120 +180,6 @@ export function opcoesQwen(model: string): { enable_thinking?: false } {
   return model.toLowerCase().startsWith('qwen') && process.env.QWEN_ENABLE_THINKING !== 'true'
     ? { enable_thinking: false }
     : {};
-}
-
-// Seleção dinâmica de modelo por complexidade da peça:
-// peças complexas (Recurso/Contestação) usam o Pro; demais usam o Flash.
-export function selecionarModeloDeepSeek(isComplex: boolean): string {
-  return isComplex ? deepseekModelPro : deepseekModel;
-}
-
-export async function generatePecaWithDeepSeek(
-  tipo: string,
-  area: string,
-  dadosCaso: string,
-  contexto: string
-): Promise<string> {
-  const prompt = `Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica.
-
-DIRETRIZES DE REDAÇÃO E CORREÇÃO (AUTOCORRETOR):
-1. Linguagem Jurídica: Utilize o padrão culto da língua portuguesa e o jargão jurídico adequado (ex: vênia, exordial, proêmio). Evite coloquialismos.
-2. Correção Gramatical: Atue como um revisor ortográfico implacável. Certifique-se de que há estrita concordância verbal e nominal, regência correta e pontuação impecável.
-3. Clareza e Concisão: Apesar da formalidade, evite o "juridiquês" excessivo ou prolixo que dificulte a compreensão do juízo.
-
-Tarefa: Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
-
-Os dados do caso são:
-${dadosCaso}
-
-Contexto (Precedentes e Leis relevantes):
-${contexto}
-
-DIRETRIZES DE FUNDAMENTAÇÃO (RAG):
-1. Você receberá blocos de contexto (chunks) contendo teses, jurisprudência e fatos do caso.
-2. É OBRIGATÓRIO fundamentar todos os pedidos e alegações exclusivamente nas leis, doutrinas e jurisprudências fornecidas no contexto.
-3. Não invente ou alucine precedentes, números de processos ou artigos de lei que não estejam nos documentos de suporte.
-4. Se o contexto fornecido for insuficiente para fundamentar uma tese complexa, adicione uma nota ao advogado sugerindo a inclusão de mais documentos comprobatórios.
-
-REGRAS DE FORMAÇÃO DO SISTEMA:
-- Retorne APENAS o texto da peça.
-- Não inclua saudações, explicações ou texto em Markdown, pois o sistema processará a saída via streaming SSE diretamente para o editor rico.`;
-
-  try {
-    const completion = await deepseekClient.chat.completions.create({
-      model: deepseekModel,
-      ...opcoesQwen(deepseekModel),
-      messages: [
-        { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.3,
-      stream: true,
-    });
-
-    let fullText = '';
-    for await (const chunk of completion) {
-      const delta = chunk.choices[0]?.delta?.content || '';
-      fullText += delta;
-      // In a real SSE stream we would yield this back, but for now we'll accumulate 
-      // or implement an async generator.
-    }
-    return fullText;
-  } catch (err) {
-    console.error('[AI Service] Erro ao chamar o provedor de IA:', err);
-    throw err;
-  }
-}
-
-export async function generateStreamWithDeepSeek(
-  tipo: string,
-  area: string,
-  dadosCaso: string,
-  contexto: string,
-  isComplex: boolean = false
-) {
-  const prompt = `Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica.
-
-DIRETRIZES DE REDAÇÃO E CORREÇÃO (AUTOCORRETOR):
-1. Linguagem Jurídica: Utilize o padrão culto da língua portuguesa e o jargão jurídico adequado (ex: vênia, exordial, proêmio). Evite coloquialismos.
-2. Correção Gramatical: Atue como um revisor ortográfico implacável. Certifique-se de que há estrita concordância verbal e nominal, regência correta e pontuação impecável.
-3. Clareza e Concisão: Apesar da formalidade, evite o "juridiquês" excessivo ou prolixo que dificulte a compreensão do juízo.
-
-Tarefa: Com base na jurisprudência e doutrina fornecidas abaixo, crie uma peça jurídica do tipo "${tipo}" na área "${area}".
-
-Os dados do caso são:
-${dadosCaso}
-
-Contexto (Precedentes e Leis relevantes):
-${contexto}
-
-DIRETRIZES DE FUNDAMENTAÇÃO (RAG):
-1. Você receberá blocos de contexto (chunks) contendo teses, jurisprudência e fatos do caso.
-2. É OBRIGATÓRIO fundamentar todos os pedidos e alegações exclusivamente nas leis, doutrinas e jurisprudências fornecidas no contexto.
-3. Não invente ou alucine precedentes, números de processos ou artigos de lei que não estejam nos documentos de suporte.
-4. Se o contexto fornecido for insuficiente para fundamentar uma tese complexa, adicione uma nota ao advogado sugerindo a inclusão de mais documentos comprobatórios.
-
-REGRAS DE FORMAÇÃO DO SISTEMA:
-- Retorne APENAS o texto da peça.
-- Não inclua saudações, explicações ou texto em Markdown, pois o sistema processará a saída via streaming SSE diretamente para o editor rico.`;
-
-  try {
-    const stream = await deepseekClient.chat.completions.create({
-      model: selecionarModeloDeepSeek(isComplex),
-      ...opcoesQwen(selecionarModeloDeepSeek(isComplex)),
-      messages: [
-        { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.3,
-      stream: true,
-    });
-
-    return stream;
-  } catch (err) {
-    console.error('[AI Service] Erro ao chamar o provedor de IA:', err);
-    throw err;
-  }
 }
 
 // ===========================================================================
@@ -207,7 +244,7 @@ export async function gerarOperacaoIA(op: {
   payload: ClassifierOutput;
   modelTier: 'FLASH' | 'PRO';
 }): Promise<ResultadoGeracaoIA> {
-  const modelo = op.modelTier === 'PRO' ? deepseekModelPro : deepseekModel;
+  const modelo = modeloPorTier(op.modelTier);
   try {
     const completion = await deepseekClient.chat.completions.create({
       model: modelo,
@@ -235,8 +272,11 @@ export async function gerarOperacaoIA(op: {
     if (!valido(usage.prompt_tokens) || !valido(usage.completion_tokens)) {
       throw new ErroGeracaoIA('métricas de uso inválidas (tokens não inteiros/não finitos/negativos)', { ambigua: true });
     }
+    // `completion.model` reflete o modelo EFETIVAMENTE usado pelo provedor
+    // (com o wrapper de fallback, pode ser o reserva — ex.: OpenCode Go).
+    const modelUsado = completion.model || modelo;
     return {
-      modelUsed: modelo,
+      modelUsed: modelUsado,
       inputTokens: usage.prompt_tokens,
       outputTokens: usage.completion_tokens,
     };

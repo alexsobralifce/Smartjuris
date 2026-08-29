@@ -22,6 +22,7 @@ function mockCliente(opts: {
   errStatus?: number;
   errMessage?: string;
   networkError?: boolean;
+  model?: string;
 }) {
   (deepseekClient as any).chat = {
     completions: {
@@ -33,7 +34,7 @@ function mockCliente(opts: {
         }
         if (opts.networkError) throw new Error(opts.errMessage ?? 'fetch failed');
         if (opts.usage === null) return { usage: undefined };
-        return { usage: opts.usage ?? { prompt_tokens: 100, completion_tokens: 50 } };
+        return { model: opts.model, usage: opts.usage ?? { prompt_tokens: 100, completion_tokens: 50 } };
       },
     },
   };
@@ -52,6 +53,12 @@ describe('3B — adaptador real (gerarOperacaoIA)', () => {
     assert.equal(rFlash.modelUsed, deepseekModel, `modelo FLASH (${rFlash.modelUsed})`);
     const rPro = await gerarOperacaoIA({ operationId: 'x', payload: payloadBase, modelTier: 'PRO' });
     assert.equal(rPro.modelUsed, deepseekModelPro, `modelo PRO (${rPro.modelUsed})`);
+  });
+
+  test('modelUsed reflete o modelo EFETIVAMENTE usado pelo provedor (fallback)', async () => {
+    mockCliente({ usage: { prompt_tokens: 10, completion_tokens: 5 }, model: 'deepseek-v4-flash' });
+    const r = await gerarOperacaoIA({ operationId: 'x', payload: payloadBase, modelTier: 'FLASH' });
+    assert.equal(r.modelUsed, 'deepseek-v4-flash', 'modelo do provedor vencedor prevalece sobre o pedido');
   });
 
   test('4xx de cliente (400/429) → confirmadoSemProcessamento (autoriza fallback)', async () => {

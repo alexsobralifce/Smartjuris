@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { trackTokenUsage } from './usage.js';
+import { tokenPlanBaseUrl, tokenPlanApiKey } from './ai.js';
 
 // Cache LRU em memória: chave = sha256(texto), valor = embedding.
 // Capacidade máxima ~256 entradas; ao exceder, remove a entrada mais antiga.
@@ -19,18 +20,6 @@ function embeddingTimeoutMs(): number {
   return Number(process.env.EMBEDDING_TIMEOUT_MS ?? '6000');
 }
 
-function fallbackBaseUrl(): string {
-  return (
-    process.env.AI_BASE_URL ||
-    process.env.DEEPSEEK_BASE_URL ||
-    'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1'
-  );
-}
-
-function fallbackApiKey(): string {
-  return process.env.DEEP_SEEK_API || process.env.DEEPSEEK_API_KEY || '';
-}
-
 /** Insere no cache LRU (remove a entrada mais antiga ao exceder o máximo). */
 function armazenarNoCache(cacheKey: string, embedding: number[]): void {
   embeddingCache.set(cacheKey, embedding);
@@ -43,7 +32,7 @@ function armazenarNoCache(cacheKey: string, embedding: number[]): void {
 /** Embedding via API do Token Plan (DashScope/Bailian), OpenAI-compat:
  *  POST {base}/embeddings com text-embedding-v3 e dimensions 1024. */
 async function gerarEmbeddingTokenPlan(text: string, usuarioId?: string): Promise<number[]> {
-  const apiKey = fallbackApiKey();
+  const apiKey = tokenPlanApiKey();
   if (!apiKey) {
     throw new Error('Embeddings do Token Plan sem API key configurada (DEEP_SEEK_API).');
   }
@@ -52,7 +41,7 @@ async function gerarEmbeddingTokenPlan(text: string, usuarioId?: string): Promis
   const timeoutId = setTimeout(() => controller.abort(), embeddingTimeoutMs());
 
   try {
-    const response = await fetch(`${fallbackBaseUrl()}/embeddings`, {
+    const response = await fetch(`${tokenPlanBaseUrl()}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

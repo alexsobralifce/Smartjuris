@@ -16,7 +16,7 @@
 import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../middlewares/auth.js';
 import { runAiOperation } from './aiOperation.js';
-import { deepseekClient, deepseekModel, deepseekModelPro, normalizarErroProvedor, opcoesQwen } from './ai.js';
+import { deepseekClient, modeloPorTier, normalizarErroProvedor, opcoesQwen } from './ai.js';
 import { generateEmbedding } from './embedding.js';
 import { buscarChunksPorEmbedding, buscarChunksPorKeywords } from './documento.js';
 import { sql } from 'drizzle-orm';
@@ -88,11 +88,6 @@ async function saldoDoEscritorio(escritorioId: string): Promise<{ credits: numbe
   } catch {
     return { credits: null, reserveCents: null };
   }
-}
-
-/** Modelo concreto por tier (mesma fonte do ai.ts). */
-function modeloPorTier(tier: 'FLASH' | 'PRO'): string {
-  return tier === 'PRO' ? deepseekModelPro : deepseekModel;
 }
 
 /** Monta o prompt de redação com o contexto RAG do escritório e o TAMANHO
@@ -383,7 +378,7 @@ export async function gerarPecaComSSE(
         // persistido junto do texto gerado (rastreável pela operationId).
         const persistido = await persistirSubOperacoes(
           operationId,
-          montarSubOperacoesJurisprudencia(deltas.join(''), modeloPorTier(modelTier), jurisprudenciaAoVivo),
+          montarSubOperacoesJurisprudencia(deltas.join(''), (stream as any)?.model ?? modeloPorTier(modelTier), jurisprudenciaAoVivo),
         );
         if (!persistido) {
           throw new Error('operação não encontrada para persistência do conteúdo');
@@ -395,7 +390,7 @@ export async function gerarPecaComSSE(
         );
       }
       emitir(res, { type: 'progresso', progresso: 85, label: 'Finalizando...' });
-      return { modelUsed: modeloPorTier(modelTier), inputTokens: tokensIn, outputTokens: tokensOut };
+      return { modelUsed: (stream as any)?.model ?? modeloPorTier(modelTier), inputTokens: tokensIn, outputTokens: tokensOut };
     }),
   });
   } catch (err) {

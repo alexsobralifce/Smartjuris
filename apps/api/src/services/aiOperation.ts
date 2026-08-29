@@ -37,7 +37,7 @@ import {
   type AiEstimateResult,
 } from './usage.js';
 import { ehErroRetryable, ehFalhaAmbígua, ehFalhaComResposta } from './analiseDocumental.js';
-import { gerarOperacaoIA, type ResultadoGeracaoIA } from './ai.js';
+import { gerarOperacaoIA, deepseekModelPro, type ResultadoGeracaoIA } from './ai.js';
 import { recordAudit } from '../middlewares/audit.js';
 import type { AiOperationType } from './usage.js';
 import { db } from '../db/client.js';
@@ -596,7 +596,7 @@ async function executarFallbackPro(opts: {
   // preços do PRO. `creditsRequired` é re-derivado do catálogo da OPERAÇÃO
   // (crédito por operação, não por modelo), nunca herdado da estimativa FLASH.
   const custoPro = calculateAiCostCents({
-    model: 'deepseek-v4-pro',
+    model: deepseekModelPro,
     inputTokens: opts.estimate.inputTokensEstimated,
     outputTokens: opts.estimate.outputTokensEstimated,
     isPeak: pico,

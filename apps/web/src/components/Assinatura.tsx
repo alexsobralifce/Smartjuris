@@ -3,6 +3,7 @@ import { PageContainer, PageHeader, Button, FONT, RADIUS, SPACE, Loading } from 
 import { api, getErrorMessage } from '../api/client'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import { decidirCheckoutPromocional, resumoPrecoPlano, type PromocaoStatusApi } from '../utils/promocaoUI'
+import { trackSubscriptionConversion } from '../utils/analytics'
 
 interface PlanoAssinatura {
   codigo: string
@@ -127,6 +128,9 @@ export default function Assinatura() {
       }
       const data = await res.json()
       if (data?.initPoint) {
+        // Conversão Google Ads (Assinatura) — dispara no clique do checkout,
+        // antes do redirecionamento ao Mercado Pago (método de clique).
+        trackSubscriptionConversion()
         window.location.href = data.initPoint
       } else {
         setErro('O Mercado Pago não retornou a URL de pagamento.')

@@ -56,7 +56,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: formatZodError(parsed.error) });
     }
-    const { nome, plano, limiteUsuarios, limitePecasMes, limiteProcessos, isDemo, limiteTokensMes, adminEmail, adminNome } = parsed.data;
+    const { nome, plano, limiteUsuarios, limitePecasMes, limiteProcessos, isDemo, isentoMensalidade, limiteTokensMes, adminEmail, adminNome } = parsed.data;
 
     const [existing] = await db.select({ id: usuarios.id, email: usuarios.email }).from(usuarios)
       .where(eq(usuarios.email, adminEmail)).limit(1);
@@ -78,6 +78,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       ...(limitePecasMes !== undefined ? { limitePecasMes } : {}),
       ...(limiteProcessos !== undefined ? { limiteProcessos } : {}),
       ...(isDemo !== undefined ? { isDemo } : {}),
+      ...(isentoMensalidade !== undefined ? { isentoMensalidade } : {}),
       ...(limiteTokensMes !== undefined ? { limiteTokensMes } : {}),
       createdBy: req.user?.id ?? null,
     }).returning();
@@ -96,6 +97,12 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       alvoId: escritorio.id,
       detalhes: { adminEmail },
     });
+    if (isentoMensalidade === true) {
+      await recordAudit(req, 'CORTESIA_CONCEDIDA', {
+        alvoId: escritorio.id,
+        detalhes: { adminEmail, plano },
+      });
+    }
 
     res.status(201).json({
       escritorio: baseEscritorio(escritorio),

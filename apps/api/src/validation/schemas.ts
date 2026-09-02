@@ -174,6 +174,7 @@ export const escritorioCreateSchema = z.object({
   limitePecasMes: z.number().int().min(0).optional(),
   limiteProcessos: z.number().int().min(0).optional(),
   isDemo: z.boolean().optional(),
+  isentoMensalidade: z.boolean().optional(),
   limiteTokensMes: z.number().int().min(0).nullable().optional(),
   adminEmail: z.string().email(),
   adminNome: z.string().min(1),
@@ -186,6 +187,7 @@ export const escritorioPatchSchema = z.object({
   limitePecasMes: z.number().int().min(0).optional(),
   limiteProcessos: z.number().int().min(0).optional(),
   isDemo: z.boolean().optional(),
+  isentoMensalidade: z.boolean().optional(),
   limiteTokensMes: z.number().int().min(0).nullable().optional(),
   ativo: z.boolean().optional(),
 });

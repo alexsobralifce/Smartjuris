@@ -48,6 +48,8 @@ interface StatusAssinatura {
     expiracao: string | null
   }
   mpConfigurado: boolean
+  acesso?: 'cortesia' | 'pago' | 'demo'
+  isentoMensalidade?: boolean
 }
 
 const STATUS_LABEL: Record<string, { label: string; cor: string; fundo: string }> = {
@@ -110,6 +112,7 @@ export default function Assinatura() {
   useEffect(() => { carregar() }, [carregar])
 
   const assinar = async (codigo: string) => {
+    if (status?.acesso === 'cortesia') return
     setAssinarPlano(codigo)
     setErro('')
     try {
@@ -284,7 +287,22 @@ export default function Assinatura() {
         </div>
       )}
 
+      {/* Status da assinatura */}
+      {status?.acesso === 'cortesia' && (
+        <div style={{
+          marginTop: SPACE.lg,
+          background: 'var(--color-accent-light)', color: 'var(--color-on-accent)',
+          border: '1px solid var(--color-accent)',
+          borderRadius: RADIUS.card, padding: '14px 18px', fontSize: FONT.base,
+        }}>
+          ✅ <strong>Acesso cortesia (sem cobrança)</strong> — concedido pela plataforma.
+          Seu escritório usa o SmartJuris sem pagar a mensalidade.
+        </div>
+      )}
+
       {/* Escolha do plano */}
+      {status?.acesso !== 'cortesia' && (
+        <>
       <h2 style={{
         fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400,
         letterSpacing: '-0.02em', margin: `${SPACE.xxl}px 0 ${SPACE.lg}px`,
@@ -382,6 +400,8 @@ export default function Assinatura() {
           )
         })}
       </div>
+        </>
+      )}
 
       <p style={{
         marginTop: SPACE.xxl, fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.6,

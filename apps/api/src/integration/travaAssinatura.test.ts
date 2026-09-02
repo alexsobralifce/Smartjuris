@@ -42,6 +42,7 @@ const SENHA = 'Trava#2026';
 const ESCR_DEMO = randomUUID();        // self-service, sem assinatura → trava
 const ESCR_ASSINANTE = randomUUID();   // assinatura ativa → liberado
 const ESCR_NAO_DEMO = randomUUID();    // criado pelo root (isDemo=false) → isento
+const ESCR_CORTESIA = randomUUID();    // isentoMensalidade=true (root concedeu) → liberado
 const UIDS: string[] = [];
 
 const app = express();
@@ -63,8 +64,9 @@ before(async () => {
     { id: ESCR_DEMO, nome: 'Trava Demo', plano: 'basico', isDemo: true },
     { id: ESCR_ASSINANTE, nome: 'Trava Assinante', plano: 'basico', isDemo: true, assinaturaStatus: 'ativa', assinaturaPlano: 'basico' },
     { id: ESCR_NAO_DEMO, nome: 'Trava Nao Demo', plano: 'basico', isDemo: false },
+    { id: ESCR_CORTESIA, nome: 'Trava Cortesia', plano: 'basico', isDemo: true, isentoMensalidade: true },
   ]).onConflictDoNothing();
-  for (const escId of [ESCR_DEMO, ESCR_ASSINANTE, ESCR_NAO_DEMO]) {
+  for (const escId of [ESCR_DEMO, ESCR_ASSINANTE, ESCR_NAO_DEMO, ESCR_CORTESIA]) {
     const uid = randomUUID();
     UIDS.push(uid);
     await db.insert(usuarios).values({
@@ -79,10 +81,10 @@ before(async () => {
 after(async () => {
   await new Promise<void>((r) => { (server as any).closeAllConnections?.(); server.close(() => r()); });
   delete process.env.TRAVA_ASSINATURA;
-  await client`DELETE FROM pecas WHERE escritorio_id IN (${ESCR_DEMO}, ${ESCR_ASSINANTE}, ${ESCR_NAO_DEMO})`.catch(() => {});
-  await client`DELETE FROM clientes WHERE escritorio_id IN (${ESCR_DEMO}, ${ESCR_ASSINANTE}, ${ESCR_NAO_DEMO})`.catch(() => {});
+  await client`DELETE FROM pecas WHERE escritorio_id IN (${ESCR_DEMO}, ${ESCR_ASSINANTE}, ${ESCR_NAO_DEMO}, ${ESCR_CORTESIA})`.catch(() => {});
+  await client`DELETE FROM clientes WHERE escritorio_id IN (${ESCR_DEMO}, ${ESCR_ASSINANTE}, ${ESCR_NAO_DEMO}, ${ESCR_CORTESIA})`.catch(() => {});
   await client`DELETE FROM usuarios WHERE id = ANY(${UIDS}::uuid[])`.catch(() => {});
-  await client`DELETE FROM escritorios WHERE id IN (${ESCR_DEMO}, ${ESCR_ASSINANTE}, ${ESCR_NAO_DEMO})`.catch(() => {});
+  await client`DELETE FROM escritorios WHERE id IN (${ESCR_DEMO}, ${ESCR_ASSINANTE}, ${ESCR_NAO_DEMO}, ${ESCR_CORTESIA})`.catch(() => {});
   await client.end({ timeout: 5 }).catch(() => {});
 });
 
@@ -166,6 +168,14 @@ describe('trava do plano demo', () => {
     assert.equal(r1.status, 201, await r1.text());
     const r2 = await salvarPeca(token);
     assert.equal(r2.status, 201, `não-demo isento: ${await r2.text()}`);
+  });
+
+  test('escritório com isentoMensalidade=true (cortesia) → SEM limite, mesmo isDemo', async () => {
+    const token = await login(ESCR_CORTESIA);
+    const r1 = await salvarPeca(token);
+    assert.equal(r1.status, 201, await r1.text());
+    const r2 = await salvarPeca(token);
+    assert.equal(r2.status, 201, `cortesia liberado: ${await r2.text()}`);
   });
 
   test('flag TRAVA_ASSINATURA off → fluxo atual inalterado (demo liberado)', async () => {

@@ -48,6 +48,7 @@ interface Escritorio {
   usuarios: { id: string; nome: string; email: string; role: string; ativo: boolean }[]
   limiteTokensMes?: number | null
   usoPercentual?: number
+  isentoMensalidade?: boolean
 }
 
 interface CreditoUsuario {
@@ -505,7 +506,7 @@ export default function RootPainel() {
     addToast(ok ? 'success' : 'error', ok ? 'Log filtrado copiado.' : 'Falha ao copiar.')
   }
 
-  const handleCriarEscritorio = async (data: { nome: string; adminNome: string; adminEmail: string }) => {
+  const handleCriarEscritorio = async (data: { nome: string; adminNome: string; adminEmail: string; isentoMensalidade?: boolean }) => {
     try {
       const res = await api.raiz.criarEscritorio(data)
       const json = await res.json().catch(() => ({}))
@@ -779,6 +780,12 @@ export default function RootPainel() {
                               <Td rowSpan={rowspan} style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, verticalAlign: 'middle' }}>{fmtNum(esc.usuariosAtivos)}</Td>
                               <Td rowSpan={rowspan} style={{ fontFamily: 'var(--font-mono)', fontSize: FONT.base, verticalAlign: 'middle' }}>{fmtNum(esc.tokens30d)}</Td>
                               <Td rowSpan={rowspan} style={{ verticalAlign: 'middle' }}>
+                                {esc.isentoMensalidade && (
+                                  <span style={{
+                                    fontSize: FONT.xs, fontWeight: 700, padding: '3px 8px', borderRadius: RADIUS.chip,
+                                    color: 'var(--color-on-accent)', background: 'var(--color-accent)', marginRight: 6,
+                                  }}>Cortesia</span>
+                                )}
                                 <span style={{
                                   fontSize: FONT.xs, fontWeight: 600, padding: '3px 8px', borderRadius: RADIUS.chip,
                                   color: esc.ativo ? 'var(--color-success)' : 'var(--color-muted)',
@@ -1260,10 +1267,11 @@ export default function RootPainel() {
   )
 }
 
-function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClose: () => void; onSubmit: (data: { nome: string; adminNome: string; adminEmail: string }) => void }) {
+function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClose: () => void; onSubmit: (data: { nome: string; adminNome: string; adminEmail: string; isentoMensalidade?: boolean }) => void }) {
   const [nome, setNome] = useState('')
   const [adminNome, setAdminNome] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
+  const [isentoMensalidade, setIsentoMensalidade] = useState(false)
   const [errors, setErrors] = useState<{ nome?: string; adminNome?: string; adminEmail?: string }>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -1279,7 +1287,7 @@ function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClo
     if (Object.keys(next).length > 0) return
 
     setSubmitting(true)
-    await onSubmit({ nome: nome.trim(), adminNome: adminNome.trim(), adminEmail: adminEmail.trim() })
+    await onSubmit({ nome: nome.trim(), adminNome: adminNome.trim(), adminEmail: adminEmail.trim(), isentoMensalidade })
     setSubmitting(false)
   }
 
@@ -1317,6 +1325,12 @@ function NovoEscritorioModal({ open, onClose, onSubmit }: { open: boolean; onClo
           <Field label="E-mail do admin inicial" error={errors.adminEmail}>
             <input value={adminEmail} onChange={e => { setAdminEmail(e.target.value); if (errors.adminEmail) setErrors(p => ({ ...p, adminEmail: undefined })) }} style={{ ...inputStyle(), borderColor: errors.adminEmail ? 'var(--color-danger)' : 'var(--color-border)' }} type="email" placeholder="admin@escritorio.com" />
           </Field>
+        </FormRow>
+        <FormRow span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: FONT.base, color: 'var(--color-foreground)', lineHeight: 1.4 }}>
+            <input type="checkbox" checked={isentoMensalidade} onChange={e => setIsentoMensalidade(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--color-accent)', flexShrink: 0 }} />
+            Acesso gratuito (cortesia) — este escritório usa o sistema sem pagar a mensalidade
+          </label>
         </FormRow>
       </FormGrid>
     </Modal>

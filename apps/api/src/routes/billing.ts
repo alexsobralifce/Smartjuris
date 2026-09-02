@@ -162,6 +162,12 @@ router.get('/status', async (req: AuthenticatedRequest, res) => {
         expiracao: esc.assinaturaExpiracao ?? null,
       },
       mpConfigurado: MP_CONFIGURADO,
+      isentoMensalidade: esc.isentoMensalidade === true,
+      acesso: esc.isentoMensalidade === true
+        ? 'cortesia'
+        : esc.assinaturaStatus === 'ativa'
+          ? 'pago'
+          : 'demo',
     });
   } catch (error) {
     console.error('[Billing] Erro ao buscar status:', error);

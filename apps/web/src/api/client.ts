@@ -309,7 +309,7 @@ export const api = {
   },
   raiz: {
     listEscritorios: () => authFetch('/api/root/escritorios').then(r => r.json()),
-    criarEscritorio: async (data: { nome: string; adminNome: string; adminEmail: string }) =>
+    criarEscritorio: async (data: { nome: string; adminNome: string; adminEmail: string; isentoMensalidade?: boolean }) =>
       bufferedResponse(await authFetch('/api/root/escritorios', { method: 'POST', body: JSON.stringify(data) })),
     editarEscritorio: async (id: string, patch: any) =>
       bufferedResponse(await authFetch(`/api/root/escritorios/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })),

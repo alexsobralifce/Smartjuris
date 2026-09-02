@@ -42,9 +42,14 @@ export async function decidirTrava(escritorioId: string): Promise<DecisaoTrava> 
   const [esc] = await db.select({
     isDemo: escritorios.isDemo,
     assinaturaStatus: escritorios.assinaturaStatus,
+    isentoMensalidade: escritorios.isentoMensalidade,
   }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
   if (!esc) {
     return { liberado: false, aplica: true, motivo: 'escritorio-nao-encontrado' };
+  }
+  if (esc.isentoMensalidade === true) {
+    // Cortesia concedida pelo root (acesso gratuito) → sempre liberado.
+    return { liberado: true, aplica: false, motivo: 'cortesia' };
   }
   if (esc.assinaturaStatus === 'ativa') {
     return { liberado: true, aplica: false, motivo: null };

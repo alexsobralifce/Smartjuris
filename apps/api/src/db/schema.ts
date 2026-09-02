@@ -193,6 +193,7 @@ export const escritorios = pgTable('escritorios', {
   limitePecasMes: integer('limite_pecas_mes').notNull().default(50),
   limiteProcessos: integer('limite_processos').notNull().default(100),
   isDemo: boolean('is_demo').notNull().default(false),
+  isentoMensalidade: boolean('isento_mensalidade').notNull().default(false),
   limiteTokensMes: integer('limite_tokens_mes'),
   ativo: boolean('ativo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

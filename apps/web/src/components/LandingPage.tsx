@@ -955,7 +955,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         lineHeight: 1.5,
         borderBottom: '1px solid color-mix(in srgb, var(--color-on-primary) 10%, transparent)'
       }}>
-        ✨ <strong style={{ color: 'var(--color-accent)' }}>SmartJuris v2.5 (LexOS Edition)</strong> — A Primeira Plataforma Jurídica com IA Nativa e Validação Auditável do Brasil.
+        ✨ <strong style={{ color: 'var(--color-accent)' }}>SmartJuris v2.5 (LexOS Edition)</strong> — A Primeira Plataforma Jurídica com IA Nativa e Validação Auditável do Brasil. <span style={{ opacity: 0.75, marginLeft: 4 }}>Planos Intermediário & Avançado incluem <strong style={{ color: 'var(--color-accent)' }}>Jus IA</strong> — jurisprudência em tempo real de todos os tribunais.</span>
       </div>
 
       {/* Navbar Minimalista Swiss */}
@@ -1118,7 +1118,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             </div>
           </div>
 
-          {/* Destaques dos 6 Módulos */}
+          {/* Destaques dos Módulos */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr 1fr' : '1fr 1fr 1fr', gap: SPACE.lg }}>
             {[
               { title: 'Gerador RAG', desc: 'Peças fundamentadas na base do escritório.' },
@@ -1127,9 +1127,10 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               { title: 'Jurimetria Preditiva', desc: 'Simulador de probabilidade de êxito.' },
               { title: 'Financeiro & Horas', desc: 'Honorários e gravação de horas faturáveis.' },
               { title: 'Revisão Contratual', desc: 'Scanner autônomo de cláusulas abusivas.' },
+              { title: '⚡ Consulta Jus IA', desc: 'Jurisprudência ao vivo — STF, STJ, TJs e TRFs em segundos. Exclusivo nos planos Intermediário & Avançado.' },
             ].map(f => (
-              <div key={f.title} style={{ borderLeft: '2px solid var(--color-accent)', paddingLeft: SPACE.md }}>
-                <div style={{ fontSize: FONT.base, fontWeight: 600, marginBottom: 2 }}>{f.title}</div>
+              <div key={f.title} style={{ borderLeft: f.title.startsWith('⚡') ? '2px solid var(--color-primary)' : '2px solid var(--color-accent)', paddingLeft: SPACE.md, background: f.title.startsWith('⚡') ? 'color-mix(in srgb, var(--color-primary) 5%, transparent)' : 'transparent', borderRadius: f.title.startsWith('⚡') ? '0 4px 4px 0' : undefined, paddingTop: f.title.startsWith('⚡') ? 6 : undefined, paddingBottom: f.title.startsWith('⚡') ? 6 : undefined }}>
+                <div style={{ fontSize: FONT.base, fontWeight: 600, marginBottom: 2, color: f.title.startsWith('⚡') ? 'var(--color-primary)' : 'var(--color-foreground)' }}>{f.title}</div>
                 <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.4 }}>{f.desc}</div>
               </div>
             ))}

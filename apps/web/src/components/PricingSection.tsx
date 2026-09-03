@@ -53,6 +53,7 @@ const PLANS: Plan[] = [
       "Economia de até ~100 horas/mês (1 advogado pleno equivalente)",
       "Análise de até 150 páginas de autos (PDF) por peça",
       "Scanner autônomo de riscos contratuais & jurimetria preditiva",
+      "✦ Consultas ilimitadas ao Jus IA (jurisprudência ao vivo)",
       "Suporte prioritário no WhatsApp",
       "Histórico ilimitado com busca semântica",
     ],
@@ -70,6 +71,7 @@ const PLANS: Plan[] = [
       "Economia de até ~200 horas/mês (2 advogados associados plenos)",
       "Custo unitário inferior a R$ 5,00 por peça qualificada",
       "Múltiplos perfis de usuário (até 3 advogados simultâneos)",
+      "✦ Jus IA com acesso prioritário + alertas automáticos de jurisprudência",
       "Fila de validação com governança e aprovação por sócio",
       "Agentes autônomos para revisão e teses customizadas",
     ],
@@ -425,6 +427,105 @@ export default function PricingSection({
           })}
         </div>
 
+        {/* Banner de Integração Jus IA */}
+        <div
+          style={{
+            marginTop: 40,
+            borderRadius: RADIUS.card,
+            background: "linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 92%, transparent) 0%, color-mix(in srgb, var(--color-accent) 85%, transparent) 100%)",
+            border: "1px solid color-mix(in srgb, var(--color-primary) 40%, transparent)",
+            padding: isMobile ? "24px 20px" : "32px 40px",
+            display: "grid",
+            gridTemplateColumns: isDesktop ? "1fr auto" : "1fr",
+            gap: isMobile ? 20 : 32,
+            alignItems: "center",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{
+                background: "var(--color-accent)",
+                color: "var(--color-on-accent)",
+                fontSize: FONT.xs,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                padding: "4px 12px",
+                borderRadius: 20,
+              }}>Exclusivo Intermediário & Avançado</span>
+            </div>
+            <div style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "clamp(20px, 3vw, 26px)",
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "#ffffff",
+              lineHeight: 1.2,
+            }}>
+              Jurisprudência ao Vivo via Jus IA
+            </div>
+            <p style={{
+              fontSize: FONT.base,
+              color: "rgba(255,255,255,0.82)",
+              lineHeight: 1.65,
+              margin: 0,
+              maxWidth: 560,
+            }}>
+              Os planos <strong style={{ color: "#ffffff" }}>Intermediário</strong> e <strong style={{ color: "#ffffff" }}>Avançado</strong> incluem acesso direto à <strong style={{ color: "var(--color-accent)" }}>Jus IA</strong>, a maior base de jurisprudência inteligente do Brasil. Pesquise decisões de todos os tribunais em segundos, com linguagem natural, e use os resultados diretamente na geração das suas peças — sem sair da plataforma.
+            </p>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+              gap: 12,
+              marginTop: 4,
+            }}>
+              {[
+                { icon: "🔍", title: "Busca Semântica", desc: "Encontre decisões relevantes com linguagem natural, sem precisar de operadores booleanos." },
+                { icon: "⚡", title: "Resultados em Tempo Real", desc: "Acesso ao acervo vivo dos tribunais — STF, STJ, TJs, TRFs e muito mais." },
+                { icon: "🔗", title: "Integrado ao Gerador RAG", desc: "Os julgados encontrados são injetados automaticamente na geração das suas peças." },
+              ].map(item => (
+                <div key={item.title} style={{
+                  background: "rgba(255,255,255,0.09)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: RADIUS.control,
+                  padding: "14px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}>
+                  <div style={{ fontSize: 20 }}>{item.icon}</div>
+                  <div style={{ fontSize: FONT.sm, fontWeight: 700, color: "#ffffff" }}>{item.title}</div>
+                  <div style={{ fontSize: FONT.xs, color: "rgba(255,255,255,0.70)", lineHeight: 1.5 }}>{item.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {isDesktop && (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              flexShrink: 0,
+              width: 140,
+            }}>
+              <div style={{
+                width: 80,
+                height: 80,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.12)",
+                border: "2px solid rgba(255,255,255,0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 36,
+              }}>⚖️</div>
+              <div style={{ fontSize: FONT.xs, color: "rgba(255,255,255,0.65)", textAlign: "center", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Jus IA</div>
+            </div>
+          )}
+        </div>
+
         {/* Banner de promoção */}
         {promocao?.ativa && (
           <div
@@ -484,6 +585,16 @@ export default function PricingSection({
           >
             ⚖️ Todos os planos rodam no modelo de inteligência artificial mais
             capaz para raciocínio lógico-jurídico.
+          </p>
+          <p
+            style={{
+              fontSize: FONT.sm,
+              color: "var(--color-muted)",
+              lineHeight: 1.6,
+              margin: 0,
+            }}
+          >
+            📚 Planos Intermediário & Avançado incluem acesso à Jus IA — pesquise jurisprudência em tempo real de todos os tribunais brasileiros.
           </p>
         </div>
       </div>

@@ -256,16 +256,19 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
     res.cookie(COOKIE_NAME, token, cookieOptions);
 
-    // Expõe o status de assinatura/isDemo do escritório (para a trava de IA no front).
+    // Expõe o status de assinatura/isDemo/cortesia do escritório (para a trava de IA no front).
     let assinaturaStatus: string = 'nenhuma';
     let isDemo: boolean = false;
+    let isentoMensalidade: boolean = false;
     if (escritorioId) {
       const [esc] = await db.select({
         assinaturaStatus: escritorios.assinaturaStatus,
         isDemo: escritorios.isDemo,
+        isentoMensalidade: escritorios.isentoMensalidade,
       }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
       assinaturaStatus = esc?.assinaturaStatus || 'nenhuma';
       isDemo = esc?.isDemo ?? false;
+      isentoMensalidade = esc?.isentoMensalidade ?? false;
     }
 
     res.json({
@@ -282,6 +285,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         limiteTokensMes,
         assinaturaStatus,
         isDemo,
+        isentoMensalidade,
       },
     });
   } catch (error) {
@@ -883,6 +887,7 @@ router.get('/me', authMiddleware, refreshSession, async (req: AuthenticatedReque
       ? db.select({
           assinaturaStatus: escritorios.assinaturaStatus,
           isDemo: escritorios.isDemo,
+          isentoMensalidade: escritorios.isentoMensalidade,
         }).from(escritorios).where(eq(escritorios.id, req.user.escritorioId)).limit(1).then((rows) => rows[0])
       : Promise.resolve(undefined),
   ]);
@@ -899,6 +904,7 @@ router.get('/me', authMiddleware, refreshSession, async (req: AuthenticatedReque
       limiteTokensMes,
       assinaturaStatus: escritorioInfo?.assinaturaStatus || 'nenhuma',
       isDemo: escritorioInfo?.isDemo ?? false,
+      isentoMensalidade: escritorioInfo?.isentoMensalidade ?? false,
     },
   });
 });

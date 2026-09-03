@@ -6,7 +6,8 @@
   "description": "Automação de navegador (Playwright) para capturar screenshots e gerar o tutorial visual do SmartJuris com dados de demonstração.",
   "scripts": {
     "capture": "tsx src/capture.ts",
-    "install:browsers": "playwright install chromium"
+    "install:browsers": "playwright install chromium",
+    "e2e:ia": "tsx src/e2e-liberacao-ia.ts"
   },
   "devDependencies": {
     "playwright": "^1.49.0",

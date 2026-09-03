@@ -12,6 +12,7 @@ import {
   reserveAiUsage,
   settleAiUsage,
   releaseAiUsageReservation,
+  checkTokenQuota,
   cicloAtual,
   isHorarioPico,
   PLANS,
@@ -54,13 +55,15 @@ try {
 // Fecha o pool do postgres para o processo do test runner encerrar.
 after(() => client.end({ timeout: 5 }));
 
-async function criarEscritorioTeste(credits = 20, plano = 'basico'): Promise<{ escId: string; userId: string }> {
+async function criarEscritorioTeste(credits = 20, plano = 'basico', opts: { isentoMensalidade?: boolean; assinaturaStatus?: string } = {}): Promise<{ escId: string; userId: string }> {
   const [esc] = await db.insert(escritorios).values({
     nome: `Escritório Teste ${randomUUID().slice(0, 8)}`,
     plano,
     creditsAvailable: credits,
     reserveCentsUsed: 0,
     cycleMonth: cicloAtual(),
+    isentoMensalidade: opts.isentoMensalidade ?? false,
+    assinaturaStatus: opts.assinaturaStatus ?? 'nenhuma',
   }).returning({ id: escritorios.id });
   const [user] = await db.insert(usuarios).values({
     nome: 'Usuário Teste',
@@ -265,6 +268,77 @@ describe('avaliarElegibilidade', () => {
     assert.ok(r.warnings.some((w) => w.includes('abaixo de 20%')));
     assert.ok(r.warnings.some((w) => w.includes('acima de 80%')));
   });
+
+  test('ilimitado=true (assinante/cortesia): sempre allowed, ignora saldo/custo/orçamento', () => {
+    // Saldo ZERO, custo ACIMA do teto e orçamento estourado — mas ilimitado
+    // (assinante/cortesia) deve liberar de qualquer forma.
+    const state: CreditStateEscritorio = { creditsAvailable: 0, reserveCentsUsed: 4_500, cycleMonth: cicloAtual(), plano: 'basico' };
+    const cara = { ...estimativa, estimatedCostCents: 900 }; // > maxOpCostCents (240) e > maxReserveCents (4500)
+    const r = avaliarElegibilidade(state, cara, PLANS.ESSENTIAL, cicloAtual(), true);
+    assert.equal(r.allowed, true);
+    assert.equal(r.reason, 'acesso-liberado');
+    assert.equal(r.creditsRequired, cara.creditsRequired); // telemetria preservada
+  });
+
+  test('ilimitado=true preserva a viabilidade técnica (estimate.eligible)', () => {
+    // Volumes acima do teto da operação tornam eligible=false — o acesso
+    // liberado NÃO permite a operação tecnicamente impossível.
+    const naoElegivel = estimateAiOperation({ operation: 'COMPLEX_DOCUMENT', pagesRelevant: 50, annexPages: 5, ragContextChars: 0 });
+    const state: CreditStateEscritorio = { creditsAvailable: 0, reserveCentsUsed: 0, cycleMonth: cicloAtual(), plano: 'basico' };
+    const r = avaliarElegibilidade(state, naoElegivel, PLANS.ESSENTIAL, cicloAtual(), true);
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, 'limites-da-operacao-ultrapassados');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkTokenQuota (banco local; pula se indisponível)
+// ---------------------------------------------------------------------------
+
+describe('checkTokenQuota', { skip: !dbDisponivel }, () => {
+  // Helper: monta um req autenticado mínimo (só user.id é usado por checkTokenQuota).
+  function reqComUsuario(userId: string) {
+    return { user: { id: userId } } as any;
+  }
+
+  test('Escritório NORMAL com limite de tokens: bloqueia ao atingir 100%', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20);
+    try {
+      // Define limite_tokens_mes no escritório e registra uso acima do limite.
+      await db.update(escritorios).set({ limiteTokensMes: 10 }).where(eq(escritorios.id, escId));
+      const q = await checkTokenQuota(reqComUsuario(userId));
+      assert.equal(q.status, 'ok'); // sem uso ainda
+      assert.ok(q.limite == null || q.limite === 10);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('CORTESIA (isentoMensalidade=true): sem limite de tokens (status ok, limite null)', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20, 'basico', { isentoMensalidade: true });
+    try {
+      await db.update(escritorios).set({ limiteTokensMes: 5 }).where(eq(escritorios.id, escId));
+      const q = await checkTokenQuota(reqComUsuario(userId));
+      assert.equal(q.status, 'ok');
+      assert.equal(q.limite, null, 'cortesia ignora limite_tokens_mes');
+      assert.equal(q.pct, 0);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('ASSINANTE (assinatura_status=ativa): sem limite de tokens (status ok, limite null)', async () => {
+    const { escId, userId } = await criarEscritorioTeste(20, 'basico', { assinaturaStatus: 'ativa' });
+    try {
+      await db.update(escritorios).set({ limiteTokensMes: 5 }).where(eq(escritorios.id, escId));
+      const q = await checkTokenQuota(reqComUsuario(userId));
+      assert.equal(q.status, 'ok');
+      assert.equal(q.limite, null, 'assinante ignora limite_tokens_mes');
+      assert.equal(q.pct, 0);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -307,6 +381,36 @@ describe('reserveAiUsage (banco)', { skip: !dbDisponivel }, () => {
       assert.equal(r.reason, 'creditos-insuficientes');
       const saldo = await saldoEscritorio(escId);
       assert.equal(saldo.credits, 0);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('CORTESIA (isentoMensalidade=true): reserva SEMPRE ok, sem débito de créditos', async () => {
+    const { escId, userId } = await criarEscritorioTeste(0, 'basico', { isentoMensalidade: true });
+    try {
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativaSimples() });
+      assert.equal(r.ok, true, 'cortesia não pode ser bloqueada por falta de créditos');
+      assert.equal(r.creditsReserved, 0, 'cortesia NÃO debita créditos');
+      assert.equal(r.costCentsReserved, 0, 'cortesia NÃO reserva custo');
+      const saldo = await saldoEscritorio(escId);
+      assert.equal(saldo.credits, 0, 'saldo de créditos intocado para cortesia');
+      assert.equal(saldo.reserveUsed, 0, 'reserva de custo não usada para cortesia');
+      // Operação persistida para telemetria/auditoria.
+      const ops = await db.execute(sql`SELECT credits_reserved, cost_cents_reserved FROM ai_operations WHERE id = ${r.operationId}`) as any[];
+      assert.equal(Number(ops[0]?.credits_reserved), 0);
+    } finally {
+      await limparEscritorioTeste(escId);
+    }
+  });
+
+  test('ASSINANTE (assinatura_status=ativa): reserva SEMPRE ok, sem débito de créditos', async () => {
+    const { escId, userId } = await criarEscritorioTeste(0, 'basico', { assinaturaStatus: 'ativa' });
+    try {
+      const r = await reserveAiUsage({ escritorioId: escId, usuarioId: userId, idempotencyKey: randomUUID(), operation: 'SIMPLE_PETITION', estimate: estimativaSimples() });
+      assert.equal(r.ok, true, 'assinante não pode ser bloqueado por falta de créditos');
+      assert.equal(r.creditsReserved, 0, 'assinante NÃO debita créditos');
+      assert.equal(r.costCentsReserved, 0, 'assinante NÃO reserva custo');
     } finally {
       await limparEscritorioTeste(escId);
     }

@@ -38,6 +38,7 @@ interface User {
   limiteTokensMes?: number | null
   assinaturaStatus?: string
   isDemo?: boolean
+  isentoMensalidade?: boolean
 }
 
 const nav: { id: Route; label: string; icon: string; badge?: number }[] = [
@@ -359,6 +360,7 @@ export default function App() {
     && user.role !== 'admin'
     && user.isDemo === true
     && user.assinaturaStatus !== 'ativa'
+    && user.isentoMensalidade !== true
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-background)' }}>

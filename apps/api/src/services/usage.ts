@@ -115,6 +115,8 @@ export async function checkTokenQuota(req: AuthenticatedRequest): Promise<TokenQ
     .select({
       creditosMes: usuarios.creditosMes,
       limiteTokensMes: escritorios.limiteTokensMes,
+      isentoMensalidade: escritorios.isentoMensalidade,
+      assinaturaStatus: escritorios.assinaturaStatus,
     })
     .from(usuarios)
     .innerJoin(escritorios, eq(escritorios.id, usuarios.escritorioId))
@@ -123,6 +125,11 @@ export async function checkTokenQuota(req: AuthenticatedRequest): Promise<TokenQ
 
   const reg = rows[0];
   if (!reg) return { status: 'ok', usado: 0, limite: null, pct: 0 };
+
+  // Assinantes e cortesia: sem limite de tokens.
+  if (reg.isentoMensalidade === true || reg.assinaturaStatus === 'ativa') {
+    return { status: 'ok', usado: 0, limite: null, pct: 0 };
+  }
 
   const limite = reg.creditosMes != null
     ? Number(reg.creditosMes)
@@ -459,20 +466,50 @@ export function cicloAtual(date: Date = new Date()): string {
 }
 
 /**
+ * Verifica se o escritório tem acesso LIBERADO a todos os recursos de IA:
+ * assinatura ativa (assinatura_status='ativa') OU cortesia concedida pelo
+ * criador (isento_mensalidade=true). Usado para ignorar cotas de tokens,
+ * créditos, tetos de custo por operação e orçamento interno do ciclo.
+ */
+export async function ehLiberadoIA(escritorioId: string): Promise<boolean> {
+  const [esc] = await db.select({
+    isentoMensalidade: escritorios.isentoMensalidade,
+    assinaturaStatus: escritorios.assinaturaStatus,
+  }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1);
+  if (!esc) return false;
+  return esc.isentoMensalidade === true || esc.assinaturaStatus === 'ativa';
+}
+
+/**
  * Avaliação pura de elegibilidade (testável sem banco).
  * - Aplica o rollover do ciclo na leitura (saldo = plano quando o mês mudou).
  * - Checa créditos, teto de custo por operação e orçamento interno do ciclo.
+ * - `ilimitado: true` (assinante/cortesia) → SEMPRE allowed (ignora créditos,
+ *   teto de custo e orçamento interno; preserva apenas a viabilidade técnica
+ *   da operação via `estimate.eligible` e a telemetria de `creditsRequired`).
  */
 export function avaliarElegibilidade(
   state: CreditStateEscritorio,
   estimate: AiEstimateResult,
   plan: PlanConfig,
-  ciclo: string = cicloAtual()
+  ciclo: string = cicloAtual(),
+  ilimitado: boolean = false
 ): AiEligibilityResult {
   const cicloAtivo = state.cycleMonth === ciclo;
   const creditsAvailable = cicloAtivo ? state.creditsAvailable : plan.creditsPerCycle;
   const reserveUsed = cicloAtivo ? state.reserveCentsUsed : 0;
   const warnings: string[] = [...estimate.warnings];
+
+  if (ilimitado) {
+    return {
+      allowed: estimate.eligible,
+      reason: estimate.eligible ? 'acesso-liberado' : estimate.reason,
+      creditsRequired: estimate.creditsRequired,
+      creditsAvailable,
+      estimatedCostCents: estimate.estimatedCostCents,
+      warnings,
+    };
+  }
 
   let allowed = estimate.eligible;
   let reason = estimate.eligible ? '' : estimate.reason;
@@ -618,11 +655,18 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
 
   const resultado = await db.transaction(async (tx) => {
     const escRows = await tx.execute(sql`
-      SELECT id, plano, credits_available, reserve_cents_used, cycle_month
+      SELECT id, plano, credits_available, reserve_cents_used, cycle_month,
+             isento_mensalidade, assinatura_status
       FROM escritorios WHERE id = ${input.escritorioId} FOR UPDATE
     `) as any[];
     const esc = escRows[0];
     if (!esc) return { ok: false, reason: 'escritorio-nao-encontrado' } as ReserveAiUsageResult;
+
+    // Acesso LIBERADO: assinante (assinatura_status='ativa') ou cortesia
+    // (isento_mensalidade=true) → NÃO debita créditos nem reserva custo.
+    // A operação ainda é persistida em ai_operations (telemetria/auditoria)
+    // com creditsReserved=0 e costCentsReserved=0.
+    const liberado = esc.isento_mensalidade === true || esc.assinatura_status === 'ativa';
 
     const plan = PLANS[planoDoEscritorio(String(esc.plano ?? ''))];
 
@@ -662,13 +706,16 @@ export async function reserveAiUsage(input: ReserveAiUsageInput): Promise<Reserv
       cycleMonth: String(esc.cycle_month),
       plano: String(esc.plano ?? ''),
     };
-    const elegibilidade = avaliarElegibilidade(state, input.estimate, plan, ciclo);
+    const elegibilidade = avaliarElegibilidade(state, input.estimate, plan, ciclo, liberado);
     if (!elegibilidade.allowed) {
       return { ok: false, reason: elegibilidade.reason } as ReserveAiUsageResult;
     }
 
-    const credits = input.estimate.creditsRequired;
-    const costCents = input.estimate.estimatedCostCents;
+    // Acesso liberado (assinante/cortesia): NÃO debita créditos nem reserva
+    // custo (crédito zero). A operação é registrada para telemetria/auditoria,
+    // mas sem consumo financeiro.
+    const credits = liberado ? 0 : input.estimate.creditsRequired;
+    const costCents = liberado ? 0 : input.estimate.estimatedCostCents;
 
     await tx.execute(sql`
       UPDATE escritorios
@@ -778,12 +825,19 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       isPeak: pico,
     });
 
+    // Acesso LIBERADO (assinante/cortesia): a operação foi reservada SEM débito
+    // (credits_reserved=0 e cost_cents_reserved=0). Na liquidação, NÃO registra
+    // custo financeiro (reserve_cents_used e ledger ficam em 0) — apenas a
+    // telemetria de tokens via trackTokenUsage continua sendo registrada.
+    const liberado = op.credits_reserved === 0 && op.cost_cents_reserved === 0;
+    const custoFinanceiro = liberado ? 0 : custoReal.brlCents;
+
     // Libera a diferença: reserva - custo real (pode ser negativo → consome mais reserva).
     // cost_cents_reserved agora é numeric(10,2) (fase 5E); reserve_cents_used é
     // integer — arredonda o resultado para evitar erro de cast.
     await tx.execute(sql`
       UPDATE escritorios
-      SET reserve_cents_used = GREATEST(0, ROUND(reserve_cents_used - ROUND(${op.cost_cents_reserved}::numeric) + ${custoReal.brlCents}::numeric)::int)
+      SET reserve_cents_used = GREATEST(0, ROUND(reserve_cents_used - ROUND(${op.cost_cents_reserved}::numeric) + ${custoFinanceiro}::numeric)::int)
       WHERE id = ${op.escritorio_id}
     `);
 
@@ -792,7 +846,7 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       modelUsed: input.modelUsed,
       tokensIn: input.inputTokens,
       tokensOut: input.outputTokens,
-      costCentsActual: Math.round(custoReal.brlCents),
+      costCentsActual: Math.round(custoFinanceiro),
       creditsSettled: op.credits_reserved,
       finishedAt: new Date(),
       updatedAt: new Date(),
@@ -809,7 +863,7 @@ export async function settleAiUsage(input: SettleAiUsageInput): Promise<SettleAi
       // financeiro PRECISO (custo real − reservado fracionário). O contador do
       // ciclo (reserve_cents_used, integer) continua movendo por ROUND(real) −
       // ROUND(reservado) — o ledger é a telemetria; o contador é o orçamento.
-      costCents: custoReal.brlCents - op.cost_cents_reserved,
+      costCents: custoFinanceiro - op.cost_cents_reserved,
       model: input.modelUsed,
       idempotencyKey: `${op.idempotency_key}:settle`,
       status: 'committed',

@@ -25,6 +25,7 @@ FROM nginx:1.27-alpine
 
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/templates/default.conf.template
+COPY apps/web/security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 # Railway injeta PORT; o entrypoint oficial do nginx faz envsubst em *.template
 # substituindo ${PORT}. O proxy /api usa a rede privada (smartjuris-api.railway.internal).

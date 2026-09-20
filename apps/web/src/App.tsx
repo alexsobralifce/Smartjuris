@@ -1,24 +1,24 @@
-import { useState, useEffect } from 'react'
-import Dashboard from './components/Dashboard'
-import Tutorial from './components/Tutorial'
-import Processos from './components/Processos'
-import GeradorPecas from './components/GeradorPecas'
-import Validacao from './components/Validacao'
-import Jurimetria from './components/Jurimetria'
-import Decisoes from './components/Decisoes'
-import Base from './components/Base'
-import Documentacao from './components/Documentacao'
-import Financeiro from './components/Financeiro'
-import Contratos from './components/Contratos'
-import Crm from './components/Crm'
-import Clientes from './components/Clientes'
-import TrocarSenha from './components/TrocarSenha'
-import AdminEscritorio from './components/AdminEscritorio'
-import RootPainel from './components/RootPainel'
+import { lazy, Suspense, useState, useEffect } from 'react'
+const Dashboard = lazy(() => import('./components/Dashboard'))
+const Tutorial = lazy(() => import('./components/Tutorial'))
+const Processos = lazy(() => import('./components/Processos'))
+const GeradorPecas = lazy(() => import('./components/GeradorPecas'))
+const Validacao = lazy(() => import('./components/Validacao'))
+const Jurimetria = lazy(() => import('./components/Jurimetria'))
+const Decisoes = lazy(() => import('./components/Decisoes'))
+const Base = lazy(() => import('./components/Base'))
+const Documentacao = lazy(() => import('./components/Documentacao'))
+const Financeiro = lazy(() => import('./components/Financeiro'))
+const Contratos = lazy(() => import('./components/Contratos'))
+const Crm = lazy(() => import('./components/Crm'))
+const Clientes = lazy(() => import('./components/Clientes'))
+const TrocarSenha = lazy(() => import('./components/TrocarSenha'))
+const AdminEscritorio = lazy(() => import('./components/AdminEscritorio'))
+const RootPainel = lazy(() => import('./components/RootPainel'))
 import LandingPage from './components/LandingPage'
-import Agenda from './components/Agenda'
-import Assinatura from './components/Assinatura'
-import PromoAssinaturaModal from './components/PromoAssinaturaModal'
+const Agenda = lazy(() => import('./components/Agenda'))
+const Assinatura = lazy(() => import('./components/Assinatura'))
+const PromoAssinaturaModal = lazy(() => import('./components/PromoAssinaturaModal'))
 import FeatureLocked from './components/FeatureLocked'
 import { api } from './api/client'
 import { useTheme } from './hooks/useTheme'
@@ -304,7 +304,11 @@ export default function App() {
 
   // Fluxo de troca de senha obrigatória — impede o acesso ao shell até concluir
   if (precisaTrocar) {
-    return <TrocarSenha user={user} onSuccess={handleTrocaSenhaSuccess} />
+    return (
+      <Suspense fallback={<div style={{ padding: 24 }}>Carregando...</div>}>
+        <TrocarSenha user={user} onSuccess={handleTrocaSenhaSuccess} />
+      </Suspense>
+    )
   }
 
   // Iniciais do usuário
@@ -537,6 +541,7 @@ export default function App() {
 
       {/* Main */}
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <Suspense fallback={<div style={{ padding: 24 }}>Carregando...</div>}>
         {route === 'dashboard' && <Dashboard />}
         {route === 'agenda' && <Agenda />}
         {route === 'processos' && <Processos />}
@@ -586,13 +591,16 @@ export default function App() {
         {route === 'assinatura' && <Assinatura />}
         {route === 'admin' && user?.role === 'root' && <RootPainel />}
         {route === 'admin' && user?.role === 'admin' && <AdminEscritorio />}
+        </Suspense>
       </main>
 
-      <PromoAssinaturaModal
-        open={showPromo}
-        onDismiss={handlePromoDismiss}
-        onNavigateAssinatura={handlePromoNavigateAssinatura}
-      />
+      <Suspense fallback={null}>
+        <PromoAssinaturaModal
+          open={showPromo}
+          onDismiss={handlePromoDismiss}
+          onNavigateAssinatura={handlePromoNavigateAssinatura}
+        />
+      </Suspense>
     </div>
   )
 }

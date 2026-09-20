@@ -1,6 +1,14 @@
 {
-  "title": "SmartJuris",
+  "title": "SmartJuris — Software Jurídico com IA para Advogados e Escritórios",
   "analytics": {
     "googleAnalyticsId": "AW-18423855449"
+  },
+  "description": "Plataforma de gestão jurídica com IA: gere petições com RAG, acompanhe processos e prazos, use jurimetria, revise contratos e controle honorários. Supervisão ética OAB.",
+  "language": "pt-BR",
+  "icons": {
+    "icon": "/favicon.svg"
+  },
+  "openGraph": {
+    "image": "https://www.smartjuris.com.br/og-image.png"
   }
 }

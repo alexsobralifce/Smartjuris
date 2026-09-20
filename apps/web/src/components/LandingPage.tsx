@@ -5,7 +5,7 @@ import { useBreakpoint } from '../hooks/useBreakpoint'
 import PricingSection from './PricingSection'
 import ProductionShowcase from './ProductionShowcase'
 import TestimonialsSection from './TestimonialsSection'
-import lawyersImg from '../assets/lawyers_operating_smartjuris.jpg'
+import lawyersImg from '../assets/lawyers_operating_smartjuris.webp'
 
 // Tipografia do hero — exceção de marketing permitida (46px).
 const HERO_FONT_SIZE = 46
@@ -1038,7 +1038,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             fontWeight: 400,
             color: 'var(--color-foreground)'
           }}>
-            Acelerador Operacional para Advogados e Escritórios de Alta Performance.
+            Software jurídico com IA para advogados e escritórios de alta performance.
           </h1>
 
           <p style={{
@@ -1079,6 +1079,10 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                   display: 'block',
                   filter: 'contrast(1.02) brightness(0.98)',
                 }}
+                width={1200}
+                height={670}
+                fetchPriority="high"
+                decoding="async"
                 loading="eager"
               />
               <div style={{
@@ -1373,6 +1377,22 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         color: 'var(--color-muted)',
         background: 'var(--color-surface)'
       }}>
+        <nav aria-label="Páginas do SmartJuris" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 20px', marginBottom: 12 }}>
+          {[
+            ['/recursos/gerador-de-pecas-com-ia', 'Gerador de peças com IA'],
+            ['/recursos/gestao-de-processos', 'Gestão de processos'],
+            ['/recursos/jurimetria', 'Jurimetria'],
+            ['/recursos/revisao-contratual-com-ia', 'Revisão contratual'],
+            ['/recursos/pesquisa-de-jurisprudencia', 'Jurisprudência'],
+            ['/recursos/gestao-financeira-e-timesheet', 'Financeiro e timesheet'],
+            ['/recursos/crm-para-advogados', 'CRM'],
+            ['/planos', 'Planos'],
+            ['/blog', 'Blog'],
+            ['/faq', 'FAQ'],
+          ].map(([href, label]) => (
+            <a key={href} href={href} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>{label}</a>
+          ))}
+        </nav>
         © {new Date().getFullYear()} SmartJuris LexOS. Inteligência Artificial Jurídica & Gestão para Advocacia Contemporânea. Suporte Técnico via WhatsApp: <a href="https://wa.me/5588993573809" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>88 99357-3809</a>. Estética Vignelli.
       </footer>
     </div>

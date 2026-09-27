@@ -37,6 +37,7 @@ import {
   planoAssinatura,
   listarPlanosAssinatura,
 } from '../services/billing.js';
+import { sendRootAssinaturaIniciadaEmail } from '../services/email.js';
 
 const router = Router();
 
@@ -247,6 +248,7 @@ async function executarCheckout(
       );
 
       const [esc] = await tx.select({
+        nome: escritorios.nome,
         mercadoPagoId: escritorios.mercadoPagoId,
         email: escritorios.email,
         assinaturaStatus: escritorios.assinaturaStatus,
@@ -502,6 +504,14 @@ async function executarCheckout(
       alvoId: escritorioId,
       detalhes: { plano, mercadoPagoId: assinatura.id },
     });
+
+    sendRootAssinaturaIniciadaEmail({
+      escritorioNome: esc.nome,
+      escritorioEmail: esc.email,
+      plano: planoAssinatura(plano)?.rotulo ?? plano,
+      tipo: 'recorrente',
+    }).catch((err) => console.error('[Billing] Falha ao notificar root sobre assinatura iniciada:', err));
+
     return res.status(201).json({
       initPoint: assinatura.initPoint,
       mercadoPagoId: assinatura.id,
@@ -859,6 +869,17 @@ async function executarCheckoutPromocional(
       valorPromocionalCents: claim.valorPromocionalCents,
     },
   });
+
+  db.select({ nome: escritorios.nome, email: escritorios.email })
+    .from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1)
+    .then(([esc]) => esc && sendRootAssinaturaIniciadaEmail({
+      escritorioNome: esc.nome,
+      escritorioEmail: esc.email,
+      plano: cfgOp?.rotulo ?? plano,
+      tipo: 'promocional',
+    }))
+    .catch((err) => console.error('[Billing] Falha ao notificar root sobre assinatura promocional iniciada:', err));
+
   return res.status(201).json({
     initPoint: preference.initPoint,
     preferenceId: preference.id,

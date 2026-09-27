@@ -557,3 +557,167 @@ export async function sendPilotCostAlert(params: {
     html: emailWrapper('Piloto — Alerta de Custo', body),
   });
 }
+
+/**
+ * E-mail ao Root — Assinatura iniciada (checkout criado no Mercado Pago,
+ * status 'pendente'). Disparado ANTES da confirmação do pagamento, tanto no
+ * checkout recorrente quanto no promocional (routes/billing.ts).
+ */
+export async function sendRootAssinaturaIniciadaEmail(params: {
+  escritorioNome: string;
+  escritorioEmail?: string | null;
+  plano: string;
+  tipo: 'recorrente' | 'promocional';
+  rootEmail?: string;
+}): Promise<EmailResult> {
+  const rootRecipient = params.rootEmail || process.env.ROOT_NOTIFICATION_EMAIL || 'alexandresobral2004@gmail.com';
+  const rotuloTipo = params.tipo === 'promocional' ? 'Checkout Promocional' : 'Checkout Recorrente';
+
+  const body = `
+    <span class="badge" style="background: #e0f2fe; color: #0369a1; border-color: #bae6fd;">Assinatura Iniciada</span>
+    <h2 style="margin: 0 0 16px; color: #1a2744; font-size: 20px;">Um escritório iniciou uma assinatura</h2>
+    <p>O checkout foi criado no Mercado Pago e aguarda confirmação do pagamento.</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870; width: 140px;"><strong>Escritório:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600; color: #1a2744;">${params.escritorioNome}</td>
+      </tr>
+      ${params.escritorioEmail ? `
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>E-mail:</strong></td>
+        <td style="padding: 8px 0;"><a href="mailto:${params.escritorioEmail}" style="color: #1a2744;">${params.escritorioEmail}</a></td>
+      </tr>
+      ` : ''}
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Plano:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600;">${params.plano}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Tipo:</strong></td>
+        <td style="padding: 8px 0;">${rotuloTipo}</td>
+      </tr>
+    </table>
+
+    <p style="text-align: center; margin: 28px 0;">
+      <a href="https://smartjuris-web-production.up.railway.app" class="button">Acompanhar no Painel Root →</a>
+    </p>
+  `;
+
+  return sendEmail({
+    to: rootRecipient,
+    subject: `🆕 Assinatura iniciada: ${params.escritorioNome} — Plano ${params.plano}`,
+    html: emailWrapper('Assinatura Iniciada', body),
+  });
+}
+
+/**
+ * E-mail ao Root — Pagamento aprovado pelo Mercado Pago. Disparado para TODO
+ * pagamento aprovado (1ª cobrança e cada recorrência mensal seguinte).
+ */
+export async function sendRootPagamentoAprovadoEmail(params: {
+  escritorioNome: string;
+  plano: string;
+  valor?: number | null;
+  payerEmail?: string | null;
+  dataAprovacao?: string | null;
+  rootEmail?: string;
+}): Promise<EmailResult> {
+  const rootRecipient = params.rootEmail || process.env.ROOT_NOTIFICATION_EMAIL || 'alexandresobral2004@gmail.com';
+  const valorFormatado = typeof params.valor === 'number'
+    ? params.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : 'não informado';
+  const dataFormatada = params.dataAprovacao
+    ? new Date(params.dataAprovacao).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    : 'não informada';
+
+  const body = `
+    <span class="badge" style="background: #d8ede4; color: #2d6a4f; border-color: #a7d7c5;">Pagamento Aprovado</span>
+    <h2 style="margin: 0 0 16px; color: #1a2744; font-size: 20px;">Pagamento confirmado pelo Mercado Pago</h2>
+    <p>Um pagamento de assinatura foi <strong>aprovado</strong> — pode ser a 1ª cobrança ou uma renovação mensal.</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870; width: 140px;"><strong>Escritório:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600; color: #1a2744;">${params.escritorioNome}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Plano:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600;">${params.plano}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Valor:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600; color: #2d6a4f;">${valorFormatado}</td>
+      </tr>
+      ${params.payerEmail ? `
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Pagador:</strong></td>
+        <td style="padding: 8px 0;"><a href="mailto:${params.payerEmail}" style="color: #1a2744;">${params.payerEmail}</a></td>
+      </tr>
+      ` : ''}
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Aprovado em:</strong></td>
+        <td style="padding: 8px 0;">${dataFormatada}</td>
+      </tr>
+    </table>
+  `;
+
+  return sendEmail({
+    to: rootRecipient,
+    subject: `💰 Pagamento aprovado: ${params.escritorioNome} — ${valorFormatado} (${params.plano})`,
+    html: emailWrapper('Pagamento Aprovado', body),
+  });
+}
+
+/** Rótulos legíveis para o motivo de desativação da assinatura. */
+const ROTULOS_MOTIVO_DESATIVACAO: Record<string, string> = {
+  pagamento_recusado: 'Pagamento recusado',
+  estorno: 'Estorno (chargeback)',
+  cancelada: 'Assinatura cancelada',
+  pausada: 'Assinatura pausada',
+};
+
+/**
+ * E-mail ao Root — Assinatura desativada por pagamento recusado, estorno,
+ * cancelamento ou pausa (contraparte de sendRootPagamentoAprovadoEmail).
+ */
+export async function sendRootAssinaturaDesativadaEmail(params: {
+  escritorioNome: string;
+  plano: string;
+  motivo: 'pagamento_recusado' | 'estorno' | 'cancelada' | 'pausada';
+  rootEmail?: string;
+}): Promise<EmailResult> {
+  const rootRecipient = params.rootEmail || process.env.ROOT_NOTIFICATION_EMAIL || 'alexandresobral2004@gmail.com';
+  const rotuloMotivo = ROTULOS_MOTIVO_DESATIVACAO[params.motivo] ?? params.motivo;
+
+  const body = `
+    <span class="badge" style="background: #fee2e2; color: #7f1d1d; border-color: #fca5a5;">Assinatura Desativada</span>
+    <h2 style="margin: 0 0 16px; color: #1a2744; font-size: 20px;">Uma assinatura foi desativada</h2>
+    <p>O acesso do escritório aos recursos de IA foi bloqueado por: <strong>${rotuloMotivo}</strong>.</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870; width: 140px;"><strong>Escritório:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600; color: #1a2744;">${params.escritorioNome}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Plano:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600;">${params.plano}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #eeede9;">
+        <td style="padding: 8px 0; color: #7a7870;"><strong>Motivo:</strong></td>
+        <td style="padding: 8px 0; font-weight: 600; color: #7f1d1d;">${rotuloMotivo}</td>
+      </tr>
+    </table>
+
+    <p style="text-align: center; margin: 28px 0;">
+      <a href="https://smartjuris-web-production.up.railway.app" class="button">Ver no Painel Root →</a>
+    </p>
+  `;
+
+  return sendEmail({
+    to: rootRecipient,
+    subject: `⚠️ Assinatura desativada: ${params.escritorioNome} — ${rotuloMotivo}`,
+    html: emailWrapper('Assinatura Desativada', body),
+  });
+}

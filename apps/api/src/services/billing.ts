@@ -16,6 +16,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { eq, and, gte, or, sql, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { escritorios, billingWebhookEvents, billingCheckoutOperations, billingEscritorioLocks } from '../db/schema.js';
+import { sendRootPagamentoAprovadoEmail, sendRootAssinaturaDesativadaEmail } from './email.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 const MP_TOKEN: string = process.env.MERCADO_PAGO_ACCESS_TOKEN ?? '';
@@ -923,6 +924,34 @@ export async function processarWebhook(payload: { type?: string; data?: { id?: s
         }
       }
       await finalizarEventoWebhook(type, dataId, status, ok ? statusFinal : 'ESCRITORIO_NAO_ENCONTRADO', acaoFinal);
+
+      // Notificação ao root — fire-and-forget, nunca bloqueia/derruba a
+      // resposta do webhook ao Mercado Pago. Cobre TODO pagamento aprovado
+      // (1ª cobrança e cada renovação mensal) e desativação por recusa/estorno.
+      if (ok) {
+        const rotuloPlano = planoAssinatura(plano)?.rotulo ?? plano;
+        if (status === 'approved') {
+          db.select({ nome: escritorios.nome }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1)
+            .then(([esc]) => esc && sendRootPagamentoAprovadoEmail({
+              escritorioNome: esc.nome,
+              plano: rotuloPlano,
+              valor: typeof payment.transaction_amount === 'number' ? payment.transaction_amount : null,
+              payerEmail: payment.payer?.email ?? null,
+              dataAprovacao: payment.date_approved ? String(payment.date_approved) : null,
+            }))
+            .catch((err) => console.error('[Billing] Falha ao notificar root sobre pagamento aprovado:', err));
+        } else if (status === 'rejected' || status === 'charged_back' || status === 'cancelled') {
+          const motivo = status === 'rejected' ? 'pagamento_recusado' : status === 'charged_back' ? 'estorno' : 'cancelada';
+          db.select({ nome: escritorios.nome }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1)
+            .then(([esc]) => esc && sendRootAssinaturaDesativadaEmail({
+              escritorioNome: esc.nome,
+              plano: rotuloPlano,
+              motivo,
+            }))
+            .catch((err) => console.error('[Billing] Falha ao notificar root sobre assinatura desativada:', err));
+        }
+      }
+
       if (!ok) return { handled: false, motivo: `Escritório não encontrado (${escritorioId}).` };
       return { handled: true, acao: acaoFinal, escritorioId };
     }
@@ -989,6 +1018,22 @@ export async function processarWebhook(payload: { type?: string; data?: { id?: s
       }
       const { ok, acao, statusResult } = execucao.resultado;
       await finalizarEventoWebhook(type, dataId, status, ok ? statusResult : 'ESCRITORIO_NAO_ENCONTRADO', acao);
+
+      // Notificação ao root — só para cancelamento/pausa (a autorização não
+      // dispara e-mail aqui: o pagamento aprovado, com valor real, já cobre
+      // esse caso via o evento `payment`).
+      if (ok && (status === 'cancelled' || status === 'paused')) {
+        const rotuloPlano = planoAssinatura(plano)?.rotulo ?? plano;
+        const motivo = status === 'cancelled' ? 'cancelada' : 'pausada';
+        db.select({ nome: escritorios.nome }).from(escritorios).where(eq(escritorios.id, escritorioId)).limit(1)
+          .then(([esc]) => esc && sendRootAssinaturaDesativadaEmail({
+            escritorioNome: esc.nome,
+            plano: rotuloPlano,
+            motivo,
+          }))
+          .catch((err) => console.error('[Billing] Falha ao notificar root sobre assinatura desativada:', err));
+      }
+
       if (!ok) return { handled: false, motivo: `Escritório não encontrado (${escritorioId}).` };
       return { handled: true, acao, escritorioId };
     }

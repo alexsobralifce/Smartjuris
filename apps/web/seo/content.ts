@@ -398,10 +398,10 @@ export const INFO: Page[] = [
   {
     path: '/planos',
     kind: 'info',
-    title: 'Planos do SmartJuris | Software Jurídico com IA',
+    title: 'Planos e Preços do SmartJuris | Software Jurídico com IA',
     description:
-      'Conheça os planos Básico, Intermediário e Avançado do SmartJuris, com 20, 50 e 100 peças por mês, e os recursos de cada um.',
-    h1: 'Planos do SmartJuris',
+      'Conheça os planos Básico (R$ 180), Intermediário (R$ 300) e Avançado (R$ 500) do SmartJuris, com 20, 50 e 100 peças por mês.',
+    h1: 'Planos e preços do SmartJuris',
     lead:
       'Escolha o plano pelo volume de peças do seu escritório. Todos incluem gestão de processos, agenda, clientes e exportação com timbre.',
     sections: [], // renderizado a partir de PLANS
@@ -412,7 +412,7 @@ export const INFO: Page[] = [
       },
       {
         q: 'Onde vejo as condições de contratação?',
-        a: 'As condições são apresentadas na tela de Assinatura, dentro do sistema, após o cadastro. O SmartJuris é uma ferramenta de apoio ao advogado e não substitui a análise e a decisão do profissional.',
+        a: 'A contratação é feita na tela de Assinatura, dentro do sistema, após o cadastro. O SmartJuris é uma ferramenta de apoio ao advogado e não substitui a análise e a decisão do profissional.',
       },
     ],
     related: ['/faq', '/recursos/gerador-de-pecas-com-ia'],

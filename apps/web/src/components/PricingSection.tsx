@@ -1,20 +1,35 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button, FONT, RADIUS, SPACE } from "../ui"
 import { useBreakpoint } from "../hooks/useBreakpoint"
+import { resumoPrecoPlano, type PlanoAssinaturaApi } from "../utils/promocaoUI"
+import { getApiBaseUrl } from "../api/config"
 
 interface Plan {
   audience: string
   name: string
+  price: string
   limit: string
   features: string[]
   cta: string
   highlight: boolean
 }
 
+interface PromocaoPublica {
+  ativa: boolean
+  percentual: number
+  planos: Array<{
+    codigo: string
+    precoMensal: number
+    valorPromocional: number | null
+    valorPromocionalCents: number | null
+  }>
+}
+
 const PLANS: Plan[] = [
   {
     audience: "Ideal para advogados solo",
     name: "Básico",
+    price: "R$ 180,00",
     limit: "20 peças completas por mês",
     features: [
       "Até 20 peças geradas com RAG BGE-M3 + Qwen",
@@ -28,6 +43,7 @@ const PLANS: Plan[] = [
   {
     audience: "Para escritórios em crescimento",
     name: "Intermediário",
+    price: "R$ 300,00",
     limit: "50 peças completas por mês",
     features: [
       "Tudo do Básico +",
@@ -44,6 +60,7 @@ const PLANS: Plan[] = [
   {
     audience: "Ideal para bancas estabelecidas",
     name: "Avançado",
+    price: "R$ 500,00",
     limit: "100 peças completas por mês",
     features: [
       "Tudo do Intermediário +",
@@ -81,9 +98,11 @@ function CheckIcon() {
 
 function PricingCard({
   plan,
+  resumo,
   onCtaClick,
 }: {
   plan: Plan
+  resumo: ReturnType<typeof resumoPrecoPlano>
   onCtaClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
@@ -164,6 +183,71 @@ function PricingCard({
         {plan.name}
       </div>
 
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {resumo.promocional ? (
+          <>
+            <span
+              style={{
+                alignSelf: "flex-start",
+                background: "var(--color-accent)",
+                color: "var(--color-on-accent)",
+                fontSize: FONT.xs,
+                fontWeight: 700,
+                padding: "3px 8px",
+                borderRadius: RADIUS.chip,
+                marginBottom: 4,
+              }}
+            >
+              {resumo.percentual}% OFF 1º mês
+            </span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 36,
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1,
+                  color: "var(--color-foreground)",
+                }}
+              >
+                R$ {resumo.valorDestaque.toFixed(2).replace(".", ",")}
+              </span>
+              <span
+                style={{ fontSize: FONT.base, color: "var(--color-muted)" }}
+              >
+                /mês
+              </span>
+            </div>
+            <span
+              style={{
+                fontSize: FONT.sm,
+                color: "var(--color-muted)",
+                textDecoration: "line-through",
+              }}
+            >
+              R$ {resumo.precoMensal.toFixed(2).replace(".", ",")} depois
+            </span>
+          </>
+        ) : (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: 36,
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+                color: "var(--color-foreground)",
+              }}
+            >
+              {plan.price}
+            </span>
+            <span style={{ fontSize: FONT.base, color: "var(--color-muted)" }}>
+              /mês
+            </span>
+          </div>
+        )}
+      </div>
+
       <div
         style={{
           background: "var(--color-surface-2)",
@@ -229,6 +313,45 @@ export default function PricingSection({
   const isTablet = breakpoint === "tablet"
   const isDesktop = breakpoint === "desktop"
 
+  const [promocao, setPromocao] = useState<PromocaoPublica | null>(null)
+
+  useEffect(() => {
+    fetch(`${getApiBaseUrl()}/api/billing/promocao/status`)
+      .then((r) => r.json())
+      .then(setPromocao)
+      .catch(() => setPromocao(null)) // fail gracefully
+  }, [])
+
+  const planosApi: PlanoAssinaturaApi[] = PLANS.map((plan, idx) => {
+    const codigo = ["basico", "profissional", "office"][idx]
+    const precoMensal = [180, 300, 500][idx]
+    const promoData = promocao?.planos.find((p) => p.codigo === codigo)
+    return {
+      codigo,
+      precoMensal,
+      creditos: [20, 50, 100][idx],
+      rotulo: plan.name,
+      promocao: promoData?.valorPromocional
+        ? {
+            percentual: promocao!.percentual,
+            valorPromocional: promoData.valorPromocional,
+            valorPromocionalCents: promoData.valorPromocionalCents!,
+          }
+        : null,
+    }
+  })
+
+  const promocaoStatus = promocao?.ativa
+    ? {
+        ativa: true,
+        percentual: promocao.percentual,
+        elegivel: true,
+        motivoIneligibilidade: null,
+        valorPromocional: null,
+      }
+    : undefined
+
+
   return (
     <section
       style={{
@@ -274,8 +397,7 @@ export default function PricingSection({
             }}
           >
             A IA auxilia na elaboração de minutas e na pesquisa; o advogado
-            revisa, decide e assina. Os valores e condições são apresentados
-            após o cadastro, na área do cliente.
+            revisa, decide e assina. Cancele quando quiser.
           </p>
         </div>
 
@@ -288,8 +410,13 @@ export default function PricingSection({
             alignItems: "stretch",
           }}
         >
-          {PLANS.map((plan) => (
-            <PricingCard key={plan.name} plan={plan} onCtaClick={onCtaClick} />
+          {PLANS.map((plan, idx) => (
+            <PricingCard
+              key={plan.name}
+              plan={plan}
+              resumo={resumoPrecoPlano(planosApi[idx], promocaoStatus)}
+              onCtaClick={onCtaClick}
+            />
           ))}
         </div>
 
@@ -391,6 +518,32 @@ export default function PricingSection({
             </div>
           )}
         </div>
+
+        {/* Banner de promoção */}
+        {promocao?.ativa && (
+          <div
+            style={{
+              marginTop: 32,
+              padding: "16px 24px",
+              background: "var(--color-accent-light)",
+              border: "1px solid var(--color-accent)",
+              borderRadius: RADIUS.card,
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontSize: FONT.md,
+                color: "var(--color-foreground)",
+                fontWeight: 600,
+              }}
+            >
+              🎉 {promocao.percentual}% OFF na 1ª mensalidade — recorrência
+              integral a partir do 2º mês
+            </p>
+          </div>
+        )}
 
         {/* Gatilhos mentais */}
         <div

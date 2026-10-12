@@ -21,16 +21,19 @@ export const SAME_AS: string[] = ['https://www.uranosistemas.com.br/', 'https://
 
 export interface Plan {
   name: string
+  price: string
+  priceNumber: string
   audience: string
   limit: string
   features: string[]
 }
 
-// Planos públicos: sem valores, descontos ou promoções (vedado pela publicidade da advocacia/OAB).
-// Condições comerciais são exibidas apenas na área logada do cliente.
+// Valores de tabela (espelham PricingSection.tsx). Sem promessas de resultado ou economia.
 export const PLANS: Plan[] = [
   {
     name: 'Básico',
+    price: 'R$ 180,00',
+    priceNumber: '180.00',
     audience: 'Ideal para advogados solo',
     limit: '20 peças completas por mês',
     features: [
@@ -42,6 +45,8 @@ export const PLANS: Plan[] = [
   },
   {
     name: 'Intermediário',
+    price: 'R$ 300,00',
+    priceNumber: '300.00',
     audience: 'Para escritórios em crescimento',
     limit: '50 peças completas por mês',
     features: [
@@ -55,6 +60,8 @@ export const PLANS: Plan[] = [
   },
   {
     name: 'Avançado',
+    price: 'R$ 500,00',
+    priceNumber: '500.00',
     audience: 'Ideal para bancas estabelecidas',
     limit: '100 peças completas por mês',
     features: [

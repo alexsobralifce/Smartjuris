@@ -1,11 +1,15 @@
 import { ALL_PAGES, BLOG, HOME_FAQ, RESOURCES, type Faq, type Page } from './content'
 import {
+  COMPANY,
   OG_IMAGE,
   PLANS,
+  SAME_AS,
+  SUPPORT_EMAIL,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_TITLE,
   SITE_URL,
+  WHATSAPP_DISPLAY,
   WHATSAPP_URL,
 } from './site'
 
@@ -27,10 +31,15 @@ export const organizationLd = {
   name: SITE_NAME,
   url: SITE_URL,
   logo: `${SITE_URL}/og-image.png`,
+  ...(COMPANY.legalName ? { legalName: COMPANY.legalName } : {}),
+  ...(COMPANY.cnpj ? { taxID: COMPANY.cnpj } : {}),
+  ...(COMPANY.address ? { address: { '@type': 'PostalAddress', streetAddress: COMPANY.address, addressCountry: 'BR' } } : {}),
+  ...(SAME_AS.length ? { sameAs: SAME_AS } : {}),
   contactPoint: {
     '@type': 'ContactPoint',
     contactType: 'customer support',
     url: WHATSAPP_URL,
+    email: SUPPORT_EMAIL,
     availableLanguage: 'pt-BR',
   },
 }
@@ -44,13 +53,6 @@ export const softwareLd = {
   inLanguage: 'pt-BR',
   url: SITE_URL,
   description: SITE_DESCRIPTION,
-  offers: PLANS.map(p => ({
-    '@type': 'Offer',
-    name: p.name,
-    price: p.priceNumber,
-    priceCurrency: 'BRL',
-    url: `${SITE_URL}/planos`,
-  })),
 }
 
 export const websiteLd = {
@@ -109,7 +111,8 @@ h2{font-family:'DM Serif Display',serif;font-weight:400;font-size:26px;margin:36
 .box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;margin:24px 0}
 .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin:24px 0}
 .plans .box{margin:0}
-.price{font-size:28px;font-weight:600}
+.skip{position:fixed;top:8px;left:8px;z-index:10;background:var(--primary);color:var(--on-primary);padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;transform:translateY(-200%)}
+.skip:focus{transform:none}
 ul.tight{padding-left:20px}
 details{border-bottom:1px solid var(--border);padding:12px 0}
 summary{cursor:pointer;font-weight:600}
@@ -123,6 +126,8 @@ const NAV = [
   { href: '/planos', label: 'Planos' },
   { href: '/blog', label: 'Blog' },
   { href: '/faq', label: 'FAQ' },
+  { href: '/sobre', label: 'Sobre' },
+  { href: '/contato', label: 'Contato' },
 ]
 
 const section = (s: { h2: string; p?: string[]; ul?: string[] }) =>
@@ -137,8 +142,23 @@ const faqHtml = (faq: Faq[]) =>
 
 const plansHtml = () =>
   `<div class="plans">${PLANS.map(
-    p => `<div class="box"><h2 style="margin-top:0">${esc(p.name)}</h2><p class="meta">${esc(p.audience)}</p><p class="price">${esc(p.price)}<span class="meta"> /mês</span></p><p><strong>${esc(p.limit)}</strong></p><ul class="tight">${p.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`,
+    p => `<div class="box"><h2 style="margin-top:0">${esc(p.name)}</h2><p class="meta">${esc(p.audience)}</p><p><strong>${esc(p.limit)}</strong></p><ul class="tight">${p.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>`,
   ).join('')}</div>`
+
+const companyHtml = () => {
+  const rows = [
+    ['Razão social', COMPANY.legalName],
+    ['CNPJ', COMPANY.cnpj],
+    ['Endereço', COMPANY.address],
+    ['Responsável', COMPANY.responsible],
+  ].filter(([, v]) => v)
+  return rows.length
+    ? `<ul class="tight">${rows.map(([k, v]) => `<li><strong>${esc(k)}:</strong> ${esc(v)}</li>`).join('')}</ul>`
+    : ''
+}
+
+const contactHtml = () =>
+  `<div class="box"><h2 style="margin-top:0">Atendimento</h2><ul class="tight"><li><strong>WhatsApp:</strong> <a href="${WHATSAPP_URL}" rel="noopener">${esc(WHATSAPP_DISPLAY)}</a></li><li><strong>E-mail:</strong> <a href="mailto:${SUPPORT_EMAIL}">${esc(SUPPORT_EMAIL)}</a></li></ul>${companyHtml()}</div>`
 
 const cta = () =>
   `<div class="box"><strong>Pronto para testar?</strong><p>Crie a conta do seu escritório e comece a usar o SmartJuris.</p><a class="cta" href="/">Começar agora</a> <a href="${WHATSAPP_URL}" rel="noopener">Falar com o suporte no WhatsApp</a></div>`
@@ -164,6 +184,8 @@ const footerNav = () =>
     { href: '/planos', label: 'Planos' },
     { href: '/blog', label: 'Blog' },
     { href: '/faq', label: 'FAQ' },
+    { href: '/sobre', label: 'Sobre' },
+    { href: '/contato', label: 'Contato' },
   ]
     .map(l => `<a href="${l.href}">${esc(l.label)}</a>`)
     .join('')
@@ -190,8 +212,10 @@ export function renderPage(page: Page): string {
 
   let body = ''
   if (page.path === '/planos') body += plansHtml()
+  if (page.path === '/contato') body += contactHtml()
   if (page.path === '/blog') body += blogListHtml()
   body += page.sections.map(section).join('')
+  if (page.path === '/sobre') body += companyHtml()
   if (page.faq?.length) body += faqHtml(page.faq)
   body += relatedHtml(page.related)
   if (page.path !== '/blog') body += cta()
@@ -226,14 +250,15 @@ export function renderPage(page: Page): string {
 ${ld.map(jsonLd).join('\n')}
 </head>
 <body>
+<a class="skip" href="#conteudo">Pular para o conteúdo principal</a>
 <header class="site"><div class="wrap"><a class="brand" href="/">⚖ ${SITE_NAME}</a><nav class="main" aria-label="Principal">${NAV.map(n => `<a href="${n.href}">${n.label}</a>`).join('')}</nav></div></header>
-<main class="wrap">
+<main class="wrap" id="conteudo">
 <h1>${esc(page.h1)}</h1>
 <p class="lead">${esc(page.lead)}</p>
 ${page.datePublished ? `<p class="meta">Publicado em <time datetime="${page.datePublished}">${page.datePublished.split('-').reverse().join('/')}</time></p>` : ''}
 ${body}
 </main>
-<footer class="site"><div class="wrap"><nav aria-label="Rodapé">${footerNav()}</nav>© ${new Date().getFullYear()} ${SITE_NAME} LexOS. Ferramenta de apoio ao advogado; a responsabilidade técnica e ética pelas peças é do profissional.</div></footer>
+<footer class="site"><div class="wrap"><nav aria-label="Rodapé">${footerNav()}</nav>© ${new Date().getFullYear()} ${SITE_NAME} LexOS. Ferramenta de apoio ao advogado: nada é protocolado ou enviado sem a revisão do profissional, que responde técnica e eticamente pelas peças.</div></footer>
 </body>
 </html>
 `
@@ -271,11 +296,11 @@ export function renderHomeStatic(): string {
 <h2>Recursos</h2>
 <ul>${RESOURCES.map(r => `<li><a href="${r.path}">${esc(r.h1)}</a> — ${esc(r.lead)}</li>`).join('')}</ul>
 <h2>Planos</h2>
-<ul>${PLANS.map(p => `<li><strong>${esc(p.name)}</strong> — ${esc(p.price)}/mês, ${esc(p.limit)}</li>`).join('')}</ul>
+<ul>${PLANS.map(p => `<li><strong>${esc(p.name)}</strong> — ${esc(p.limit)}</li>`).join('')}</ul>
 <p><a href="/planos">Ver detalhes dos planos</a></p>
 <h2>Perguntas frequentes</h2>
 ${HOME_FAQ.map(f => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('')}
-<nav aria-label="Páginas"><a href="/planos">Planos</a> · <a href="/blog">Blog</a> · <a href="/faq">FAQ</a></nav>
+<nav aria-label="Páginas"><a href="/planos">Planos</a> · <a href="/blog">Blog</a> · <a href="/faq">FAQ</a> · <a href="/sobre">Sobre</a> · <a href="/contato">Contato</a></nav>
 <noscript><p>Ative o JavaScript para acessar o sistema.</p></noscript>
 </div>`
 }

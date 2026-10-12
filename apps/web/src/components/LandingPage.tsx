@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { api, getErrorMessage } from '../api/client'
 import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
-import PricingSection from './PricingSection'
-import ProductionShowcase from './ProductionShowcase'
-import TestimonialsSection from './TestimonialsSection'
+const PricingSection = lazy(() => import('./PricingSection'))
+const ProductionShowcase = lazy(() => import('./ProductionShowcase'))
+const TestimonialsSection = lazy(() => import('./TestimonialsSection'))
 import lawyersImg from '../assets/lawyers_operating_smartjuris.webp'
 
 // Tipografia do hero — exceção de marketing permitida (46px).
@@ -487,7 +487,7 @@ function CadastroForm({
         color: 'var(--color-muted)',
         lineHeight: 1.5,
       }}>
-        <strong style={{ color: 'var(--color-foreground)' }}>Nota:</strong> Ao criar sua conta gratuita, os recursos avançados de IA (geração de peças, análise de documentos, busca de jurisprudência e revisão contratual) estarão limitados. Assine um plano para desbloquear acesso completo.
+        <strong style={{ color: 'var(--color-foreground)' }}>Nota:</strong> Os recursos de IA (geração de minutas, análise de documentos, busca de jurisprudência e revisão contratual) são ferramentas de apoio ao advogado: nada é protocolado, enviado ou decidido sem a revisão e a aprovação do profissional. Os recursos disponíveis dependem do plano contratado.
       </div>
 
       <p style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5, margin: 0, textAlign: 'center' }}>
@@ -943,6 +943,8 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
       fontFamily: 'var(--font-sans)',
       color: 'var(--color-foreground)'
     }}>
+      <a href="#conteudo-principal" className="skip-link">Pular para o conteúdo principal</a>
+
       {/* Top Banner de Destaque */}
       <div style={{
         background: 'var(--color-primary)',
@@ -955,7 +957,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         lineHeight: 1.5,
         borderBottom: '1px solid color-mix(in srgb, var(--color-on-primary) 10%, transparent)'
       }}>
-        ✨ <strong style={{ color: 'var(--color-accent)' }}>SmartJuris v2.5 (LexOS Edition)</strong> — A Primeira Plataforma Jurídica com IA Nativa e Validação Auditável do Brasil. <span style={{ opacity: 0.75, marginLeft: 4 }}>Planos Intermediário & Avançado incluem <strong style={{ color: 'var(--color-accent)' }}>Jus IA</strong> — jurisprudência em tempo real de todos os tribunais.</span>
+        ✨ <strong style={{ color: 'var(--color-accent)' }}>SmartJuris v2.5 (LexOS Edition)</strong> — Plataforma de apoio ao advogado, com IA e validação humana auditável. <span style={{ opacity: 0.75, marginLeft: 4 }}>A IA auxilia; a decisão e a responsabilidade são sempre do advogado.</span>
       </div>
 
       {/* Navbar Minimalista Swiss */}
@@ -1006,7 +1008,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
       </header>
 
       {/* Hero Grid Principal */}
-      <main style={{
+      <main id="conteudo-principal" tabIndex={-1} style={{
         flex: 1,
         display: 'grid',
         gridTemplateColumns: isDesktop ? '1fr 440px' : '1fr',
@@ -1026,7 +1028,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             marginBottom: SPACE.xl, border: '1px solid var(--color-border)',
             flexWrap: 'wrap'
           }}>
-            <span>⚖️</span> Peticionamento, Contratos e Jurimetria sem Alucinações
+            <span>⚖️</span> Minutas, contratos e jurimetria com revisão do advogado
           </div>
 
           <h1 style={{
@@ -1038,7 +1040,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             fontWeight: 400,
             color: 'var(--color-foreground)'
           }}>
-            Software jurídico com IA para advogados e escritórios de alta performance.
+            Software jurídico com IA como apoio a advogados e escritórios.
           </h1>
 
           <p style={{
@@ -1048,7 +1050,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             marginBottom: 32,
             maxWidth: 620
           }}>
-            O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA Nativa</strong>. Crie minutas de peças em segundos com RAG vetorial, revise contratos com scanner de risco e acompanhe a linha do tempo do processo e prazos.
+            O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA Nativa</strong>. Elabore minutas de peças para revisão com RAG vetorial, revise contratos com scanner de risco e acompanhe a linha do tempo do processo e prazos.
           </p>
 
           {/* Showcase Visual: Foto Real dos Advogados Operando o SmartJuris com IA */}
@@ -1114,7 +1116,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               background: 'var(--color-surface)',
             }}>
               <div style={{ fontSize: FONT.lg, fontWeight: 700, color: 'var(--color-primary)' }}>
-                Blindagem Ética OAB & RAG Vetorial sem Alucinações
+                Apoio ao advogado, com revisão humana obrigatória
               </div>
               <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
                 1. Extração semântica com BGE-M3 · 2. Raciocínio Qwen · 3. Playbooks de teses · 4. Crivo e validação humana auditável.
@@ -1131,7 +1133,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               { title: 'Jurimetria Preditiva', desc: 'Simulador de probabilidade de êxito.' },
               { title: 'Financeiro & Horas', desc: 'Honorários e gravação de horas faturáveis.' },
               { title: 'Revisão Contratual', desc: 'Scanner autônomo de cláusulas abusivas.' },
-              { title: '⚡ Consulta Jus IA', desc: 'Jurisprudência ao vivo — STF, STJ, TJs e TRFs em segundos. Exclusivo nos planos Intermediário & Avançado.' },
+              { title: '⚡ Consulta Jus IA', desc: 'Pesquisa de jurisprudência em tribunais como STF, STJ, TJs e TRFs, para análise do advogado.' },
             ].map(f => (
               <div key={f.title} style={{ borderLeft: f.title.startsWith('⚡') ? '2px solid var(--color-primary)' : '2px solid var(--color-accent)', paddingLeft: SPACE.md, background: f.title.startsWith('⚡') ? 'color-mix(in srgb, var(--color-primary) 5%, transparent)' : 'transparent', borderRadius: f.title.startsWith('⚡') ? '0 4px 4px 0' : undefined, paddingTop: f.title.startsWith('⚡') ? 6 : undefined, paddingBottom: f.title.startsWith('⚡') ? 6 : undefined }}>
                 <div style={{ fontSize: FONT.base, fontWeight: 600, marginBottom: 2, color: f.title.startsWith('⚡') ? 'var(--color-primary)' : 'var(--color-foreground)' }}>{f.title}</div>
@@ -1359,13 +1361,19 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
       </main>
 
       {/* Seção 1: Mostruário de Produção com Fonte Destacada & Capacidade por Plano */}
-      <ProductionShowcase />
+      <Suspense fallback={null}>
+        <ProductionShowcase />
+      </Suspense>
 
       {/* Seção 2: Feedbacks e Prova Social de Advogados pelo Brasil */}
-      <TestimonialsSection />
+      <Suspense fallback={null}>
+        <TestimonialsSection />
+      </Suspense>
 
       {/* Seção 3: Planos e Preços Detalhados */}
-      <PricingSection onCtaClick={handlePricingCta} />
+      <Suspense fallback={null}>
+        <PricingSection onCtaClick={handlePricingCta} />
+      </Suspense>
 
       {/* Footer Swiss */}
       <footer style={{
@@ -1387,13 +1395,15 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             ['/recursos/gestao-financeira-e-timesheet', 'Financeiro e timesheet'],
             ['/recursos/crm-para-advogados', 'CRM'],
             ['/planos', 'Planos'],
+            ['/sobre', 'Sobre'],
+            ['/contato', 'Contato'],
             ['/blog', 'Blog'],
             ['/faq', 'FAQ'],
           ].map(([href, label]) => (
             <a key={href} href={href} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>{label}</a>
           ))}
         </nav>
-        © {new Date().getFullYear()} SmartJuris LexOS. Inteligência Artificial Jurídica & Gestão para Advocacia Contemporânea. Suporte Técnico via WhatsApp: <a href="https://wa.me/5588993573809" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>88 99357-3809</a>. Estética Vignelli.
+        © {new Date().getFullYear()} SmartJuris LexOS. Inteligência Artificial Jurídica & Gestão para Advocacia Contemporânea. Suporte Técnico via WhatsApp: <a href="https://wa.me/5588993573809" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>88 99357-3809</a>. O SmartJuris é uma ferramenta de apoio ao advogado: não presta serviços jurídicos nem atua sem a revisão e a responsabilidade do profissional.
       </footer>
     </div>
   )

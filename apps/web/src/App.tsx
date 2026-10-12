@@ -142,7 +142,8 @@ function SessionExpiredScreen({ onBackToLogin }: { onBackToLogin: () => void }) 
 export default function App() {
   const [user, setUser] = useState<User | null>(readCachedUser)
   const [precisaTrocar, setPrecisaTrocar] = useState<boolean>(() => readCachedUser()?.precisaTrocarSenha === true)
-  const [loading, setLoading] = useState(true)
+  // Visitante sem sessão em cache vê a landing de imediato (LCP); /me valida em segundo plano.
+  const [loading, setLoading] = useState(() => readCachedUser() !== null)
   const [route, setRoute] = useState<Route>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sessionExpired, setSessionExpired] = useState(false)

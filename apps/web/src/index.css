@@ -133,3 +133,21 @@ textarea:focus-visible {
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
+
+/* Acessibilidade: link para pular ao conteúdo principal (visível apenas ao receber foco). */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}

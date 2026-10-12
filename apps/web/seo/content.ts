@@ -398,10 +398,10 @@ export const INFO: Page[] = [
   {
     path: '/planos',
     kind: 'info',
-    title: 'Planos e Preços do SmartJuris | Software Jurídico com IA',
+    title: 'Planos do SmartJuris | Software Jurídico com IA',
     description:
-      'Conheça os planos Básico (R$ 180), Intermediário (R$ 300) e Avançado (R$ 500) do SmartJuris, com 20, 50 e 100 peças por mês.',
-    h1: 'Planos e preços do SmartJuris',
+      'Conheça os planos Básico, Intermediário e Avançado do SmartJuris, com 20, 50 e 100 peças por mês, e os recursos de cada um.',
+    h1: 'Planos do SmartJuris',
     lead:
       'Escolha o plano pelo volume de peças do seu escritório. Todos incluem gestão de processos, agenda, clientes e exportação com timbre.',
     sections: [], // renderizado a partir de PLANS
@@ -411,11 +411,53 @@ export const INFO: Page[] = [
         a: 'Sim. A assinatura é gerenciada dentro do sistema, na tela de Assinatura.',
       },
       {
-        q: 'Os valores incluem promoções?',
-        a: 'Os valores exibidos são de tabela. Promoções vigentes aparecem na página inicial e na tela de assinatura.',
+        q: 'Onde vejo as condições de contratação?',
+        a: 'As condições são apresentadas na tela de Assinatura, dentro do sistema, após o cadastro. O SmartJuris é uma ferramenta de apoio ao advogado e não substitui a análise e a decisão do profissional.',
       },
     ],
     related: ['/faq', '/recursos/gerador-de-pecas-com-ia'],
+  },
+  {
+    path: '/sobre',
+    kind: 'info',
+    title: 'Sobre o SmartJuris | Ferramenta de Apoio ao Advogado',
+    description:
+      'Conheça o SmartJuris: plataforma de gestão jurídica com IA que apoia o advogado, sem atuar sem a sua revisão e responsabilidade.',
+    h1: 'Sobre o SmartJuris',
+    lead: 'Tecnologia a serviço do advogado, com revisão humana e responsabilidade profissional preservadas.',
+    sections: [
+      {
+        h2: 'O que é o SmartJuris',
+        p: [
+          'O SmartJuris LexOS é uma plataforma de gestão jurídica que reúne processos, prazos, agenda, clientes, financeiro e ferramentas de inteligência artificial para apoiar o trabalho de advogados e escritórios.',
+        ],
+      },
+      {
+        h2: 'Como tratamos a inteligência artificial',
+        ul: [
+          'A IA é uma ferramenta de apoio: ela sugere minutas, resumos e pesquisas, mas não age por conta própria.',
+          'Nenhuma peça é protocolada, enviada ou assinada sem a revisão e a aprovação do advogado.',
+          'A responsabilidade técnica e ética pelo conteúdo é sempre do profissional, conforme o Estatuto da Advocacia e o Código de Ética e Disciplina da OAB.',
+          'O SmartJuris não presta serviços jurídicos, não capta clientes e não divulga valores de honorários de advogados.',
+          'Os dados são tratados conforme a LGPD (Lei nº 13.709/2018), com isolamento por escritório.',
+        ],
+      },
+      {
+        h2: 'Dados da empresa',
+        p: [],
+      },
+    ],
+    related: ['/contato', '/blog/ia-na-advocacia-supervisao-humana-e-etica-oab', '/faq'],
+  },
+  {
+    path: '/contato',
+    kind: 'info',
+    title: 'Contato | SmartJuris',
+    description: 'Fale com o suporte do SmartJuris por WhatsApp ou e-mail.',
+    h1: 'Contato',
+    lead: 'Canais de atendimento para dúvidas sobre o sistema, cadastro e suporte técnico.',
+    sections: [],
+    related: ['/sobre', '/faq'],
   },
   {
     path: '/faq',

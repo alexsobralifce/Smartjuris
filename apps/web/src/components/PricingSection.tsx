@@ -1,81 +1,59 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button, FONT, RADIUS, SPACE } from "../ui"
 import { useBreakpoint } from "../hooks/useBreakpoint"
-import { resumoPrecoPlano, type PlanoAssinaturaApi } from "../utils/promocaoUI"
-import { getApiBaseUrl } from "../api/config"
 
 interface Plan {
   audience: string
   name: string
-  price: string
   limit: string
   features: string[]
   cta: string
   highlight: boolean
 }
 
-interface PromocaoPublica {
-  ativa: boolean
-  percentual: number
-  planos: Array<{
-    codigo: string
-    precoMensal: number
-    valorPromocional: number | null
-    valorPromocionalCents: number | null
-  }>
-}
-
 const PLANS: Plan[] = [
   {
     audience: "Ideal para advogados solo",
     name: "Básico",
-    price: "R$ 180,00",
     limit: "20 peças completas por mês",
     features: [
       "Até 20 peças geradas com RAG BGE-M3 + Qwen",
-      "Ideal para ~6 iniciais, 6 contestações e 8 recursos/contratos",
-      "Economia de até ~40 horas de redação no mês",
       "Suporte técnico via WhatsApp e e-mail",
       "Exportação em PDF/DOCX com timbre personalizado",
       "Histórico seguro de peças por 60 dias",
     ],
-    cta: "Começar com o Básico",
+    cta: "Criar conta",
     highlight: false,
   },
   {
-    audience: "Melhor Custo-Benefício",
+    audience: "Para escritórios em crescimento",
     name: "Intermediário",
-    price: "R$ 300,00",
     limit: "50 peças completas por mês",
     features: [
       "Tudo do Básico +",
       "Até 50 peças/mês (iniciais com tutelas, apelações e scanners)",
-      "Economia de até ~100 horas/mês (1 advogado pleno equivalente)",
       "Análise de até 150 páginas de autos (PDF) por peça",
       "Scanner autônomo de riscos contratuais & jurimetria preditiva",
-      "✦ Consultas ilimitadas ao Jus IA (jurisprudência ao vivo)",
+      "✦ Consultas ao Jus IA (jurisprudência ao vivo)",
       "Suporte prioritário no WhatsApp",
-      "Histórico ilimitado com busca semântica",
+      "Histórico com busca semântica",
     ],
-    cta: "Escolher o Intermediário",
+    cta: "Criar conta",
     highlight: true,
   },
   {
     audience: "Ideal para bancas estabelecidas",
     name: "Avançado",
-    price: "R$ 500,00",
     limit: "100 peças completas por mês",
     features: [
       "Tudo do Intermediário +",
       "Até 100 peças/mês (alta escala, recursos aos tribunais superiores)",
-      "Economia de até ~200 horas/mês (2 advogados associados plenos)",
-      "Custo unitário inferior a R$ 5,00 por peça qualificada",
       "Múltiplos perfis de usuário (até 3 advogados simultâneos)",
       "✦ Jus IA com acesso prioritário + alertas automáticos de jurisprudência",
       "Fila de validação com governança e aprovação por sócio",
-      "Agentes autônomos para revisão e teses customizadas",
+      "Revisão assistida e teses customizadas, sempre sob aprovação do advogado",
     ],
-    cta: "Falar com vendas",
+    cta: "Criar conta",
     highlight: false,
   },
 ]
@@ -103,11 +81,9 @@ function CheckIcon() {
 
 function PricingCard({
   plan,
-  resumo,
   onCtaClick,
 }: {
   plan: Plan
-  resumo: ReturnType<typeof resumoPrecoPlano>
   onCtaClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
@@ -156,7 +132,7 @@ function PricingCard({
             whiteSpace: "nowrap",
           }}
         >
-          Mais Escolhido
+          Em destaque
         </span>
       )}
 
@@ -186,71 +162,6 @@ function PricingCard({
         }}
       >
         {plan.name}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {resumo.promocional ? (
-          <>
-            <span
-              style={{
-                alignSelf: "flex-start",
-                background: "var(--color-accent)",
-                color: "var(--color-on-accent)",
-                fontSize: FONT.xs,
-                fontWeight: 700,
-                padding: "3px 8px",
-                borderRadius: RADIUS.chip,
-                marginBottom: 4,
-              }}
-            >
-              {resumo.percentual}% OFF 1º mês
-            </span>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 36,
-                  letterSpacing: "-0.02em",
-                  lineHeight: 1,
-                  color: "var(--color-foreground)",
-                }}
-              >
-                R$ {resumo.valorDestaque.toFixed(2).replace(".", ",")}
-              </span>
-              <span
-                style={{ fontSize: FONT.base, color: "var(--color-muted)" }}
-              >
-                /mês
-              </span>
-            </div>
-            <span
-              style={{
-                fontSize: FONT.sm,
-                color: "var(--color-muted)",
-                textDecoration: "line-through",
-              }}
-            >
-              R$ {resumo.precoMensal.toFixed(2).replace(".", ",")} depois
-            </span>
-          </>
-        ) : (
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <span
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: 36,
-                letterSpacing: "-0.02em",
-                lineHeight: 1,
-                color: "var(--color-foreground)",
-              }}
-            >
-              {plan.price}
-            </span>
-            <span style={{ fontSize: FONT.base, color: "var(--color-muted)" }}>
-              /mês
-            </span>
-          </div>
-        )}
       </div>
 
       <div
@@ -318,44 +229,6 @@ export default function PricingSection({
   const isTablet = breakpoint === "tablet"
   const isDesktop = breakpoint === "desktop"
 
-  const [promocao, setPromocao] = useState<PromocaoPublica | null>(null)
-
-  useEffect(() => {
-    fetch(`${getApiBaseUrl()}/api/billing/promocao/status`)
-      .then((r) => r.json())
-      .then(setPromocao)
-      .catch(() => setPromocao(null)) // fail gracefully
-  }, [])
-
-  const planosApi: PlanoAssinaturaApi[] = PLANS.map((plan, idx) => {
-    const codigo = ["basico", "profissional", "office"][idx]
-    const precoMensal = [180, 300, 500][idx]
-    const promoData = promocao?.planos.find((p) => p.codigo === codigo)
-    return {
-      codigo,
-      precoMensal,
-      creditos: [20, 50, 100][idx],
-      rotulo: plan.name,
-      promocao: promoData?.valorPromocional
-        ? {
-            percentual: promocao!.percentual,
-            valorPromocional: promoData.valorPromocional,
-            valorPromocionalCents: promoData.valorPromocionalCents!,
-          }
-        : null,
-    }
-  })
-
-  const promocaoStatus = promocao?.ativa
-    ? {
-        ativa: true,
-        percentual: promocao.percentual,
-        elegivel: true,
-        motivoIneligibilidade: null,
-        valorPromocional: null,
-      }
-    : undefined
-
   return (
     <section
       style={{
@@ -389,7 +262,7 @@ export default function PricingSection({
               margin: "0 0 16px",
             }}
           >
-            Automatize sua rotina jurídica. Escolha o plano ideal para o seu
+            Conheça os planos do SmartJuris e escolha o que atende ao seu
             escritório.
           </h2>
           <p
@@ -400,8 +273,9 @@ export default function PricingSection({
               margin: 0,
             }}
           >
-            Produza peças complexas em minutos com a IA mais avançada do
-            mercado. Cancele quando quiser.
+            A IA auxilia na elaboração de minutas e na pesquisa; o advogado
+            revisa, decide e assina. Os valores e condições são apresentados
+            após o cadastro, na área do cliente.
           </p>
         </div>
 
@@ -414,17 +288,9 @@ export default function PricingSection({
             alignItems: "stretch",
           }}
         >
-          {PLANS.map((plan, idx) => {
-            const resumo = resumoPrecoPlano(planosApi[idx], promocaoStatus)
-            return (
-              <PricingCard
-                key={plan.name}
-                plan={plan}
-                resumo={resumo}
-                onCtaClick={onCtaClick}
-              />
-            )
-          })}
+          {PLANS.map((plan) => (
+            <PricingCard key={plan.name} plan={plan} onCtaClick={onCtaClick} />
+          ))}
         </div>
 
         {/* Banner de Integração Jus IA */}
@@ -471,7 +337,7 @@ export default function PricingSection({
               margin: 0,
               maxWidth: 560,
             }}>
-              Os planos <strong style={{ color: "#ffffff" }}>Intermediário</strong> e <strong style={{ color: "#ffffff" }}>Avançado</strong> incluem acesso direto à <strong style={{ color: "var(--color-accent)" }}>Jus IA</strong>, a maior base de jurisprudência inteligente do Brasil. Pesquise decisões de todos os tribunais em segundos, com linguagem natural, e use os resultados diretamente na geração das suas peças — sem sair da plataforma.
+              Os planos <strong style={{ color: "#ffffff" }}>Intermediário</strong> e <strong style={{ color: "#ffffff" }}>Avançado</strong> incluem acesso direto à <strong style={{ color: "var(--color-accent)" }}>Jus IA</strong>, base de jurisprudência inteligente. Pesquise decisões de tribunais com linguagem natural e use os resultados diretamente na geração das suas peças — sem sair da plataforma.
             </p>
             <div style={{
               display: "grid",
@@ -526,32 +392,6 @@ export default function PricingSection({
           )}
         </div>
 
-        {/* Banner de promoção */}
-        {promocao?.ativa && (
-          <div
-            style={{
-              marginTop: 32,
-              padding: "16px 24px",
-              background: "var(--color-accent-light)",
-              border: "1px solid var(--color-accent)",
-              borderRadius: RADIUS.card,
-              textAlign: "center",
-            }}
-          >
-            <p
-              style={{
-                margin: 0,
-                fontSize: FONT.md,
-                color: "var(--color-foreground)",
-                fontWeight: 600,
-              }}
-            >
-              🎉 {promocao.percentual}% OFF na 1ª mensalidade — recorrência
-              integral a partir do 2º mês
-            </p>
-          </div>
-        )}
-
         {/* Gatilhos mentais */}
         <div
           style={{
@@ -572,8 +412,8 @@ export default function PricingSection({
               margin: 0,
             }}
           >
-            ☕ 1 peça complexa redigida pelo SmartJuris custa menos que um
-            cafezinho.
+            ⚖️ O SmartJuris é uma ferramenta de apoio: nenhuma peça é
+            protocolada ou enviada sem a revisão e a aprovação do advogado.
           </p>
           <p
             style={{
@@ -583,8 +423,8 @@ export default function PricingSection({
               margin: 0,
             }}
           >
-            ⚖️ Todos os planos rodam no modelo de inteligência artificial mais
-            capaz para raciocínio lógico-jurídico.
+            🔒 A responsabilidade técnica e ética pelo conteúdo é sempre do
+            profissional, conforme o Código de Ética e Disciplina da OAB.
           </p>
           <p
             style={{
@@ -594,7 +434,7 @@ export default function PricingSection({
               margin: 0,
             }}
           >
-            📚 Planos Intermediário & Avançado incluem acesso à Jus IA — pesquise jurisprudência em tempo real de todos os tribunais brasileiros.
+            📚 Os planos Intermediário e Avançado incluem acesso à Jus IA para pesquisa de jurisprudência.
           </p>
         </div>
       </div>

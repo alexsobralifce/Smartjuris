@@ -4,7 +4,6 @@ import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 const PricingSection = lazy(() => import('./PricingSection'))
 const ProductionShowcase = lazy(() => import('./ProductionShowcase'))
-const TestimonialsSection = lazy(() => import('./TestimonialsSection'))
 import lawyersImg from '../assets/lawyers_operating_smartjuris.webp'
 
 // Tipografia do hero — exceção de marketing permitida (46px).
@@ -1363,11 +1362,6 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
       {/* Seção 1: Mostruário de Produção com Fonte Destacada & Capacidade por Plano */}
       <Suspense fallback={null}>
         <ProductionShowcase />
-      </Suspense>
-
-      {/* Seção 2: Feedbacks e Prova Social de Advogados pelo Brasil */}
-      <Suspense fallback={null}>
-        <TestimonialsSection />
       </Suspense>
 
       {/* Seção 3: Planos e Preços Detalhados */}

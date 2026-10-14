@@ -24,6 +24,8 @@ import jurisprudenciasRoutes from './routes/jurisprudencias.js';
 import agendaRoutes from './routes/agenda.js';
 import billingRoutes, { billingPublicRouter } from './routes/billing.js';
 import billingWebhookRoutes from './routes/billingWebhook.js';
+import blogRoutes from './routes/blog.js';
+import rootBlogRoutes from './routes/rootBlog.js';
 
 import { authMiddleware } from './middlewares/auth.js';
 import { refreshSession } from './middlewares/refreshSession.js';
@@ -78,6 +80,9 @@ app.use('/api/auth', authRoutes);
 // x-signature + conferência na API do MP). Deve vir ANTES do router autenticado.
 app.use('/api/billing/webhook', billingWebhookRoutes);
 
+// Blog — leitura PÚBLICA (artigos publicados, para o build do site) e disparo agendado por token.
+app.use('/api/blog', blogRoutes);
+
 // Billing PÚBLICO — status da promoção para a landing page (SEM autenticação).
 // Deve vir ANTES do router autenticado abaixo (o authMiddleware montado em
 // /api/billing bloquearia a rota caso estivesse dentro de billingRoutes).
@@ -93,6 +98,7 @@ app.use('/api/root/documentos', authMiddleware, refreshSession, requireRoot, roo
 app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootCreditosRoutes);
 app.use('/api/root', authMiddleware, refreshSession, requireRoot, rootStatsRoutes);
 app.use('/api/root/piloto', authMiddleware, refreshSession, requireRoot, pilotoRoutes);
+app.use('/api/root/blog', authMiddleware, refreshSession, requireRoot, rootBlogRoutes);
 
 // Admin do escritório — admin role + tenant internamente + forcePasswordChange
 app.use('/api/admin/escritorio', authMiddleware, refreshSession, requireAdmin, forcePasswordChange, adminEscritorioRoutes);

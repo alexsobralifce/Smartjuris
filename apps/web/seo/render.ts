@@ -1,4 +1,4 @@
-import { ALL_PAGES, BLOG, HOME_FAQ, RESOURCES, type Faq, type Page } from './content'
+import { ALL_PAGES, BLOG_TODOS, HOME_FAQ, RESOURCES, type Faq, type Page } from './content'
 import {
   COMPANY,
   OG_IMAGE,
@@ -126,6 +126,16 @@ details{border-bottom:1px solid var(--border);padding:12px 0}
 summary{cursor:pointer;font-weight:600}
 footer.site .wrap{padding-top:28px;padding-bottom:28px;font-size:15px;color:var(--muted)}
 footer.site nav{display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:14px}
+.cover{margin:24px 0}
+.cover img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:12px;background:var(--surface)}
+.cover figcaption{margin-top:6px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin:28px 0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover}
+.card-body{padding:16px 18px 18px}
+.card h2{font-size:21px;margin:4px 0 8px}
+.card h2 a{text-decoration:none}
+.card p{margin:0}
 `
 
 const NAV = [
@@ -181,10 +191,33 @@ const relatedHtml = (paths: string[] = []) => {
     .join('')}</ul></section>`
 }
 
+const dataBr = (iso: string) => iso.split('-').reverse().join('/')
+
 const blogListHtml = () =>
-  `<ul class="tight">${BLOG.map(
-    p => `<li><a href="${p.path}"><strong>${esc(p.h1)}</strong></a><br><span class="meta">${esc(p.description)}</span></li>`,
-  ).join('')}</ul>`
+  `<div class="cards">${BLOG_TODOS.map(
+    p =>
+      `<article class="card">${
+        p.image
+          ? `<a href="${p.path}"><img src="${esc(p.image)}" width="1200" height="800" alt="${esc(p.imageAlt ?? p.h1)}" loading="lazy" decoding="async"></a>`
+          : ''
+      }<div class="card-body">${
+        p.category ? `<p class="meta">${esc(p.category)}${p.datePublished ? ` · ${dataBr(p.datePublished)}` : ''}</p>` : ''
+      }<h2><a href="${p.path}">${esc(p.h1)}</a></h2><p>${esc(p.description)}</p></div></article>`,
+  ).join('')}</div>`
+
+const coverHtml = (p: Page) =>
+  p.image
+    ? `<figure class="cover"><img src="${esc(p.image)}" width="1200" height="800" alt="${esc(p.imageAlt ?? p.h1)}" fetchpriority="high" decoding="async">${
+        p.imageCredit ? `<figcaption class="meta">${esc(p.imageCredit)}</figcaption>` : ''
+      }</figure>`
+    : ''
+
+const sourcesHtml = (p: Page) =>
+  p.sources?.length
+    ? `<section class="box"><h2 style="margin-top:0">Fonte</h2><p class="meta">Este artigo comenta matéria publicada por outro veículo; o texto é uma análise própria da equipe SmartJuris. Leia a notícia original:</p><ul class="tight">${p.sources
+        .map(s => `<li><a href="${esc(s.url)}" rel="noopener noreferrer" target="_blank">${esc(s.title)}</a></li>`)
+        .join('')}</ul></section>`
+    : ''
 
 const footerNav = () =>
   [
@@ -200,6 +233,7 @@ const footerNav = () =>
 
 export function renderPage(page: Page): string {
   const url = absolute(page.path)
+  const ogImage = page.image ? absolute(page.image) : OG_IMAGE
   const ld: unknown[] = [organizationLd, breadcrumbLd(page)]
   if (page.faq?.length) ld.push(faqLd(page.faq))
   if (page.kind === 'blog') {
@@ -209,11 +243,13 @@ export function renderPage(page: Page): string {
       headline: page.h1,
       description: page.description,
       datePublished: page.datePublished,
-      dateModified: page.datePublished,
+      dateModified: page.dateModified ?? page.datePublished,
       inLanguage: 'pt-BR',
       mainEntityOfPage: url,
-      image: OG_IMAGE,
-      author: { '@type': 'Organization', name: SITE_NAME },
+      image: ogImage,
+      ...(page.category ? { articleSection: page.category } : {}),
+      ...(page.sources?.length ? { citation: page.sources.map(s => s.url), isBasedOn: page.sources.map(s => s.url) } : {}),
+      author: { '@type': 'Organization', name: page.author ?? SITE_NAME },
       publisher: { '@type': 'Organization', name: SITE_NAME, logo: { '@type': 'ImageObject', url: OG_IMAGE } },
     })
   }
@@ -225,6 +261,7 @@ export function renderPage(page: Page): string {
   body += page.sections.map(section).join('')
   if (page.path === '/sobre') body += companyHtml()
   if (page.faq?.length) body += faqHtml(page.faq)
+  body += sourcesHtml(page)
   body += relatedHtml(page.related)
   if (page.path !== '/blog') body += cta()
 
@@ -241,14 +278,14 @@ export function renderPage(page: Page): string {
 <meta property="og:type" content="${page.kind === 'blog' ? 'article' : 'website'}">
 <meta property="og:site_name" content="${SITE_NAME}">
 <meta property="og:locale" content="pt_BR">
-<meta property="og:title" content="${esc(page.title)}">
+${page.kind === 'blog' && page.datePublished ? `<meta property="article:published_time" content="${page.datePublished}">\n` : ''}<meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${url}">
-<meta property="og:image" content="${OG_IMAGE}">
+<meta property="og:image" content="${ogImage}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(page.title)}">
 <meta name="twitter:description" content="${esc(page.description)}">
-<meta name="twitter:image" content="${OG_IMAGE}">
+<meta name="twitter:image" content="${ogImage}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${FONTS_URL}" media="print" onload="this.media='all'">
@@ -263,7 +300,8 @@ ${ld.map(jsonLd).join('\n')}
 <main class="wrap" id="conteudo">
 <h1>${esc(page.h1)}</h1>
 <p class="lead">${esc(page.lead)}</p>
-${page.datePublished ? `<p class="meta">Publicado em <time datetime="${page.datePublished}">${page.datePublished.split('-').reverse().join('/')}</time></p>` : ''}
+${page.datePublished ? `<p class="meta">Publicado em <time datetime="${page.datePublished}">${dataBr(page.datePublished)}</time>${page.author ? ` · Por ${esc(page.author)}` : ''}</p>` : ''}
+${coverHtml(page)}
 ${body}
 </main>
 <footer class="site"><div class="wrap"><nav aria-label="Rodapé">${footerNav()}</nav>© ${new Date().getFullYear()} ${SITE_NAME} LexOS. Ferramenta de apoio ao advogado: nada é protocolado ou enviado sem a revisão do profissional, que responde técnica e eticamente pelas peças.</div></footer>
@@ -278,13 +316,20 @@ export function render404(): string {
 
 export function renderSitemap(now: Date): string {
   const lastmod = now.toISOString().slice(0, 10)
-  const urls = [
+  const ultimoPost = BLOG_TODOS[0]?.dateModified ?? BLOG_TODOS[0]?.datePublished ?? lastmod
+  const urls: Array<{ path: string; priority: string; lastmod?: string }> = [
     { path: '/', priority: '1.0' },
-    ...ALL_PAGES.map(p => ({ path: p.path, priority: p.kind === 'resource' || p.path === '/planos' ? '0.8' : '0.6' })),
+    ...ALL_PAGES.map(p => ({
+      path: p.path,
+      priority: p.kind === 'resource' || p.path === '/planos' ? '0.8' : '0.6',
+      lastmod: p.kind === 'blog' ? (p.dateModified ?? p.datePublished) : undefined,
+    })),
   ]
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url><loc>${absolute(u.path)}</loc><lastmod>${lastmod}</lastmod><priority>${u.priority}</priority></url>`).join('\n')}
+${urls
+  .map(u => `  <url><loc>${absolute(u.path)}</loc><lastmod>${u.path === '/blog' ? ultimoPost : (u.lastmod ?? lastmod)}</lastmod><priority>${u.priority}</priority></url>`)
+  .join('\n')}
 </urlset>
 `
 }

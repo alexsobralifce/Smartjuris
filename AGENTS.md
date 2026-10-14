@@ -469,3 +469,15 @@ railway variable list -s smartjuris-api
 - **User demo**: `user@smartjuris.com` / `SEED_USER_PASSWORD` (default `user123`).
 - **QA multi-tenant** (`db:seed:test`): `admin.qa@teste.com`, `adv1.qa@teste.com`, `adv2.qa@teste.com` (escritório "Silva & Associados") e `admin.beta@teste.com`, `adv.beta@teste.com` (escritório "Teste Beta").
 - **Acesso por role**: root → Painel de Operações (`/api/root/*`); admin/user → módulos do escritório (root é bloqueado nas rotas de negócio).
+
+---
+
+## Blog automático (curadoria semanal com IA)
+
+- **Fluxo**: GitHub Actions (`.github/workflows/blog-semanal.yml`, segunda 08h Brasília) → `POST /api/blog/curadoria/agendada` (header `x-curadoria-token`) → `services/blog/curadoria.ts`: feeds RSS jurídicos (`fontes.ts`: Conjur, JOTA, OAB, TST, Agência Brasil/Senado/Câmara) → ranking (`selecao.ts`) → Qwen redige (`redator.ts`, JSON + validação OAB/clichês/cópia + auditoria E-E-A-T) → capa por IA (`imagem.ts`, OpenAI Images → webp via `sharp`) → **RASCUNHO** em `blog_artigos` (migration 0041).
+- **Aprovação humana obrigatória**: root revisa/edita e publica em Painel Root > Blog (`RootBlog.tsx`, `routes/rootBlog.ts` em `/api/root/blog`). Não publica sem capa. Publicar/despublicar agenda redeploy do web (`services/blog/rebuild.ts`, debounce 90 s).
+- **Site estático**: `apps/web/scripts/sincronizar-blog.mjs` (prebuild) baixa os artigos PUBLICADOS de `GET /api/blog/artigos` para `seo/blog/*.json` + `public/blog/*` (gitignored); `seo/content.ts` os junta aos 3 posts fixos; `seo/render.ts` gera HTML com capa (`alt`, 1200x800), caixa **Fonte** (link da matéria original), BlogPosting (image, dateModified, citation) e sitemap com `lastmod` real.
+- **Limitação conhecida**: a IA escreve a partir do título + trecho (≤900 caracteres) do feed, não da matéria inteira; por isso a revisão humana é obrigatória e os artigos citam a fonte.
+- **Variáveis (API)**: `OPENAI_API_KEY` (capa), `CURADORIA_TOKEN` (também secret `CURADORIA_TOKEN` no GitHub), `BLOG_MODELO_IMAGEM` (`gpt-image-1-mini`), `BLOG_IMAGEM_QUALIDADE` (`medium`), `CURADORIA_UTILIDADE_MIN` (3), `RAILWAY_PROJECT_TOKEN`/`RAILWAY_WEB_SERVICE_ID`/`RAILWAY_ENVIRONMENT_ID` (redeploy do web). **Web (build)**: `SINCRONIZAR_BLOG_API` (default no Dockerfile = API de produção).
+- **Custo de tokens**: operação `plataforma_blog` em `token_usage` (sem `usuario_id`; `trackTokenUsage` aceita só operações com esse prefixo sem usuário).
+- **Testes**: `services/blog/curadoria.test.ts` (puros) e `integration/blog.test.ts` (banco real); `apps/web/seo/render.test.ts`.

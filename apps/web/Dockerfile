@@ -17,6 +17,11 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
+# Blog: o build baixa os artigos publicados da API (pré-renderização estática).
+# Se a API estiver fora do ar, o build segue com os artigos já existentes.
+ARG SINCRONIZAR_BLOG_API=https://smartjuris-api-production.up.railway.app
+ENV SINCRONIZAR_BLOG_API=$SINCRONIZAR_BLOG_API
+
 # Build frontend
 RUN pnpm --filter @lexia/web build
 

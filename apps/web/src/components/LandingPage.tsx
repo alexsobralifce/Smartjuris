@@ -1004,6 +1004,13 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             <span>Design Swiss Vignelli</span>
           </div>
         )}
+
+        <a href="/blog" style={{
+          display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 8px',
+          fontSize: FONT.md, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none',
+        }}>
+          Blog
+        </a>
       </header>
 
       {/* Hero Grid Principal */}

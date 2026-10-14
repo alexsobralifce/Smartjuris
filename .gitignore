@@ -35,3 +35,10 @@ reasonix.toml
 /.opencode-skills/
 .railway-cli/
 /docs/ai-development/mercadopago-webhook-secret.txt
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Blog: artigos publicados sincronizados da API no build (scripts/sincronizar-blog.mjs)
+apps/web/seo/blog/
+apps/web/public/blog/

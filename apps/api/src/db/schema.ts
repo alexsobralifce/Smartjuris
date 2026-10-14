@@ -528,3 +528,61 @@ export const billingEscritorioLocks = pgTable('billing_escritorio_locks', {
 
 
 
+
+// ---------------------------------------------------------------------------
+// Blog automático (migration 0041): curadoria semanal com IA, aprovada pelo root.
+// ---------------------------------------------------------------------------
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
+export interface BlogSecao {
+  titulo: string;
+  paragrafos: string[];
+  lista?: string[];
+}
+
+export const blogArtigos = pgTable(
+  'blog_artigos',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    slug: text('slug').notNull().unique(),
+    tipo: text('tipo').notNull().default('CURADORIA'), // ORIGINAL | CURADORIA
+    status: text('status').notNull().default('RASCUNHO'), // RASCUNHO | PUBLICADO | DESPUBLICADO
+    titulo: text('titulo').notNull(),
+    descricao: text('descricao').notNull(),
+    categoria: text('categoria').notNull(),
+    autor: text('autor').notNull().default('Equipe SmartJuris'),
+    resumo: text('resumo').notNull(),
+    secoes: jsonb('secoes').$type<BlogSecao[]>().notNull().default([]),
+    faq: jsonb('faq').$type<Array<{ q: string; a: string }>>().notNull().default([]),
+    fontes: jsonb('fontes').$type<Array<{ titulo: string; url: string }>>().notNull().default([]),
+    origem: jsonb('origem').$type<{ veiculo: string; titulo: string; url: string } | null>(),
+    imagem: bytea('imagem'),
+    imagemMime: text('imagem_mime'),
+    imagemAlt: text('imagem_alt'),
+    imagemCredito: text('imagem_credito'),
+    publicadoEm: timestamp('publicado_em', { withTimezone: true }),
+    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    atualizadoEm: timestamp('atualizado_em', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ statusPubIdx: index('blog_artigos_status_pub_idx').on(t.status, t.publicadoEm) }),
+);
+
+export const blogCuradoriaExecucoes = pgTable(
+  'blog_curadoria_execucoes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    status: text('status').notNull().default('EXECUTANDO'), // EXECUTANDO | OK | ERRO
+    origem: text('origem').notNull().default('MANUAL'), // AGENDADA | MANUAL
+    quantidade: integer('quantidade').notNull().default(3),
+    geradas: integer('geradas').notNull().default(0),
+    relatorio: jsonb('relatorio'),
+    erro: text('erro'),
+    iniciadoEm: timestamp('iniciado_em', { withTimezone: true }).notNull().defaultNow(),
+    concluidoEm: timestamp('concluido_em', { withTimezone: true }),
+  },
+  (t) => ({ iniciadoIdx: index('blog_exec_iniciado_idx').on(t.iniciadoEm) }),
+);

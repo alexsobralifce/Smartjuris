@@ -32,7 +32,8 @@ export async function trackTokenUsage(
   modelo: string,
   usage: { prompt_tokens?: number; completion_tokens?: number }
 ): Promise<void> {
-  if (!usuarioId) return;
+  // Operações da plataforma (ex.: `plataforma_blog`) não têm usuário; as demais exigem.
+  if (!usuarioId && !operacao.startsWith('plataforma_')) return;
   const prompt = usage.prompt_tokens ?? 0;
   const completion = usage.completion_tokens ?? 0;
   const total = prompt + completion;
@@ -50,7 +51,7 @@ export async function trackTokenUsage(
 
   try {
     await db.insert(tokenUsage).values({
-      usuarioId,
+      usuarioId: usuarioId ?? null,
       modelo,
       operacao,
       promptTokens: prompt,

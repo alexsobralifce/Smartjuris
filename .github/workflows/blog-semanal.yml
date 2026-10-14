@@ -1,0 +1,32 @@
+name: Curadoria semanal do blog
+
+# Toda segunda às 08h (Brasília) a API busca notícias jurídicas e gera 3 RASCUNHOS com capa e fonte citada.
+# Nada vai ao ar sozinho: o root revisa e publica em Painel Root > Blog.
+# O robô roda dentro da API (Railway); este workflow só pede para ele começar.
+on:
+  schedule:
+    - cron: '0 11 * * 1'
+  workflow_dispatch:
+    inputs:
+      quantidade:
+        description: 'Quantidade de rascunhos (1 a 4)'
+        default: '3'
+
+jobs:
+  disparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pedir à API para rodar a curadoria
+        env:
+          CURADORIA_TOKEN: ${{ secrets.CURADORIA_TOKEN }}
+          QUANTIDADE: ${{ inputs.quantidade || '3' }}
+        run: |
+          if [ -z "$CURADORIA_TOKEN" ]; then echo "Segredo CURADORIA_TOKEN não configurado no GitHub."; exit 1; fi
+          case "$QUANTIDADE" in 1|2|3|4) ;; *) echo "Quantidade inválida: $QUANTIDADE"; exit 1;; esac
+          resposta=$(curl --fail-with-body --silent --show-error --retry 3 --retry-delay 10 --max-time 60 \
+            -X POST "https://smartjuris-api-production.up.railway.app/api/blog/curadoria/agendada" \
+            -H "Content-Type: application/json" \
+            -H "x-curadoria-token: $CURADORIA_TOKEN" \
+            -d "{\"quantidade\":$QUANTIDADE}")
+          echo "Resposta da API: $resposta"

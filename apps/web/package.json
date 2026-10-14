@@ -6,12 +6,12 @@
   "scripts": {
     "predev": "pnpm --filter @lexia/shared build",
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "prebuild": "pnpm --filter @lexia/shared build",
+    "prebuild": "pnpm --filter @lexia/shared build && node scripts/sincronizar-blog.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "format": "oxfmt",
     "verify:ui": "! grep -rnE '#[0-9a-fA-F]{3,6}' src/components src/ui src/hooks && ! grep -rnE 'rgba?\\(' src/components src/ui src/hooks && echo 'UI check OK: zero cores hardcoded em componentes'",
-    "test": "tsx --test src/utils/sseParser.test.ts src/utils/sseFlow.test.ts src/utils/promocaoUI.test.ts",
+    "test": "tsx --test seo/render.test.ts src/utils/sseParser.test.ts src/utils/sseFlow.test.ts src/utils/promocaoUI.test.ts",
     "pretest": "pnpm --filter @lexia/shared build"
   },
   "dependencies": {

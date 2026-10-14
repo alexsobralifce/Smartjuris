@@ -339,6 +339,28 @@ export const api = {
       bufferedResponse(await authFetch(`/api/root/escritorios/${escritorioId}/usuarios`, { method: 'POST', body: JSON.stringify(data) })),
     atualizarUsuario: async (escritorioId: string, userId: string, patch: { ativo?: boolean; role?: string; nome?: string; email?: string }) =>
       bufferedResponse(await authFetch(`/api/root/escritorios/${escritorioId}/usuarios/${userId}`, { method: 'PATCH', body: JSON.stringify(patch) })),
+    blog: {
+      listar: () => authFetch('/api/root/blog').then(r => r.json()),
+      obter: (id: string) => authFetch(`/api/root/blog/${id}`).then(r => r.json()),
+      execucoes: () => authFetch('/api/root/blog/execucoes').then(r => r.json()),
+      imagem: (id: string) => authFetch(`/api/root/blog/${id}/imagem`),
+      gerarCuradoria: async (quantidade = 3) =>
+        bufferedResponse(await authFetch('/api/root/blog/curadoria', { method: 'POST', body: JSON.stringify({ quantidade }) })),
+      editar: async (id: string, patch: unknown) =>
+        bufferedResponse(await authFetch(`/api/root/blog/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })),
+      status: async (id: string, status: 'PUBLICADO' | 'DESPUBLICADO' | 'RASCUNHO') =>
+        bufferedResponse(await authFetch(`/api/root/blog/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) })),
+      regenerarImagem: async (id: string) =>
+        bufferedResponse(await authFetch(`/api/root/blog/${id}/imagem/regenerar`, { method: 'POST' })),
+      enviarImagem: async (id: string, arquivo: File, credito?: string) => {
+        const fd = new FormData();
+        fd.append('imagem', arquivo);
+        if (credito) fd.append('credito', credito);
+        return bufferedResponse(await authFetch(`/api/root/blog/${id}/imagem`, { method: 'POST', body: fd }));
+      },
+      excluir: async (id: string) => bufferedResponse(await authFetch(`/api/root/blog/${id}`, { method: 'DELETE' })),
+      republicarSite: async () => bufferedResponse(await authFetch('/api/root/blog/republicar', { method: 'POST' })),
+    },
   },
   jurisprudencias: {
     listCourts: (): Promise<{ data: Court[] }> =>

@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 export interface Section {
   h2: string
   p?: string[]
@@ -11,6 +14,11 @@ export interface Faq {
 
 export type PageKind = 'resource' | 'blog' | 'info'
 
+export interface PageSource {
+  title: string
+  url: string
+}
+
 export interface Page {
   path: string // sem barra final, ex.: /planos
   kind: PageKind
@@ -21,7 +29,15 @@ export interface Page {
   sections: Section[]
   faq?: Faq[]
   datePublished?: string
+  dateModified?: string
   related?: string[] // paths
+  // Artigos gerados pela curadoria (seo/blog/*.json, sincronizados da API)
+  image?: string // caminho local da capa, ex.: /blog/slug.webp
+  imageAlt?: string
+  imageCredit?: string
+  sources?: PageSource[] // matéria(s) original(is) citada(s)
+  category?: string
+  author?: string
 }
 
 const DATE = '2026-09-20'
@@ -512,6 +528,71 @@ export const INFO: Page[] = [
   },
 ]
 
-export const ALL_PAGES: Page[] = [...INFO, ...RESOURCES, ...BLOG]
+// ---- Artigos da curadoria (publicados no painel root; sincronizados por scripts/sincronizar-blog.mjs) ----
+interface ArtigoSincronizado {
+  slug: string
+  titulo: string
+  descricao: string
+  categoria: string
+  autor: string
+  resumo: string
+  secoes: Array<{ titulo: string; paragrafos: string[]; lista?: string[] }>
+  faq: Faq[]
+  fontes: Array<{ titulo: string; url: string }>
+  imagem: string | null
+  imagemAlt: string | null
+  imagemCredito: string | null
+  publicadoEm: string | null
+  atualizadoEm: string | null
+}
+
+// Recurso mais próximo de cada categoria: link interno contextual no fim do artigo.
+const RECURSO_POR_CATEGORIA: Record<string, string> = {
+  'IA na advocacia': '/recursos/gerador-de-pecas-com-ia',
+  'Gestão do escritório': '/recursos/gestao-financeira-e-timesheet',
+  'Prazos e processos': '/recursos/gestao-de-processos',
+  Jurimetria: '/recursos/jurimetria',
+  Contratos: '/recursos/revisao-contratual-com-ia',
+  'LGPD e ética': '/faq',
+}
+
+export function paginaDoArtigo(a: ArtigoSincronizado): Page {
+  const dia = (iso: string | null) => (iso ?? new Date().toISOString()).slice(0, 10)
+  return {
+    path: `/blog/${a.slug}`,
+    kind: 'blog',
+    title: a.titulo,
+    description: a.descricao,
+    h1: a.titulo,
+    lead: a.resumo,
+    sections: a.secoes.map(s => ({ h2: s.titulo, p: s.paragrafos, ...(s.lista?.length ? { ul: s.lista } : {}) })),
+    faq: a.faq?.length ? a.faq : undefined,
+    datePublished: dia(a.publicadoEm),
+    dateModified: dia(a.atualizadoEm ?? a.publicadoEm),
+    related: [RECURSO_POR_CATEGORIA[a.categoria] ?? '/planos', '/planos', '/blog'],
+    image: a.imagem ?? undefined,
+    imageAlt: a.imagemAlt ?? undefined,
+    imageCredit: a.imagemCredito ?? undefined,
+    sources: (a.fontes ?? []).map(f => ({ title: f.titulo, url: f.url })),
+    category: a.categoria,
+    author: a.autor,
+  }
+}
+
+function lerArtigosSincronizados(): Page[] {
+  const dir = fileURLToPath(new URL('./blog/', import.meta.url))
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter(f => f.endsWith('.json'))
+    .map(f => paginaDoArtigo(JSON.parse(readFileSync(`${dir}${f}`, 'utf8')) as ArtigoSincronizado))
+}
+
+// Mais recentes primeiro (a lista /blog e o sitemap seguem esta ordem).
+const BLOG_TODOS: Page[] = [...lerArtigosSincronizados(), ...BLOG].sort((a, b) =>
+  (b.datePublished ?? '').localeCompare(a.datePublished ?? ''),
+)
+
+export const ALL_PAGES: Page[] = [...INFO, ...RESOURCES, ...BLOG_TODOS]
+export { BLOG_TODOS }
 
 export const HOME_FAQ: Faq[] = (INFO.find(p => p.path === '/faq')?.faq ?? []).slice(0, 5)

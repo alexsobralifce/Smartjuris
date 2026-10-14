@@ -1,7 +1,8 @@
 // Render estático do blog: capa, fonte citada, JSON-LD e sitemap.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { paginaDoArtigo, type Page } from './content'
+import { readFileSync } from 'node:fs'
+import { ALL_PAGES, AREAS, paginaDoArtigo, type Page } from './content'
 import { renderPage, renderSitemap } from './render'
 
 const artigo = paginaDoArtigo({
@@ -62,5 +63,61 @@ describe('sitemap', () => {
     const xml = renderSitemap(new Date('2030-01-01T00:00:00Z'))
     assert.match(xml, /<loc>https:\/\/www\.smartjuris\.com\.br\/blog\/ia-na-advocacia-supervisao-humana-e-etica-oab<\/loc><lastmod>2026-09-20<\/lastmod>/)
     assert.match(xml, /<loc>https:\/\/www\.smartjuris\.com\.br\/planos<\/loc><lastmod>2030-01-01<\/lastmod>/)
+  })
+})
+
+describe('páginas por área do Direito', () => {
+  const modelos = readFileSync(new URL('../../api/src/services/modelosPeca.ts', import.meta.url), 'utf8')
+  const areaDoModelo: Record<string, string> = {
+    '/software-para-advogado-trabalhista': 'Trabalhista',
+    '/software-para-advogado-previdenciario': 'Previdenciário',
+    '/software-para-advogado-de-familia': 'Família',
+    '/software-para-advogado-civel': 'Cível',
+    '/software-para-advogado-consumerista': 'Consumerista',
+    '/software-para-advogado-tributarista': 'Tributário',
+  }
+  const todas = ALL_PAGES.map(p => p.path)
+  const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+
+  test('são 6, entram no sitemap e têm título e descrição únicos e dentro do limite', () => {
+    assert.equal(AREAS.length, 6)
+    const xml = renderSitemap(new Date('2026-10-14T00:00:00Z'))
+    for (const a of AREAS) {
+      assert.ok(xml.includes(`<loc>https://www.smartjuris.com.br${a.path}</loc>`), a.path)
+      assert.ok(a.title.length <= 65, `${a.path} título com ${a.title.length}`)
+      assert.ok(a.description.length >= 120 && a.description.length <= 160, `${a.path} descrição com ${a.description.length}`)
+    }
+    assert.equal(new Set(AREAS.map(a => a.title)).size, 6)
+    assert.equal(new Set(AREAS.map(a => a.description)).size, 6)
+    assert.equal(new Set(AREAS.map(a => a.h1)).size, 6)
+  })
+  test('toda peça citada existe nos modelos do gerador, na área certa', () => {
+    for (const a of AREAS) {
+      const area = areaDoModelo[a.path]
+      assert.ok(area, `área mapeada para ${a.path}`)
+      const lista = a.sections[0].ul ?? []
+      assert.ok(lista.length >= 8, `${a.path} tem peças`)
+      for (const peca of lista) {
+        const existe = new RegExp(`area: '${area}',\\s*\\n\\s*tipo: '${escapar(peca)}'`).test(modelos)
+        assert.ok(existe, `${a.path}: "${peca}" não existe nos modelos de ${area}`)
+      }
+    }
+  })
+  test('links internos existem, há FAQ e a seção de rotina é exclusiva de cada página', () => {
+    for (const a of AREAS) {
+      for (const r of a.related ?? []) assert.ok(todas.includes(r), `${a.path} → ${r} não existe`)
+      assert.ok((a.faq?.length ?? 0) >= 3)
+    }
+    assert.equal(new Set(AREAS.map(a => a.sections[1].p?.join(' '))).size, 6)
+  })
+  test('sem promessa de resultado nem termos vedados pela OAB', () => {
+    const proibido = /causa ganha|resultado garantido|ganho garantido|100\s?%|o melhor advogado|sucesso garantido/i
+    for (const a of AREAS) {
+      const texto = renderPage(a).replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '')
+      assert.doesNotMatch(texto, proibido, a.path)
+    }
+  })
+  test('faixa de preços vem de site.ts', () => {
+    assert.match(renderPage(AREAS[0]), /R\$ 180 a R\$ 500 por mês/)
   })
 })

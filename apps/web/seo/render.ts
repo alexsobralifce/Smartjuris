@@ -1,4 +1,4 @@
-import { ALL_PAGES, BLOG_TODOS, HOME_FAQ, RESOURCES, type Faq, type Page } from './content'
+import { ALL_PAGES, AREAS, BLOG_TODOS, HOME_FAQ, RESOURCES, type Faq, type Page } from './content'
 import {
   COMPANY,
   OG_IMAGE,
@@ -222,6 +222,7 @@ const sourcesHtml = (p: Page) =>
 const footerNav = () =>
   [
     ...RESOURCES.map(r => ({ href: r.path, label: r.h1 })),
+    ...AREAS.map(a => ({ href: a.path, label: a.h1.replace('Software para advogado', 'Advogado') })),
     { href: '/planos', label: 'Planos' },
     { href: '/blog', label: 'Blog' },
     { href: '/faq', label: 'FAQ' },
@@ -348,6 +349,8 @@ export function renderHomeStatic(): string {
 <p>${esc(SITE_DESCRIPTION)}</p>
 <h2>Recursos</h2>
 <ul>${RESOURCES.map(r => `<li><a href="${r.path}">${esc(r.h1)}</a> — ${esc(r.lead)}</li>`).join('')}</ul>
+<h2>Para cada área do Direito</h2>
+<ul>${AREAS.map(a => `<li><a href="${a.path}">${esc(a.h1)}</a></li>`).join('')}</ul>
 <h2>Planos</h2>
 <ul>${PLANS.map(p => `<li><strong>${esc(p.name)}</strong> — ${esc(p.price)}/mês, ${esc(p.limit)}</li>`).join('')}</ul>
 <p><a href="/planos">Ver detalhes dos planos</a></p>

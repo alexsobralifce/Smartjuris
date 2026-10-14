@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { AREAS } from './areas'
 
 export interface Section {
   h2: string
@@ -87,7 +88,7 @@ export const RESOURCES: Page[] = [
         a: 'PDF e DOCX, com o timbre e os dados do escritório, para peças aprovadas ou protocoladas.',
       },
     ],
-    related: ['/recursos/pesquisa-de-jurisprudencia', '/blog/ia-na-advocacia-supervisao-humana-e-etica-oab', '/planos'],
+    related: ['/recursos/pesquisa-de-jurisprudencia', '/software-para-advogado-trabalhista', '/software-para-advogado-civel', '/blog/ia-na-advocacia-supervisao-humana-e-etica-oab', '/planos'],
   },
   {
     path: '/recursos/gestao-de-processos',
@@ -592,7 +593,7 @@ const BLOG_TODOS: Page[] = [...lerArtigosSincronizados(), ...BLOG].sort((a, b) =
   (b.datePublished ?? '').localeCompare(a.datePublished ?? ''),
 )
 
-export const ALL_PAGES: Page[] = [...INFO, ...RESOURCES, ...BLOG_TODOS]
-export { BLOG_TODOS }
+export const ALL_PAGES: Page[] = [...INFO, ...RESOURCES, ...AREAS, ...BLOG_TODOS]
+export { BLOG_TODOS, AREAS }
 
 export const HOME_FAQ: Faq[] = (INFO.find(p => p.path === '/faq')?.faq ?? []).slice(0, 5)

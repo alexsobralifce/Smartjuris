@@ -45,6 +45,69 @@ const DATE = '2026-09-20'
 
 export const RESOURCES: Page[] = [
   {
+    path: '/recursos/inteligencia-artificial-para-advogados',
+    kind: 'resource',
+    title: 'Inteligência Artificial para Advogados | SmartJuris',
+    description:
+      'Inteligência artificial para advogados e escritórios: pesquisa de jurisprudência, redação de peças e revisão de contratos com IA, sempre com revisão humana.',
+    h1: 'Inteligência artificial para advogados, com revisão humana',
+    lead:
+      'O SmartJuris usa IA para acelerar a rotina do escritório: pesquisa de jurisprudência, redação assistida de peças e revisão de contratos. Em cada etapa, a decisão e a responsabilidade são do advogado.',
+    sections: [
+      {
+        h2: 'Como a IA ajuda o advogado no dia a dia',
+        p: [
+          'A IA para advogados serve para tarefas repetitivas e de leitura extensa: resumir intimações, localizar precedentes, redigir minutas e conferir cláusulas de contratos. Ganha-se tempo na preparação, e o advogado concentra a análise no que exige julgamento.',
+          'A IA na advocacia não substitui o parecer técnico. Ela produz um rascunho que precisa de conferência, e o SmartJuris foi desenhado com esse limite em mente.',
+        ],
+      },
+      {
+        h2: 'Pesquisa de jurisprudência e redação de peças com IA',
+        p: [
+          'A pesquisa de jurisprudência com IA cruza o caso com decisões de tribunais e com a base de documentos do próprio escritório, e mostra as fontes de cada trecho usado.',
+          'O gerador de peças com IA monta minutas de iniciais, contestações e recursos a partir dos dados do caso e dos modelos de tese. Toda minuta entra em uma fila de validação antes de ser exportada.',
+        ],
+      },
+      {
+        h2: 'Revisão de contratos com IA',
+        p: [
+          'A revisão contratual com IA aponta cláusulas de risco e sugere redação alternativa. O advogado decide quais alterações aceitar e registra a revisão feita.',
+        ],
+      },
+      {
+        h2: 'Ética, sigilo e LGPD no uso de IA',
+        p: [
+          'O uso de IA deve respeitar o Código de Ética e Disciplina da OAB, o sigilo profissional e a LGPD. O advogado continua integralmente responsável pelo conteúdo que assina.',
+          'Antes do envio ao modelo, CPF, CNPJ, e-mail, CEP e telefone são mascarados, e os nomes das partes do processo são substituídos. Os dados ficam isolados por escritório.',
+        ],
+      },
+      {
+        h2: 'Software jurídico com IA para escritórios',
+        ul: [
+          'Pesquisa de jurisprudência com fontes rastreáveis.',
+          'Gerador de peças com IA e exportação em PDF e DOCX com timbre.',
+          'Revisão contratual com IA e alertas de risco.',
+          'Fila de validação humana e trilha de auditoria.',
+          'Gestão de processos, prazos e financeiro no mesmo sistema.',
+        ],
+      },
+    ],
+    faq: [
+      {
+        q: 'A IA substitui o advogado?',
+        a: 'Não. A IA gera rascunhos e levantamentos, e a análise, a decisão e a responsabilidade técnica continuam com o advogado.',
+      },
+      {
+        q: 'A inteligência artificial é segura para os dados de clientes?',
+        a: 'Os dados ficam isolados por escritório, e CPF, CNPJ, e-mail, CEP e telefone são mascarados antes do envio ao modelo. Recomendamos ler a política de privacidade e conferir as práticas do escritório.',
+      },
+      {
+        q: 'O SmartJuris pesquisa jurisprudência com IA?',
+        a: 'Sim. A pesquisa cruza o caso com decisões de tribunais e com os documentos do escritório, e mostra a fonte de cada trecho usado.',
+      },
+    ],
+  },
+  {
     path: '/recursos/gerador-de-pecas-com-ia',
     kind: 'resource',
     title: 'Gerador de Petições com IA para Advogados | SmartJuris',

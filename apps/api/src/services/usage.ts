@@ -195,12 +195,12 @@ export function loadPricing(env: NodeJS.ProcessEnv = process.env): TabelaPrecos 
     },
     pro: {
       peak: {
-        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_PEAK, 1.00),
-        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_PEAK, 6.00),
+        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_PEAK, 0.20),
+        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_PEAK, 1.20),
       },
       offPeak: {
-        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_OFFPEAK, 1.00),
-        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_OFFPEAK, 6.00),
+        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_OFFPEAK, 0.20),
+        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_OFFPEAK, 1.20),
       },
     },
   };

@@ -6,6 +6,7 @@ import { generateEmbedding } from '../services/embedding.js';
 import { trackTokenUsage, checkTokenQuota } from '../services/usage.js';
 import { decryptField } from '../services/crypto.js';
 import { deepseekClient, modeloPorTier, opcoesQwen } from '../services/ai.js';
+import { criarPseudonimizador } from '../services/pii.js';
 import {
   validarProcessoDoEscritorio,
   buscarChunksPorEmbedding,
@@ -99,6 +100,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
     // do mesmo escritório fornece CPF/CNPJ/endereço, e o usuário logado fornece
     // nome/OAB para o signatário.
     let blocoDados = '';
+    let nomesPartes: Array<string | null | undefined> = [];
     try {
       const autorId = (req as AuthenticatedRequest).user?.id;
       const linhas: string[] = [];
@@ -113,6 +115,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       }
 
       if (processoRow) {
+        nomesPartes = [processoRow.cliente, processoRow.adverso];
         linhas.push(`Autor: ${processoRow.cliente || 'a definir'}`);
         linhas.push(`Réu: ${processoRow.adverso || 'a definir'}`);
         if (processoRow.numero) linhas.push(`Processo nº: ${processoRow.numero}`);
@@ -298,10 +301,13 @@ REGRAS DE FORMAÇÃO DO SISTEMA:
 ${estrutura ? `Estrutura obrigatória da peça (siga EXATAMENTE estas seções, nesta ordem, usando CAIXA ALTA para os títulos de cada seção):
 ${estrutura}` : ''}`;
 
+    // Pseudonimização: nomes das partes e identificadores não saem para o provedor.
+    const pseudo = criarPseudonimizador(nomesPartes);
+    const restaurador = pseudo.streamRestaurador();
     const { stream, modelUsado } = await criarStreamComFallback(isComplex, {
       messages: [
         { role: 'system', content: 'Você é um advogado sênior e parecerista atuando no sistema SmartJuris. Sua função é redigir peças processuais e documentos jurídicos de altíssima qualidade técnica. Não utilize marcação markdown ou asteriscos na redação de forma alguma.' },
-        { role: 'user', content: prompt }
+        { role: 'user', content: pseudo.sanitize(prompt) }
       ],
       temperature: 0.3,
       stream: true,
@@ -314,13 +320,18 @@ ${estrutura}` : ''}`;
 
     for await (const chunk of stream) {
       if (aborted) break;
-      const delta = chunk.choices[0]?.delta?.content || '';
+      const delta = restaurador.processar(chunk.choices[0]?.delta?.content || '');
       // Limpa asteriscos do fluxo em tempo real
       const cleanDelta = delta.replace(/\*/g, '');
       fullText += cleanDelta;
       if ((chunk as any).usage) lastUsage = (chunk as any).usage;
       // Option to stream tokens to client if UI supports it
       if (!res.writableEnded) res.write(`data: ${JSON.stringify({ token: cleanDelta })}\n\n`);
+    }
+    const restoFinal = restaurador.finalizar().replace(/\*/g, '');
+    if (restoFinal) {
+      fullText += restoFinal;
+      if (!res.writableEnded) res.write(`data: ${JSON.stringify({ token: restoFinal })}\n\n`);
     }
 
     if (!res.writableEnded) res.write(`data: ${JSON.stringify({ progress: 100, label: 'Concluído. Aguardando revisão.' })}\n\n`);

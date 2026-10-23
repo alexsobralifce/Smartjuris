@@ -24,10 +24,17 @@ export const deepseekClient = new OpenAI({
   apiKey: tokenPlanApiKey(),
 });
 
-export const opencodeClient = new OpenAI({
-  baseURL: process.env.OPENCODE_BASE_URL || 'https://api.opencode.ai/v1',
-  apiKey: process.env.OPENCODE_API_KEY || '',
-});
+/** Backup (OpenCode Go) não configurado: sem OPENCODE_API_KEY não há reserva. */
+export class BackupIndisponivelError extends Error {}
+
+// Sem a chave o SDK lança na construção e derruba o módulo inteiro: o cliente
+// só existe quando configurado.
+export const opencodeClient = process.env.OPENCODE_API_KEY
+  ? new OpenAI({
+      baseURL: process.env.OPENCODE_BASE_URL || 'https://api.opencode.ai/v1',
+      apiKey: process.env.OPENCODE_API_KEY,
+    })
+  : null;
 
 // Modelos OpenAI: padrão = gpt-4o-mini (operações simples); complexas =
 // gpt-5.6-luna (decisão de produto: ver AGENTS.md / plano da migração).
@@ -123,6 +130,17 @@ export async function executarComFallback(
     if (!alvo.model.toLowerCase().startsWith('qwen')) {
       delete p.enable_thinking;
     }
+    // Modelos OpenAI (gpt-*): `max_completion_tokens` substitui `max_tokens`;
+    // a família GPT-5 ainda rejeita `temperature` diferente do padrão 1.
+    if (alvo.model.toLowerCase().startsWith('gpt-')) {
+      if (p.max_tokens !== undefined && p.max_completion_tokens === undefined) {
+        p.max_completion_tokens = p.max_tokens;
+      }
+      delete p.max_tokens;
+      if (alvo.model.toLowerCase().startsWith('gpt-5') && p.temperature !== undefined && p.temperature !== 1) {
+        delete p.temperature;
+      }
+    }
     return p;
   };
   try {
@@ -140,6 +158,8 @@ export async function executarComFallback(
     try {
       return anotarModeloUsado(await reserva.client(preparar(reserva), options), reserva.model);
     } catch (errFallback) {
+      // Sem backup configurado, o erro relevante é o do provedor principal.
+      if (errFallback instanceof BackupIndisponivelError) throw errMain;
       console.error('[AI Service] Ambos os provedores falharam.', errFallback);
       throw errFallback;
     }
@@ -147,7 +167,11 @@ export async function executarComFallback(
 }
 
 const originalCreate = deepseekClient.chat.completions.create.bind(deepseekClient.chat.completions);
-const opencodeCreate = opencodeClient.chat.completions.create.bind(opencodeClient.chat.completions);
+const opencodeCreate: ProvedorCreate = opencodeClient
+  ? opencodeClient.chat.completions.create.bind(opencodeClient.chat.completions)
+  : async () => {
+      throw new BackupIndisponivelError('Backup OpenCode não configurado (OPENCODE_API_KEY ausente).');
+    };
 
 /** Resolve os alvos principal/reserva a partir do modelo pedido e da
  *  preferência de provedor (`PREFER_OPENCODE=true` inverte a ordem).

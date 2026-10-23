@@ -13,6 +13,8 @@ import {
   settleAiUsage,
   releaseAiUsageReservation,
   checkTokenQuota,
+  precoDoModelo,
+  loadPricing,
   cicloAtual,
   isHorarioPico,
   PLANS,
@@ -122,8 +124,12 @@ describe('calculateAiCostCents', () => {
     });
   });
 
-  test('Pro em pico usa tabela própria (3x Flash por padrão)', () => {
-    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+  test('Pro em pico usa tabela própria (preços explícitos por env)', () => {
+    comEnv({
+      DEEPSEEK_PRO_INPUT_COST_PEAK: '1.32',
+      DEEPSEEK_PRO_OUTPUT_COST_PEAK: '3.96',
+      USD_BRL_RATE: '5.00',
+    }, () => {
       const r = calculateAiCostCents({ model: 'deepseek-v4-pro', inputTokens: 1_000_000, outputTokens: 500_000, isPeak: true });
       assert.equal(r.inputCostCents, 132);
       assert.equal(r.outputCostCents, 198);
@@ -132,7 +138,11 @@ describe('calculateAiCostCents', () => {
   });
 
   test('Pro fora de pico usa tabela própria', () => {
-    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+    comEnv({
+      DEEPSEEK_PRO_INPUT_COST_OFFPEAK: '0.66',
+      DEEPSEEK_PRO_OUTPUT_COST_OFFPEAK: '1.98',
+      USD_BRL_RATE: '5.00',
+    }, () => {
       const r = calculateAiCostCents({ model: 'pro', inputTokens: 1_000_000, outputTokens: 500_000, isPeak: false });
       assert.equal(r.inputCostCents, 66);
       assert.equal(r.outputCostCents, 99);
@@ -160,7 +170,7 @@ describe('calculateAiCostCents', () => {
   });
 
   test('Liquidação arredonda para o centésimo mais próximo (difere da reserva)', () => {
-    comEnv({ USD_BRL_RATE: '5.00' }, () => {
+    comEnv({ DEEPSEEK_INPUT_COST_PEAK: '0.44', USD_BRL_RATE: '5.00' }, () => {
       const reserva = calculateAiCostCents({ model: 'flash', inputTokens: 100_000, outputTokens: 0, isPeak: true });
       const liquida = calculateAiSettlementCents({ model: 'flash', inputTokens: 100_000, outputTokens: 0, isPeak: true });
       // 100_000 * 0.44/1M = 0.044 USD cents => usdCents 4.4 => BRL 22 centavos.
@@ -508,6 +518,13 @@ describe('reserveAiUsage (banco)', { skip: !dbDisponivel }, () => {
 
 describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
   test('Liquida com uso real, converte reserva em consumo e mantém token_usage', async () => {
+    // Preços explícitos: com a tabela OpenAI (centavos de fração) o arredondamento
+    // inteiro do saldo não mostraria a liberação da reserva.
+    const envAnterior = { ...process.env };
+    Object.assign(process.env, {
+      DEEPSEEK_INPUT_COST_PEAK: '0.44', DEEPSEEK_OUTPUT_COST_PEAK: '1.32',
+      DEEPSEEK_INPUT_COST_OFFPEAK: '0.22', DEEPSEEK_OUTPUT_COST_OFFPEAK: '0.66',
+    });
     const { escId, userId } = await criarEscritorioTeste(20);
     try {
       const estimativa = estimativaSimples('SIMPLE_PETITION');
@@ -537,6 +554,7 @@ describe('settleAiUsage (banco)', { skip: !dbDisponivel }, () => {
       assert.equal(s2.alreadySettled, true);
     } finally {
       await limparEscritorioTeste(escId);
+      process.env = envAnterior;
     }
   });
 
@@ -745,5 +763,23 @@ describe('Fase 5I — telemetria do ledger (banco)', { skip: !dbDisponivel }, ()
     } finally {
       await limparEscritorioTeste(escId);
     }
+  });
+});
+
+describe('precoDoModelo — tier por nome de modelo', () => {
+  const env = {} as NodeJS.ProcessEnv;
+  const tabela = loadPricing(env);
+
+  test('gpt-5.6-luna (PRO padrão) é cobrado como PRO', () => {
+    assert.deepEqual(precoDoModelo('gpt-5.6-luna', true, env), tabela.pro.peak);
+  });
+
+  test('gpt-4o-mini (FLASH) é cobrado como FLASH', () => {
+    assert.deepEqual(precoDoModelo('gpt-4o-mini', true, env), tabela.flash.peak);
+  });
+
+  test('PRO configurado via env é reconhecido sem "pro"/"max" no nome', () => {
+    const envPro = { DEEPSEEK_MODEL_PRO: 'gpt-4o' } as NodeJS.ProcessEnv;
+    assert.deepEqual(precoDoModelo('gpt-4o', true, envPro), loadPricing(envPro).pro.peak);
   });
 });

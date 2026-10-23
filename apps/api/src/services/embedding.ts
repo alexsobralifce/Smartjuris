@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { trackTokenUsage } from './usage.js';
-import { tokenPlanBaseUrl, tokenPlanApiKey } from './ai.js';
 
 // Cache LRU em memória: chave = sha256(texto), valor = embedding.
 // Capacidade máxima ~256 entradas; ao exceder, remove a entrada mais antiga.
@@ -8,12 +7,18 @@ const CACHE_MAX = 256;
 const embeddingCache = new Map<string, number[]>();
 
 // ---------------------------------------------------------------------------
-// Embeddings via Token Plan (DashScope/Bailian) — provedor ÚNICO de embeddings.
-//   Modelo: text-embedding-v3 (dimensão 1024, compatível com o pgvector)
-//   Base URL: AI_BASE_URL / DEEPSEEK_BASE_URL (Token Plan compatible-mode)
-//   API Key: DEEP_SEEK_API (mesma usada pelo provedor de chat)
+// Embeddings via OpenAI — provedor ÚNICO de embeddings.
+//   Modelo: text-embedding-3-small com dimensions=1024 (compatível com pgvector)
+//   Base URL: https://api.openai.com/v1
+//   API Key: OPENAI_API_KEY
+// ATENÇÃO: vetores de modelos diferentes não são comparáveis. Trocar o modelo
+// exige REINDEXAR todos os chunks (ver services/embedding.ts e AGENTS.md).
 // ---------------------------------------------------------------------------
-const EMBEDDING_MODEL = 'text-embedding-v3';
+const EMBEDDING_MODEL = 'text-embedding-3-small';
+const EMBEDDING_BASE_URL = 'https://api.openai.com/v1';
+function embeddingApiKey(): string {
+  return process.env.OPENAI_API_KEY || '';
+}
 const EMBEDDING_DIMENSIONS = 1024;
 
 function embeddingTimeoutMs(): number {
@@ -29,19 +34,19 @@ function armazenarNoCache(cacheKey: string, embedding: number[]): void {
   }
 }
 
-/** Embedding via API do Token Plan (DashScope/Bailian), OpenAI-compat:
+/** Embedding via API do OpenAI (DashScope/Bailian), OpenAI-compat:
  *  POST {base}/embeddings com text-embedding-v3 e dimensions 1024. */
-async function gerarEmbeddingTokenPlan(text: string, usuarioId?: string): Promise<number[]> {
-  const apiKey = tokenPlanApiKey();
+async function gerarEmbeddingOpenAI(text: string, usuarioId?: string): Promise<number[]> {
+  const apiKey = embeddingApiKey();
   if (!apiKey) {
-    throw new Error('Embeddings do Token Plan sem API key configurada (DEEP_SEEK_API).');
+    throw new Error('Embeddings sem OPENAI_API_KEY configurada.');
   }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), embeddingTimeoutMs());
 
   try {
-    const response = await fetch(`${tokenPlanBaseUrl()}/embeddings`, {
+    const response = await fetch(`${EMBEDDING_BASE_URL}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,14 +62,14 @@ async function gerarEmbeddingTokenPlan(text: string, usuarioId?: string): Promis
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`Token Plan embedding failed with status ${response.status}: ${errText}`);
+      throw new Error(`OpenAI embedding failed with status ${response.status}: ${errText}`);
     }
 
     const data = await response.json() as { data?: Array<{ embedding?: number[] }> };
     const embedding = data?.data?.[0]?.embedding;
     // Exige exatamente 1024 dimensões (coluna vector(1024) do pgvector).
     if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSIONS) {
-      throw new Error('Token Plan embedding retornou formato inesperado (esperado 1024 dims).');
+      throw new Error('OpenAI embedding retornou formato inesperado (esperado 1024 dims).');
     }
 
     await trackTokenUsage(usuarioId, 'embedding', EMBEDDING_MODEL, {
@@ -88,7 +93,7 @@ export async function generateEmbedding(text: string, usuarioId?: string): Promi
     return cached;
   }
 
-  const embedding = await gerarEmbeddingTokenPlan(text, usuarioId);
+  const embedding = await gerarEmbeddingOpenAI(text, usuarioId);
   armazenarNoCache(cacheKey, embedding);
   return embedding;
 }

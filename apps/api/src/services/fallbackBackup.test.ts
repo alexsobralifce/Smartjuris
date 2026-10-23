@@ -12,6 +12,7 @@ import {
   ehErroRetryableParaFallback,
   executarComFallback,
   montarProvedores,
+  opcoesQwen,
   type ProvedorCreate,
 } from './ai.js';
 
@@ -151,12 +152,10 @@ describe('5J — fallback bidirecional de IA (Token Plan <-> OpenCode Go)', () =
     await executarComFallback({ model: deepseekModel, enable_thinking: false }, undefined, principal, reserva);
     assert.equal('enable_thinking' in opencode.chamadas[0].params, false, 'não-Qwen: enable_thinking removido');
 
-    // deepseekModel default = qwen3.7-plus (Qwen) → parâmetro preservado.
-    const qwen = fakeCreate();
-    const qwenReserva = fakeCreate();
-    const p2 = montarProvedores({ model: deepseekModel }, false, qwen.create, qwenReserva.create);
-    await executarComFallback({ model: deepseekModel, enable_thinking: false }, undefined, p2.principal, p2.reserva);
-    assert.equal(qwen.chamadas[0].params.enable_thinking, false, 'Qwen: enable_thinking preservado');
+    // Qwen: o modelo do tier é definido na carga do módulo (default OpenAI),
+    // então a regra Qwen é verificada direto em opcoesQwen.
+    assert.deepEqual(opcoesQwen('qwen3.7-plus'), { enable_thinking: false });
+    assert.deepEqual(opcoesQwen('gpt-4o-mini'), {});
   });
 
   test('a resposta do fallback anota o modelo efetivamente usado', async () => {
@@ -194,7 +193,7 @@ describe('5J — fallback bidirecional de IA (Token Plan <-> OpenCode Go)', () =
 
   test('proxy real do deepseekClient instalado e montagem default coerente', () => {
     assert.ok(deepseekClient.chat.completions.create, 'wrapper do fallback existe');
-    assert.ok(opencodeClient.chat.completions.create, 'opencodeClient create existe');
+    assert.ok(opencodeClient === null || opencodeClient.chat.completions.create, 'opencodeClient existe ou está ausente (sem chave)');
     const { principal, reserva } = montarProvedores({ model: deepseekModel }, false);
     assert.equal(principal.model, deepseekModel);
     assert.equal(reserva.model, opencodeModel);

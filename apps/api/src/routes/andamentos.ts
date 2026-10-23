@@ -9,7 +9,7 @@ import { AuthenticatedRequest } from '../middlewares/auth.js';
 import { parseBody, formatZodError, andamentoSchema, uuidSchema } from '../validation/schemas.js';
 import { aiRateLimiter } from '../middlewares/rateLimit.js';
 import { recordAudit } from '../middlewares/audit.js';
-import { redactPII } from '../services/pii.js';
+import { criarPseudonimizador } from '../services/pii.js';
 import { decidirTrava } from '../services/travaAssinatura.js';
 
 const router = Router();
@@ -50,7 +50,7 @@ router.post('/', aiRateLimiter, async (req, res) => {
     }
 
     // O processo deve pertencer ao mesmo escritório do usuário autenticado
-    const [processo] = await db.select({ escritorioId: processos.escritorioId }).from(processos).where(eq(processos.id, processoId)).limit(1);
+    const [processo] = await db.select({ escritorioId: processos.escritorioId, cliente: processos.cliente, adverso: processos.adverso }).from(processos).where(eq(processos.id, processoId)).limit(1);
     if (!processo || processo.escritorioId !== escritorioId) {
       return res.status(403).json({ error: 'Processo não pertence ao seu escritório.' });
     }
@@ -70,8 +70,10 @@ router.post('/', aiRateLimiter, async (req, res) => {
           resumoIA = '🤖 Resumo IA: Limite de tokens do modo demonstração atingido. Resumo de IA não gerado neste mês.';
         } else {
         try {
-          // Redact PII before sending to the LLM (descricao original continues stored in DB)
-          const safeDescricao = redactPII(descricao);
+          // Pseudonimização antes do envio à IA: nomes das partes e identificadores
+          // viram marcadores e são restaurados na resposta (descricao original segue no banco).
+          const pseudo = criarPseudonimizador([processo.cliente, processo.adverso]);
+          const safeDescricao = pseudo.sanitize(descricao);
           const prompt = `Você é um assistente jurídico sênior. Resuma a seguinte intimação/despacho em 2 frases curtas, destacando a AÇÃO RECOMENDADA ao advogado e o prazo fatal:\n\n${safeDescricao}`;
           let completion: any;
           let modelUsado = modeloPorTier('FLASH');
@@ -85,7 +87,7 @@ router.post('/', aiRateLimiter, async (req, res) => {
             modelUsado = modeloPorTier('PRO');
             completion = await deepseekClient.chat.completions.create({ model: modelUsado, ...opcoesQwen(modelUsado), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
           }
-          resumoIA = `🤖 Resumo IA: ${completion.choices[0]?.message?.content || 'Intimação registrada.'}`;
+          resumoIA = `🤖 Resumo IA: ${pseudo.restaurar(completion.choices[0]?.message?.content || 'Intimação registrada.')}`;
           await trackTokenUsage((req as any).user?.id, 'resumo_andamento', completion.model ?? modelUsado, {
             prompt_tokens: (completion as any)?.usage?.prompt_tokens,
             completion_tokens: (completion as any)?.usage?.completion_tokens,

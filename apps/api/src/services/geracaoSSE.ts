@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import type { ClassifierOutput } from './classifier.js';
 import { ErroGeracaoIA } from './analiseDocumental.js';
+import { criarPseudonimizador } from './pii.js';
 import { buscarJurisprudenciaSeNecessario, anexarBlocoAoContexto, montarEventoJurisprudencia, type ResultadoJurisprudencia } from './jurisprudenciaRag.js';
 
 // ---------------------------------------------------------------------------
@@ -122,6 +123,20 @@ function maxTokensPorOutputSize(outputSize?: 'SHORT' | 'STANDARD' | 'COMPLETE'):
   if (outputSize === 'SHORT') return 1_500;
   if (outputSize === 'COMPLETE') return 6_000;
   return 3_500; // STANDARD (padrão)
+}
+
+/** Nomes das partes do processo (para pseudonimizar antes do envio à IA). */
+async function nomesPartesDoProcesso(processoId: string | null | undefined, escritorioId: string): Promise<string[]> {
+  if (!processoId) return [];
+  try {
+    const rows = (await db.execute(sql`
+      SELECT cliente, adverso FROM processos WHERE id = ${processoId} AND escritorio_id = ${escritorioId} LIMIT 1
+    `)) as any[];
+    const r = rows[0];
+    return r ? [r.cliente, r.adverso] : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Valida que o processo informado pertence ao escritório autenticado. */
@@ -318,7 +333,10 @@ export async function gerarPecaComSSE(
 
       // Streaming real do provedor (Qwen) com outputSize efetivo (prompt +
       // max_tokens).
-      const prompt = montarPrompt(payload, input.dadosCaso ?? '', contextoFinal, input.outputSize);
+      // Pseudonimização: nomes das partes e identificadores saem como marcadores
+      // [PARTE_n]/[CPF]/etc. e voltam aos nomes reais na saída (streaming abaixo).
+      const pseudo = criarPseudonimizador(await nomesPartesDoProcesso(input.processoId ?? null, escritorioId));
+      const prompt = pseudo.sanitize(montarPrompt(payload, input.dadosCaso ?? '', contextoFinal, input.outputSize));
       // Streaming com USO REAL: `stream_options.include_usage` faz o provedor
       // retornar um chunk final com `usage` (tokens reais) — a liquidação usa
       // essas métricas, NUNCA uma aproximação (Math.ceil/contagem de chunks)
@@ -350,8 +368,10 @@ export async function gerarPecaComSSE(
       let tokensIn = 0;
       let tokensOut = 0;
       const deltas: string[] = [];
+      const restaurador = pseudo.streamRestaurador();
       for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content ?? '';
+        const deltaBruto = chunk.choices[0]?.delta?.content ?? '';
+        const delta = deltaBruto ? restaurador.processar(deltaBruto) : '';
         if (delta) {
           deltas.push(delta);
           emitir(res, { type: 'texto', delta });
@@ -362,6 +382,11 @@ export async function gerarPecaComSSE(
           tokensIn = usage.prompt_tokens;
           tokensOut = usage.completion_tokens;
         }
+      }
+      const restoEscrito = restaurador.finalizar();
+      if (restoEscrito) {
+        deltas.push(restoEscrito);
+        emitir(res, { type: 'texto', delta: restoEscrito });
       }
       // Sem usage real no stream (provedor não enviou) → AMBÍGUO: não
       // liquidamos com aproximação; a reserva fica retida para reconciliação.

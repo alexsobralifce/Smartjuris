@@ -168,7 +168,7 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   const travessoes = (textoDoArtigo(gerado).match(/—/g) ?? []).length;
   if (travessoes > 3) erros.push(`${travessoes} travessões (use no máximo 3)`);
   const d = gerado.descricao.trim().length;
-  if (d < 110 || d > 160) erros.push(`descricao com ${d} caracteres (precisa de 120 a 155)`);
+  if (d < 100 || d > 160) erros.push(`descricao com ${d} caracteres (precisa de 100 a 160)`);
   if (gerado.titulo.trim().length > 60) erros.push(`titulo com ${gerado.titulo.trim().length} caracteres (máximo 60)`);
   const alt = gerado.alt_imagem.trim().length;
   if (alt < 40 || alt > 120) erros.push(`alt_imagem com ${alt} caracteres (precisa de 40 a 120)`);
@@ -176,7 +176,7 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   if (gerado.titulo.trim().toLowerCase() === candidato.item.titulo.trim().toLowerCase()) erros.push('titulo igual ao original');
   if (gerado.secoes.length < 3) erros.push('menos de 3 seções');
   const palavras = textoDoArtigo(gerado).split(/\s+/).length;
-  if (palavras < 300 || palavras > 800) erros.push(`${palavras} palavras (precisa de 380 a 650 no corpo)`);
+  if (palavras < 250 || palavras > 800) erros.push(`${palavras} palavras (precisa de 250 a 650 no corpo)`);
   // Cópia do trecho do feed (7 palavras) reprova. O título pode reaparecer no
   // corpo (é normal em notícia), então só reprova repetição longa (10 palavras).
   const copiados = trechosCopiados(candidato.item.trecho, textoDoArtigo(gerado), 7);

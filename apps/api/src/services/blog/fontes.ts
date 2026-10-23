@@ -26,6 +26,8 @@ export const CONFIG_CURADORIA: ConfigCuradoria = {
     { id: 'agencia-brasil', nome: 'Agência Brasil (Justiça)', feed: 'https://agenciabrasil.ebc.com.br/rss/justica/feed.xml', peso: 0.8 },
     { id: 'senado', nome: 'Agência Senado', feed: 'https://www12.senado.leg.br/noticias/rss', peso: 0.7 },
     { id: 'camara', nome: 'Agência Câmara', feed: 'https://www.camara.leg.br/noticias/rss/ultimas-noticias', peso: 0.7 },
+    { id: 'aurum', nome: 'Aurum', feed: 'https://www.aurum.com.br/blog/feed/', peso: 1.0 },
+    { id: 'juris-correspondente', nome: 'Blog do Juris Correspondente', feed: 'https://blog.juriscorrespondente.com.br/feed/', peso: 0.8 },
   ],
   // Temas úteis a quem advoga e gere escritório (casados sem acento e em minúsculas).
   positivas: [

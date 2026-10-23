@@ -1,22 +1,22 @@
 import OpenAI from 'openai';
 
-// Provedor de IA: Token Plan (Alibaba Model Studio / Bailian) — OpenAI-compat.
-// Substitui o DeepSeek oficial; endpoint e chave configuráveis por env.
-// `AI_BASE_URL` é o nome canônico no código; `DEEPSEEK_BASE_URL` também é
-// aceito por compatibilidade com o .env existente.
+// Provedor de IA: OpenAI — endpoint e chave configuráveis por env.
+// `AI_BASE_URL`/`OPENAI_API_KEY` são os nomes canônicos; `DEEPSEEK_BASE_URL`/
+// `DEEP_SEEK_API`/`DEEPSEEK_API_KEY` continuam aceitos por compatibilidade
+// (provedor anterior: Token Plan/Qwen).
 
-/** URL base do Token Plan (fonte única: `AI_BASE_URL` → `DEEPSEEK_BASE_URL`). */
+/** URL base do provedor principal (fonte única: `AI_BASE_URL` → `DEEPSEEK_BASE_URL`). */
 export function tokenPlanBaseUrl(): string {
   return (
     process.env.AI_BASE_URL ||
     process.env.DEEPSEEK_BASE_URL ||
-    'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1'
+    'https://api.openai.com/v1'
   );
 }
 
-/** Chave de API do Token Plan (fonte única). */
+/** Chave de API do provedor principal (fonte única). */
 export function tokenPlanApiKey(): string {
-  return process.env.DEEP_SEEK_API || process.env.DEEPSEEK_API_KEY || '';
+  return process.env.OPENAI_API_KEY || process.env.DEEP_SEEK_API || process.env.DEEPSEEK_API_KEY || '';
 }
 
 export const deepseekClient = new OpenAI({
@@ -29,20 +29,26 @@ export const opencodeClient = new OpenAI({
   apiKey: process.env.OPENCODE_API_KEY || '',
 });
 
-// Modelos do Token Plan (Qwen): padrão = qwen3.7-plus (melhor custo/benefício
-// vs o antigo deepseek-v4-flash); complexas = qwen3.8-max (topo do plano).
-export const deepseekModel = process.env.DEEPSEEK_MODEL || 'qwen3.7-plus';
-export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'qwen3.8-max';
+// Modelos OpenAI: padrão = gpt-4o-mini (operações simples); complexas =
+// gpt-5.6-luna (decisão de produto: ver AGENTS.md / plano da migração).
+export const deepseekModel = process.env.DEEPSEEK_MODEL || 'gpt-4o-mini';
+export const deepseekModelPro = process.env.DEEPSEEK_MODEL_PRO || 'gpt-5.6-luna';
 
 // Modelos OpenCode Go (Fallback/Reserva)
 export const opencodeModel = process.env.OPENCODE_MODEL_FLASH || 'deepseek-v4-flash';
 export const opencodeModelPro = process.env.OPENCODE_MODEL_PRO || 'deepseek-v4-pro';
 
-/** Tier do modelo pelo NOME (mesma inferência de `precoDoModelo` em usage.ts):
- *  `pro`/`max` → PRO; demais → FLASH. Usado pelo roteamento do fallback —
- *  independe de qual constante o chamador passou. */
+/** Tier do modelo (mesma inferência de `precoDoModelo` em usage.ts): compara
+ *  primeiro contra os modelos PRO CONFIGURADOS (qualquer provedor) — nomes
+ *  como `gpt-5.6-luna` não contêm "pro"/"max" e não seriam detectados pela
+ *  heurística de substring. O substring fica como fallback para nomes não
+ *  previstos (ex.: modelo retornado por um provedor de reserva desconhecido).
+ *  Usado pelo roteamento do fallback — independe de qual constante o
+ *  chamador passou. */
 export function ehModeloPro(model: string): boolean {
   const nome = model.toLowerCase();
+  const prosConhecidos = [deepseekModelPro, opencodeModelPro].map((m) => m.toLowerCase());
+  if (prosConhecidos.includes(nome)) return true;
   return nome.includes('pro') || nome.includes('max');
 }
 

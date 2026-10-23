@@ -964,6 +964,8 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: SPACE.md,
         padding: isMobile ? '16px 20px' : isTablet ? '18px 32px' : '20px 48px',
         borderBottom: '1px solid var(--color-border)',
         background: 'var(--color-surface)'
@@ -995,22 +997,25 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
         </div>
 
-        {isDesktop && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.xxl, fontSize: FONT.base, fontWeight: 500, color: 'var(--color-muted)' }}>
-            <span>RAG BGE-M3 + Qwen</span>
-            <span>•</span>
-            <span>Supervisão Ética OAB</span>
-            <span>•</span>
-            <span>Design Swiss Vignelli</span>
-          </div>
-        )}
-
         <a href="/blog" style={{
-          display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 8px',
-          fontSize: FONT.md, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none',
+          display: 'inline-flex', alignItems: 'center', gap: isDesktop ? SPACE.sm : SPACE.xs, minWidth: 0,
+          maxWidth: '100%',
+          padding: isDesktop ? '8px 14px' : '6px 10px',
+          fontSize: isDesktop ? FONT.md : FONT.sm, color: 'var(--color-on-accent)',
+          background: 'var(--color-accent)',
+          borderRadius: RADIUS.control,
+          textDecoration: 'none',
+          flexWrap: isDesktop ? 'nowrap' : 'wrap',
         }}>
-          Blog
+          <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>Acesse nosso blog</span>
+          <svg width={isDesktop ? 32 : 22} height="14" viewBox="0 0 32 14" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+            <path d="M1 7H29M23 1L29 7L23 13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span style={{ fontWeight: 700, whiteSpace: isDesktop ? 'nowrap' : 'normal' }}>
+            {isDesktop ? 'Blog SmartJuris — Novidades da advocacia e do Judiciário' : 'Blog SmartJuris — Novidades'}
+          </span>
         </a>
+
       </header>
 
       {/* Hero Grid Principal */}

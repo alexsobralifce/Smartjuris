@@ -169,32 +169,38 @@ export interface TabelaPrecos {
 }
 
 /**
- * Preços centralizados (env com defaults). Flash: preços atuais do sistema;
- * Pro: 3x Flash (default). Tudo convertido para centavos de dólar (integer).
+ * Preços centralizados (env com defaults). Tudo convertido para centavos de
+ * dólar (integer).
+ *
+ * Defaults atuais = preço de tabela da OpenAI para gpt-4o-mini (Flash) e
+ * gpt-5.6-luna (Pro), levantados via busca na web em 2026-10-22 — NÃO
+ * confirmados na página oficial (platform.openai.com/docs/models). Confirme
+ * os valores reais antes de ativar em produção e, se precisar corrigir, basta
+ * ajustar as env vars abaixo (sem alterar código).
+ * A OpenAI não tem preço diferenciado por horário; por isso peak === offPeak.
  */
 export function loadPricing(env: NodeJS.ProcessEnv = process.env): TabelaPrecos {
   const usdCents = (v: string | undefined, padrao: number): number =>
     Math.round(Number(v ?? padrao) * CENTS_POR_DOLAR);
-  // Tabela interna de custo (controle/reserva) — mantém os valores originais.
   return {
     flash: {
       peak: {
-        inputCentsPerM: usdCents(env.DEEPSEEK_INPUT_COST_PEAK, 0.44),
-        outputCentsPerM: usdCents(env.DEEPSEEK_OUTPUT_COST_PEAK, 1.32),
+        inputCentsPerM: usdCents(env.DEEPSEEK_INPUT_COST_PEAK, 0.15),
+        outputCentsPerM: usdCents(env.DEEPSEEK_OUTPUT_COST_PEAK, 0.60),
       },
       offPeak: {
-        inputCentsPerM: usdCents(env.DEEPSEEK_INPUT_COST_OFFPEAK, 0.22),
-        outputCentsPerM: usdCents(env.DEEPSEEK_OUTPUT_COST_OFFPEAK, 0.66),
+        inputCentsPerM: usdCents(env.DEEPSEEK_INPUT_COST_OFFPEAK, 0.15),
+        outputCentsPerM: usdCents(env.DEEPSEEK_OUTPUT_COST_OFFPEAK, 0.60),
       },
     },
     pro: {
       peak: {
-        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_PEAK, 1.32),
-        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_PEAK, 3.96),
+        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_PEAK, 1.00),
+        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_PEAK, 6.00),
       },
       offPeak: {
-        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_OFFPEAK, 0.66),
-        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_OFFPEAK, 1.98),
+        inputCentsPerM: usdCents(env.DEEPSEEK_PRO_INPUT_COST_OFFPEAK, 1.00),
+        outputCentsPerM: usdCents(env.DEEPSEEK_PRO_OUTPUT_COST_OFFPEAK, 6.00),
       },
     },
   };
@@ -203,10 +209,17 @@ export function loadPricing(env: NodeJS.ProcessEnv = process.env): TabelaPrecos 
 export function precoDoModelo(model: string, isPeak: boolean, env: NodeJS.ProcessEnv = process.env): PrecoModelo {
   const pricing = loadPricing(env);
   // Tier pelo NOME do modelo — usado na liquidação (modelo real) e na reserva
-  // (tier canônico 'flash'/'pro'). Modelos Qwen do Token Plan: 'max' = Pro,
-  // 'plus'/'flash' = Flash. DeepSeek: 'pro' = Pro, 'flash' = Flash.
+  // (tier canônico 'flash'/'pro'). Compara primeiro contra os modelos PRO
+  // CONFIGURADOS (`DEEPSEEK_MODEL_PRO`/`OPENCODE_MODEL_PRO`, mesmos defaults
+  // de `services/ai.ts`) — nomes como `gpt-5.6-luna` não contêm "pro"/"max" e
+  // não seriam detectados pela heurística de substring abaixo, que fica como
+  // fallback para nomes não previstos.
   const nome = model.toLowerCase();
-  const tier: ModeloTier = nome.includes('pro') || nome.includes('max') ? 'pro' : 'flash';
+  const prosConhecidos = [
+    env.DEEPSEEK_MODEL_PRO || 'gpt-5.6-luna',
+    env.OPENCODE_MODEL_PRO || 'deepseek-v4-pro',
+  ].map((m) => m.toLowerCase());
+  const tier: ModeloTier = prosConhecidos.includes(nome) || nome.includes('pro') || nome.includes('max') ? 'pro' : 'flash';
   return isPeak ? pricing[tier].peak : pricing[tier].offPeak;
 }
 

@@ -166,8 +166,12 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   if (gerado.secoes.length < 3) erros.push('menos de 3 seções');
   const palavras = textoDoArtigo(gerado).split(/\s+/).length;
   if (palavras < 300 || palavras > 800) erros.push(`${palavras} palavras (precisa de 380 a 650 no corpo)`);
-  const copiados = trechosCopiados(`${candidato.item.titulo} ${candidato.item.trecho}`, textoDoArtigo(gerado));
-  if (copiados.length) erros.push(`trechos copiados do original: "${copiados[0]}"`);
+  // Cópia do trecho do feed (7 palavras) reprova. O título pode reaparecer no
+  // corpo (é normal em notícia), então só reprova repetição longa (10 palavras).
+  const copiados = trechosCopiados(candidato.item.trecho, textoDoArtigo(gerado), 7);
+  const copiadosDoTitulo = trechosCopiados(candidato.item.titulo, textoDoArtigo(gerado), 10);
+  const todos = [...copiados, ...copiadosDoTitulo];
+  if (todos.length) erros.push(`trechos copiados do original: "${todos[0]}"`);
   return erros;
 }
 

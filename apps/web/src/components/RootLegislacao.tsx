@@ -72,7 +72,7 @@ export default function RootLegislacao({ addToast }: { addToast: Toaster }) {
           style={{ height: 44, padding: '0 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-foreground)' }}>
           {COLECOES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <input ref={inputRef} type="file" accept="application/pdf,.pdf" disabled={enviando}
+        <input ref={inputRef} type="file" accept="application/pdf,.pdf,text/plain,.txt" disabled={enviando}
           onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} style={{ maxWidth: 280, fontSize: FONT.sm }} />
         <Button onClick={enviar} disabled={enviando || !arquivo}>{enviando ? 'Indexando...' : '+ Indexar PDF'}</Button>
       </div>

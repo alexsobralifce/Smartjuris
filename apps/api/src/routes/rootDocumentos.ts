@@ -63,8 +63,10 @@ const uploadLegislacao = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Somente arquivos PDF são permitidos.'));
+    const ehPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+    const ehTxt = file.mimetype === 'text/plain' || file.originalname.toLowerCase().endsWith('.txt');
+    if (ehPdf || ehTxt) cb(null, true);
+    else cb(new Error('Somente arquivos PDF ou TXT são permitidos.'));
   },
 });
 
@@ -89,13 +91,21 @@ router.post('/legislacao', uploadLegislacao.single('file'), async (req, res) => 
   }
   const arquivo = req.file;
   if (!arquivo) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
-  if (!arquivo.buffer.subarray(0, 5).toString('latin1').startsWith('%PDF')) {
+  const ehPdf = arquivo.originalname.toLowerCase().endsWith('.pdf');
+  if (ehPdf && !arquivo.buffer.subarray(0, 5).toString('latin1').startsWith('%PDF')) {
     return res.status(400).json({ error: 'Arquivo inválido: o conteúdo não é um PDF válido.' });
   }
   try {
-    const pdfData = await pdfParse(arquivo.buffer);
-    const totalPages = Number((pdfData as any).numpages) || null;
-    const rawChunks = pdfData.text.split('\n\n').filter((c: string) => c.trim().length > 50);
+    let texto: string;
+    let totalPages: number | null = null;
+    if (ehPdf) {
+      const pdfData = await pdfParse(arquivo.buffer);
+      totalPages = Number((pdfData as any).numpages) || null;
+      texto = pdfData.text;
+    } else {
+      texto = arquivo.buffer.toString('utf8').replace(/\r\n/g, '\n');
+    }
+    const rawChunks = texto.split('\n\n').filter((c: string) => c.trim().length > 50);
     const colecao = typeof req.body?.colecao === 'string' && req.body.colecao.trim() ? req.body.colecao.trim().slice(0, 80) : 'Legislação';
     const sizeMB = (arquivo.size / (1024 * 1024)).toFixed(2);
     const resultado = await processarUploadDocumento({

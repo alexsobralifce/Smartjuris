@@ -114,13 +114,13 @@ describe('redator', () => {
     assert.ok(r.ok);
     assert.equal(r.tokens.length, 2);
   });
-  test('redigir: reescreve uma vez com feedback e depois reprova', async () => {
+  test('redigir: reescreve com feedback até 3 tentativas e depois reprova', async () => {
     let chamadas = 0;
     const ruim = JSON.stringify(artigoValido({ resumo: 'Sucesso garantido.' }));
     const cliente: ClienteIA = { gerar: async () => ({ texto: (chamadas++, ruim) }) };
     const r = await redigir(candidato(), { cliente, auditar: false });
     assert.ok(!r.ok);
-    assert.equal(chamadas, 2);
+    assert.equal(chamadas, 3);
   });
   test('redigir: descarta irrelevante, utilidade baixa e JSON inválido', async () => {
     const mk = (texto: string): ClienteIA => ({ gerar: async () => ({ texto }) });

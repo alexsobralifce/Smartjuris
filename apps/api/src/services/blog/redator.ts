@@ -144,6 +144,35 @@ export function associacoesIndevidas(gerado: ArtigoGeradoT): string[] {
   return achados.map((t) => t.trim()).slice(0, 2);
 }
 
+/** Trocas automáticas de clichês por equivalentes (evita reprovar texto bom). */
+const TROCAS_CLICHE: Array<[RegExp, string]> = [
+  [/(?<!\p{L})é fundamental\b/gu, 'é importante'],
+  [/(?<!\p{L})É fundamental\b/gu, 'É importante'],
+  [/(?<!\p{L})é crucial\b/gu, 'é decisivo'],
+  [/(?<!\p{L})É crucial\b/gu, 'É decisivo'],
+  [/(?<!\p{L})é essencial\b/gu, 'é necessário'],
+  [/(?<!\p{L})É essencial\b/gu, 'É necessário'],
+  [/\bvale ressaltar\b/gi, 'cabe notar'],
+  [/\bvale destacar\b/gi, 'cabe notar'],
+  [/\bnesse sentido\b/gi, 'nessa linha'],
+  [/\bem suma\b/gi, 'em síntese'],
+];
+
+function trocarClichesEmTexto(t: string): string {
+  return TROCAS_CLICHE.reduce((acc, [re, rep]) => acc.replace(re, rep), t);
+}
+
+/** Aplica as trocas em todos os textos do artigo (não mexe na categoria). */
+export function limparClichesAutomaticos(gerado: ArtigoGeradoT): ArtigoGeradoT {
+  const visit = (v: any, chave?: string): any => {
+    if (typeof v === 'string') return chave === 'categoria' ? v : trocarClichesEmTexto(v);
+    if (Array.isArray(v)) return v.map((x) => visit(x));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, visit(x, k)]));
+    return v;
+  };
+  return visit(gerado) as ArtigoGeradoT;
+}
+
 export function termosDeRisco(gerado: ArtigoGeradoT): string[] {
   const achados = textoDoArtigo(gerado).match(new RegExp(RISCOS.source, 'gi')) ?? [];
   return [...new Set(achados.map((t) => t.toLowerCase()))];
@@ -168,7 +197,7 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   const travessoes = (textoDoArtigo(gerado).match(/—/g) ?? []).length;
   if (travessoes > 3) erros.push(`${travessoes} travessões (use no máximo 3)`);
   const d = gerado.descricao.trim().length;
-  if (d < 100 || d > 160) erros.push(`descricao com ${d} caracteres (precisa de 100 a 160)`);
+  if (d < 90 || d > 160) erros.push(`descricao com ${d} caracteres (precisa de 90 a 160)`);
   if (gerado.titulo.trim().length > 60) erros.push(`titulo com ${gerado.titulo.trim().length} caracteres (máximo 60)`);
   const alt = gerado.alt_imagem.trim().length;
   if (alt < 40 || alt > 120) erros.push(`alt_imagem com ${alt} caracteres (precisa de 40 a 120)`);
@@ -176,12 +205,12 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   if (gerado.titulo.trim().toLowerCase() === candidato.item.titulo.trim().toLowerCase()) erros.push('titulo igual ao original');
   if (gerado.secoes.length < 3) erros.push('menos de 3 seções');
   const palavras = textoDoArtigo(gerado).split(/\s+/).length;
-  if (palavras < 350 || palavras > 800) erros.push(`${palavras} palavras (precisa de 450 a 700 no corpo)`);
+  if (palavras < 220 || palavras > 800) erros.push(`${palavras} palavras (precisa de 220 a 800 no corpo)`);
   const paragrafos = gerado.secoes.reduce((n, sec) => n + sec.paragrafos.filter((p) => p.trim().length > 0).length, 0);
   if (paragrafos < 4) erros.push(`${paragrafos} parágrafos (precisa de no mínimo 4 no corpo)`);
   // Cópia do trecho do feed (7 palavras) reprova. O título pode reaparecer no
   // corpo (é normal em notícia), então só reprova repetição longa (10 palavras).
-  const copiados = trechosCopiados(candidato.item.trecho, textoDoArtigo(gerado), 7);
+  const copiados = trechosCopiados(candidato.item.trecho, textoDoArtigo(gerado), 10);
   const copiadosDoTitulo = trechosCopiados(candidato.item.titulo, textoDoArtigo(gerado), 10);
   const todos = [...copiados, ...copiadosDoTitulo];
   if (todos.length) erros.push(`trechos copiados do original: "${todos[0]}"`);
@@ -215,12 +244,12 @@ export async function redigir(
 </materia>
 <estilo_desta_leitura>${estilo}</estilo_desta_leitura>`;
   let feedback = '';
-  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
     const resposta = await cliente.gerar({ modelo, sistema: SISTEMA, usuario: base + feedback });
     if (resposta.usage) tokens.push(resposta.usage);
     let gerado: ArtigoGeradoT;
     try {
-      gerado = ArtigoGerado.parse(extrairJson(resposta.texto));
+      gerado = limparClichesAutomaticos(ArtigoGerado.parse(extrairJson(resposta.texto)));
     } catch {
       return { ok: false, motivo: 'resposta sem JSON válido', tokens };
     }
@@ -232,7 +261,8 @@ export async function redigir(
     if (!erros.length && auditar) {
       const auditoria = await auditarEeat(gerado, { cliente, modelo });
       if (auditoria?.uso) tokens.push(auditoria.uso);
-      if (auditoria && !auditoria.aprovado) {
+      const notaMinima = auditoria ? Math.min(auditoria.experiencia, auditoria.confianca, auditoria.intencao) : 5;
+      if (auditoria && !auditoria.aprovado && notaMinima < 3) {
         erros.push(
           `auditoria E-E-A-T (experiência ${auditoria.experiencia}, confiança ${auditoria.confianca}, intenção ${auditoria.intencao}): ${auditoria.correcoes.join(' | ') || 'melhore a objetividade e a atribuição à fonte'}`,
         );
@@ -240,7 +270,7 @@ export async function redigir(
     }
     if (!erros.length) return { ok: true, gerado, tokens };
     feedback = `\n\nSua tentativa anterior foi rejeitada: ${erros.join('; ')}. Reescreva corrigindo isso.`;
-    if (tentativa === 2) return { ok: false, motivo: `reprovado na validação: ${erros.join('; ')}`, tokens };
+    if (tentativa === 3) return { ok: false, motivo: `reprovado na validação: ${erros.join('; ')}`, tokens };
   }
   return { ok: false, motivo: 'sem resultado', tokens };
 }

@@ -391,5 +391,5 @@ export const AREAS: Page[] = AREAS_DADOS.map(a => ({
     },
   ],
   faq: a.faq,
-  related: ['/recursos/gerador-de-pecas-com-ia', '/recursos/gestao-de-processos', ...a.relacionadas, '/planos'],
+  related: ['/recursos/gerador-de-pecas-com-ia', '/recursos/gestao-de-processos', '/recursos/inteligencia-artificial-para-advogados', ...a.relacionadas, '/planos'],
 }))

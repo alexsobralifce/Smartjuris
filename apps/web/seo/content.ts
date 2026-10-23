@@ -151,7 +151,7 @@ export const RESOURCES: Page[] = [
         a: 'PDF e DOCX, com o timbre e os dados do escritório, para peças aprovadas ou protocoladas.',
       },
     ],
-    related: ['/recursos/pesquisa-de-jurisprudencia', '/software-para-advogado-trabalhista', '/software-para-advogado-civel', '/blog/ia-na-advocacia-supervisao-humana-e-etica-oab', '/planos'],
+    related: ['/recursos/inteligencia-artificial-para-advogados', '/recursos/pesquisa-de-jurisprudencia', '/software-para-advogado-trabalhista', '/software-para-advogado-civel', '/blog/ia-na-advocacia-supervisao-humana-e-etica-oab', '/planos'],
   },
   {
     path: '/recursos/gestao-de-processos',
@@ -294,7 +294,7 @@ export const RESOURCES: Page[] = [
         a: 'Sim, o módulo integra uma API de jurisprudência ao vivo para busca e consulta de decisões em tribunais.',
       },
     ],
-    related: ['/recursos/gerador-de-pecas-com-ia', '/recursos/jurimetria', '/planos'],
+    related: ['/recursos/inteligencia-artificial-para-advogados', '/recursos/gerador-de-pecas-com-ia', '/recursos/jurimetria', '/planos'],
   },
   {
     path: '/recursos/gestao-financeira-e-timesheet',
@@ -400,7 +400,7 @@ export const BLOG: Page[] = [
         a: 'Não é recomendável. A peça deve ser revisada e assumida pelo advogado responsável, que confere fatos, fundamentos e citações.',
       },
     ],
-    related: ['/recursos/gerador-de-pecas-com-ia', '/faq', '/planos'],
+    related: ['/recursos/inteligencia-artificial-para-advogados', '/recursos/gerador-de-pecas-com-ia', '/faq', '/planos'],
   },
   {
     path: '/blog/o-que-e-jurimetria-e-como-usar-no-escritorio',

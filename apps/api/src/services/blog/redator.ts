@@ -63,7 +63,7 @@ Regras obrigatórias:
 - Tamanho: de 380 a 650 palavras no total, em 3 seções: "O que aconteceu" (atribua ao veículo: "Segundo o <veículo>..."), "Impacto para o escritório" (o que muda em prazos, rotina, contratos, honorários ou tecnologia; use "lista" para os pontos) e "Checklist prático" (3 a 5 passos curtos e prudentes, na "lista"). Quando a matéria não detalhar algo, diga "a matéria divulgada não detalha...".
 - "faq": 2 ou 3 perguntas que um advogado faria sobre o tema, com resposta de 1 a 2 frases baseada apenas na matéria. Se não houver base, use [].
 - Ética da advocacia (Código de Ética da OAB e Provimento 205/2021): nunca prometa resultado, nunca use "causa ganha", "garantido", "100%", "o melhor", nunca incentive captação de clientela e não dê parecer jurídico individual. Quando falar de IA, reforce que a revisão e a responsabilidade são do advogado.
-- Não mencione o SmartJuris como solução, a menos que o tema seja tecnologia ou IA no escritório; nesse caso, no máximo uma menção natural no "Checklist prático". Nunca diga que o produto "resolve" ou "garante" algo.
+- Não mencione o SmartJuris como solução. Nunca diga que o produto "resolve" ou "garante" algo. Nunca associe o SmartJuris a prompt injection, manipulação de sistemas ou ataques, e nunca diga ou dê a entender que as peças, petições ou documentos do SmartJuris (ou de qualquer escritório atendido por ele) foram feitos, escritos ou gerados por IA: o tema de IA é tratado como notícia de terceiros, sem relação com o produto.
 - "descricao": entre 120 e 155 caracteres, convidando a ler. "titulo": diferente do original, claro, sem clickbait, com no máximo 60 caracteres e o assunto principal no começo.
 - "alt_imagem": frase de 40 a 120 caracteres que descreve a foto de capa (ambiente de escritório de advocacia, tribunal, documentos, tecnologia), sem texto na imagem.
 - "prompt_imagem": em inglês, 1 a 2 frases descrevendo uma cena fotográfica editorial coerente com o tema (ex.: "A lawyer reviewing documents on a laptop in a bright Brazilian law office"), sem texto, sem logotipos e sem rostos em close.
@@ -135,6 +135,15 @@ export function textoDoArtigo(a: ArtigoGeradoT): string {
 const RISCOS =
   /\b(causa ganha|ganho garantido|garante|garantid[oa]s?|garantia de (?:resultado|[eê]xito|vit[oó]ria)|resultado garantido|100\s?%|milagre|milagros[oa]s?|o melhor advogado|melhor escrit[oó]rio|sem risco|capta[cç][aã]o de clientes?)\b/i;
 
+/** Associações indevidas do SmartJuris: injeção de prompt, manipulação, ou
+ *  peças/documentos apresentados como feitos por IA. Reprova o artigo. */
+export function associacoesIndevidas(gerado: ArtigoGeradoT): string[] {
+  const texto = textoDoArtigo(gerado);
+  if (!/smartjuris/i.test(texto)) return [];
+  const achados = texto.match(/[^.!?\n]*(?:injec\w*\s+de\s+prompt|prompt\s+injection|gerad\w*\s+(?:por|pela|pelo)\s+(?:ia|intelig\w*)|(?:feit|escrit|criad|redigid)\w*\s+(?:por|pela|pelo)\s+(?:ia|intelig\w*)|pe[cç]as?\s+(?:feitas?|geradas?|escritas?)\s+(?:por|pela|pelo)\s+(?:ia|intelig\w*))[^.!?\n]*/gi) ?? [];
+  return achados.map((t) => t.trim()).slice(0, 2);
+}
+
 export function termosDeRisco(gerado: ArtigoGeradoT): string[] {
   const achados = textoDoArtigo(gerado).match(new RegExp(RISCOS.source, 'gi')) ?? [];
   return [...new Set(achados.map((t) => t.toLowerCase()))];
@@ -152,6 +161,8 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   const erros: string[] = [];
   const riscos = termosDeRisco(gerado);
   if (riscos.length) erros.push(`termos vedados pela ética da OAB (remova): ${riscos.join(', ')}`);
+  const indevidas = associacoesIndevidas(gerado);
+  if (indevidas.length) erros.push(`associação indevida do SmartJuris com IA/injeção de prompt (remova): "${indevidas[0]}"`);
   const cliches = clichesEncontrados(gerado);
   if (cliches.length) erros.push(`clichês de texto automático (reescreva com outras palavras): ${cliches.join(', ')}`);
   const travessoes = (textoDoArtigo(gerado).match(/—/g) ?? []).length;

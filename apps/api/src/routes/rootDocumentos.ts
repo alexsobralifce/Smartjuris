@@ -7,7 +7,7 @@ import { db } from '../db/client.js';
 import { documentos } from '../db/schema.js';
 import { desc, eq } from 'drizzle-orm';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
+import { extrairTexto, formatoSuportado } from '../services/extracaoTexto.js';
 
 // Rotas administrativas (root) da quarentena de documentos legados sem escopo.
 // Montado em /api/root/documentos com authMiddleware + requireRoot (server.ts).
@@ -63,10 +63,8 @@ const uploadLegislacao = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ehPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
-    const ehTxt = file.mimetype === 'text/plain' || file.originalname.toLowerCase().endsWith('.txt');
-    if (ehPdf || ehTxt) cb(null, true);
-    else cb(new Error('Somente arquivos PDF ou TXT são permitidos.'));
+    if (formatoSuportado(file.originalname)) cb(null, true);
+    else cb(new Error('Formato não suportado. Use PDF, DOCX, HTML, Markdown ou TXT.'));
   },
 });
 
@@ -91,20 +89,15 @@ router.post('/legislacao', uploadLegislacao.single('file'), async (req, res) => 
   }
   const arquivo = req.file;
   if (!arquivo) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
-  const ehPdf = arquivo.originalname.toLowerCase().endsWith('.pdf');
-  if (ehPdf && !arquivo.buffer.subarray(0, 5).toString('latin1').startsWith('%PDF')) {
+  if (arquivo.originalname.toLowerCase().endsWith('.pdf') && !arquivo.buffer.subarray(0, 5).toString('latin1').startsWith('%PDF')) {
     return res.status(400).json({ error: 'Arquivo inválido: o conteúdo não é um PDF válido.' });
   }
+  if (arquivo.originalname.toLowerCase().endsWith('.docx') && !arquivo.buffer.subarray(0, 2).toString('latin1').startsWith('PK')) {
+    return res.status(400).json({ error: 'Arquivo inválido: o conteúdo não é um DOCX válido.' });
+  }
   try {
-    let texto: string;
-    let totalPages: number | null = null;
-    if (ehPdf) {
-      const pdfData = await pdfParse(arquivo.buffer);
-      totalPages = Number((pdfData as any).numpages) || null;
-      texto = pdfData.text;
-    } else {
-      texto = arquivo.buffer.toString('utf8').replace(/\r\n/g, '\n');
-    }
+    const { texto, paginas } = await extrairTexto(arquivo.buffer, arquivo.originalname);
+    const totalPages = paginas;
     const rawChunks = texto.split('\n\n').filter((c: string) => c.trim().length > 50);
     const colecao = typeof req.body?.colecao === 'string' && req.body.colecao.trim() ? req.body.colecao.trim().slice(0, 80) : 'Legislação';
     const sizeMB = (arquivo.size / (1024 * 1024)).toFixed(2);

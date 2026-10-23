@@ -63,7 +63,10 @@ export default function RootLegislacao({ addToast }: { addToast: Toaster }) {
       <div style={{ marginBottom: SPACE.lg }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle }}>Base Legislativa</div>
         <div style={{ color: 'var(--color-muted)', fontSize: FONT.md, marginTop: 2 }}>
-          PDFs indexados aqui ficam disponíveis na busca RAG de todos os escritórios.
+          Arquivos indexados aqui (PDF ou TXT) ficam disponíveis na busca RAG de todos os escritórios.
+        </div>
+        <div style={{ color: 'var(--color-muted)', fontSize: FONT.sm, marginTop: 6 }}>
+          Escolha um arquivo para habilitar o botão de indexação.
         </div>
       </div>
 
@@ -74,7 +77,7 @@ export default function RootLegislacao({ addToast }: { addToast: Toaster }) {
         </select>
         <input ref={inputRef} type="file" accept="application/pdf,.pdf,text/plain,.txt" disabled={enviando}
           onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} style={{ maxWidth: 280, fontSize: FONT.sm }} />
-        <Button onClick={enviar} disabled={enviando || !arquivo}>{enviando ? 'Indexando...' : '+ Indexar PDF'}</Button>
+        <Button onClick={enviar} disabled={enviando || !arquivo}>{enviando ? 'Indexando...' : arquivo ? `+ Indexar ${arquivo.name}` : '+ Indexar arquivo'}</Button>
       </div>
 
       {docs.length === 0 ? (

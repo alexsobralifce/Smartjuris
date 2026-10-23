@@ -27,6 +27,8 @@ export default function Base() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadLabel, setUploadLabel] = useState('')
   const [done, setDone] = useState(false)
+  const [arquivoUpload, setArquivoUpload] = useState<File | null>(null)
+  const [colecaoUpload, setColecaoUpload] = useState('Legislação')
 
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const addToast = (type: 'error' | 'success' | 'warning' | 'info', text: string) => {
@@ -78,9 +80,9 @@ export default function Base() {
         // Send actual mock API request
         try {
           const formData = new FormData()
-          formData.append('colecao', 'Jurisprudência')
-          // Append a dummy blob to simulate a file
-          formData.append('file', new Blob(['fake-pdf-content'], { type: 'application/pdf' }), 'Documento-importado.pdf')
+          if (!arquivoUpload) return
+          formData.append('colecao', colecaoUpload)
+          formData.append('file', arquivoUpload, arquivoUpload.name)
           const res = await api.documentos.upload(formData)
           if (!res.ok) {
             addToast('error', await getErrorMessage(res, 'Erro ao indexar documento.'))
@@ -131,7 +133,15 @@ export default function Base() {
               <div style={{ fontFamily: 'var(--font-display)', fontSize: FONT.cardTitle, letterSpacing: '-0.02em' }}>Documentos & Coleções RAG</div>
               <div style={{ color: 'var(--color-muted)', fontSize: FONT.md, marginTop: 2 }}>{documentos.length} documentos indexados · Motor: PostgreSQL (pgvector) + BM25 · BGE-M3</div>
             </div>
-            <Button onClick={handleUpload} disabled={uploading}>+ Indexar Documentos</Button>
+            <div style={{ display: 'flex', gap: SPACE.sm, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select value={colecaoUpload} onChange={(e) => setColecaoUpload(e.target.value)} disabled={uploading} style={{ height: 44, padding: '0 10px', borderRadius: RADIUS.control, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-foreground)' }}>
+                <option value="Legislação">Legislação</option>
+                <option value="Jurisprudência">Jurisprudência</option>
+                <option value="Doutrina">Doutrina</option>
+              </select>
+              <input type="file" accept="application/pdf,.pdf" disabled={uploading} onChange={(e) => setArquivoUpload(e.target.files?.[0] ?? null)} style={{ maxWidth: 260, fontSize: FONT.sm }} />
+              <Button onClick={handleUpload} disabled={uploading || !arquivoUpload}>+ Indexar PDF</Button>
+            </div>
           </div>
 
           {(uploading || done) && (

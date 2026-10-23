@@ -3,9 +3,10 @@ import { api, getErrorMessage } from '../api/client'
 import { resumoUsoPromocao } from '../utils/promocaoUI'
 import Toast, { ToastMessage } from './Toast'
 import RootBlog from './RootBlog'
+import RootLegislacao from './RootLegislacao'
 import { Button, EmptyRow, EmptyState, FONT, Field, FormGrid, FormRow, inputStyle, Loading, Modal, PageContainer, PageHeader, RADIUS, SPACE, Table, TableShell, Td, Th, THeadRow, Tr, useIsMobile } from '../ui'
 
-type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria' | 'logs' | 'billing' | 'blog'
+type Tab = 'escritorios' | 'creditos' | 'metricas' | 'auditoria' | 'logs' | 'billing' | 'blog' | 'legislacao'
 
 // Painel de desenvolvedor do billing (Mercado Pago) — visão técnica root.
 interface BillingDev {
@@ -652,7 +653,7 @@ export default function RootPainel() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28, overflowX: 'auto' }}>
-        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria'], ['logs', 'Logs'], ['billing', 'Billing (Dev)'], ['blog', 'Blog']] as [Tab, string][]).map(([t, label]) => (
+        {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria'], ['logs', 'Logs'], ['billing', 'Billing (Dev)'], ['blog', 'Blog'], ['legislacao', 'Base Legislativa']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 2px',
             border: 'none',
@@ -1092,6 +1093,7 @@ export default function RootPainel() {
       )}
 
       {activeTab === 'blog' && <RootBlog addToast={addToast} />}
+      {activeTab === 'legislacao' && <RootLegislacao addToast={addToast} />}
 
       {activeTab === 'billing' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.lg }}>

@@ -208,11 +208,40 @@ export interface ChunkRag {
  *  e/ou PROCESSO (o chunk herda processo_id do documento de origem — 2A).
  *  O `processoId` é sempre validado como pertencente ao escritório pelo
  *  chamador antes de chegar aqui. */
-function condicoesEscopo(escritorioId: string, area: string | null, processoId?: string | null): SQL[] {
-  const conds: SQL[] = [eq(chunks.escritorioId, escritorioId)];
-  if (area) conds.push(sql`${chunks.metadata}->>'area' = ${area}`);
-  if (processoId) conds.push(eq(chunks.processoId, processoId));
-  return conds;
+/** Escritório técnico da Base Legislativa (documentos válidos para todos os
+ *  escritórios). Configurado por `RAG_GLOBAL_ESCRITORIO_ID`; ausente = desligado. */
+export function escritorioBaseLegislativa(): string | null {
+  return process.env.RAG_GLOBAL_ESCRITORIO_ID || null;
+}
+
+function condicoesProprias(escritorioId: string, area: string | null, processoId?: string | null): SQL[] {
+  const proprio: SQL[] = [eq(chunks.escritorioId, escritorioId)];
+  if (area) proprio.push(sql`${chunks.metadata}->>'area' = ${area}`);
+  if (processoId) proprio.push(eq(chunks.processoId, processoId));
+  return proprio;
+}
+
+/** Vagas reservadas à Base Legislativa quando ela existe. As leis são grandes e
+ *  podem ocupar a busca inteira; por isso o escritório mantém a maioria das vagas. */
+const VAGAS_BASE_LEGISLATIVA = 2;
+
+/** Busca em duas partes: o escritório tem prioridade e a Base Legislativa entra
+ *  em no máximo VAGAS_BASE_LEGISLATIVA vagas (ou nas vagas que sobrarem). */
+async function buscarDividido<T extends { texto: string }>(
+  escritorioId: string,
+  limit: number,
+  consultar: (conds: SQL[], n: number) => Promise<T[]>,
+  condsProprias: SQL[],
+): Promise<T[]> {
+  const global = escritorioBaseLegislativa();
+  if (!global || global === escritorioId) {
+    return consultar(condsProprias, limit);
+  }
+  const reserva = Math.min(VAGAS_BASE_LEGISLATIVA, limit);
+  const proprios = await consultar(condsProprias, limit - reserva);
+  const legis = await consultar([eq(chunks.escritorioId, global)], limit);
+  const restante = Math.max(0, limit - proprios.length);
+  return [...proprios, ...legis.slice(0, restante)];
 }
 
 function whereDe(conds: SQL[]): SQL {
@@ -229,12 +258,14 @@ export async function buscarChunksPorEmbedding(
   processoId?: string | null,
 ): Promise<ChunkRag[]> {
   const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, embedding)})`;
-  return db
+  const consultar = (conds: SQL[], n: number) => n <= 0 ? Promise.resolve([]) : db
     .select({ texto: chunks.texto, metadata: chunks.metadata, similarity })
     .from(chunks)
-    .where(whereDe(condicoesEscopo(escritorioId, area, processoId)))
+    .where(whereDe(conds))
     .orderBy((t) => desc(t.similarity))
-    .limit(limit);
+    .limit(n);
+  const achados = await buscarDividido(escritorioId, limit, consultar, condicoesProprias(escritorioId, area, processoId));
+  return achados.sort((a, b) => Number(b.similarity) - Number(a.similarity));
 }
 
 export async function buscarChunksPorKeywords(
@@ -244,15 +275,18 @@ export async function buscarChunksPorKeywords(
   limit = 5,
   processoId?: string | null,
 ): Promise<ChunkRag[]> {
-  const conds = condicoesEscopo(escritorioId, area, processoId);
   const likeClauses = keywords.map((k) => sql`${chunks.texto} ILIKE ${'%' + k.replace(/'/g, "''") + '%'}`);
-  if (likeClauses.length > 0) conds.push(or(...likeClauses) as SQL);
-  const rows = await db
-    .select({ texto: chunks.texto, metadata: chunks.metadata })
-    .from(chunks)
-    .where(whereDe(conds))
-    .limit(limit);
-  return rows.map((r) => ({ texto: r.texto, metadata: r.metadata, similarity: 0 }));
+  const extra = likeClauses.length > 0 ? [or(...likeClauses) as SQL] : [];
+  const consultar = async (conds: SQL[], n: number) => {
+    if (n <= 0) return [];
+    const rows = await db
+      .select({ texto: chunks.texto, metadata: chunks.metadata })
+      .from(chunks)
+      .where(whereDe([...conds, ...extra]))
+      .limit(n);
+    return rows.map((r) => ({ texto: r.texto, metadata: r.metadata, similarity: 0 }));
+  };
+  return buscarDividido(escritorioId, limit, consultar, condicoesProprias(escritorioId, area, processoId));
 }
 
 export async function buscarChunksRecentes(escritorioId: string, limit = 5): Promise<ChunkRag[]> {

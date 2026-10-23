@@ -55,6 +55,8 @@ await new Promise<void>((r) => embeddingsServer.listen(0, '127.0.0.1', r));
 const embeddingsPort = (embeddingsServer.address() as AddressInfo).port;
 
 process.env.AI_BASE_URL = `http://127.0.0.1:${embeddingsPort}`;
+process.env.EMBEDDING_BASE_URL = process.env.AI_BASE_URL;
+process.env.EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || 'test-key';
 process.env.DEEP_SEEK_API = 'sk-fake-embeddings-token-plan';
 process.env.REQUIRE_EMAIL_OTP = 'false';
 

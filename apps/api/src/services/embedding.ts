@@ -15,9 +15,12 @@ const embeddingCache = new Map<string, number[]>();
 // exige REINDEXAR todos os chunks (ver services/embedding.ts e AGENTS.md).
 // ---------------------------------------------------------------------------
 const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_BASE_URL = 'https://api.openai.com/v1';
+// Override opcional (testes/self-hosting): EMBEDDING_BASE_URL / EMBEDDING_API_KEY.
+function embeddingBaseUrl(): string {
+  return process.env.EMBEDDING_BASE_URL || 'https://api.openai.com/v1';
+}
 function embeddingApiKey(): string {
-  return process.env.OPENAI_API_KEY || '';
+  return process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '';
 }
 const EMBEDDING_DIMENSIONS = 1024;
 
@@ -46,7 +49,7 @@ async function gerarEmbeddingOpenAI(text: string, usuarioId?: string): Promise<n
   const timeoutId = setTimeout(() => controller.abort(), embeddingTimeoutMs());
 
   try {
-    const response = await fetch(`${EMBEDDING_BASE_URL}/embeddings`, {
+    const response = await fetch(`${embeddingBaseUrl()}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

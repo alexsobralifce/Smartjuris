@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { recordAudit } from '../middlewares/audit.js';
 import { parseBody, formatZodError, documentoEscritorioSchema, uuidSchema } from '../validation/schemas.js';
-import { listarDocumentosSemEscopo, associarDocumentoEscritorio } from '../services/documento.js';
+import { listarDocumentosSemEscopo, associarDocumentoEscritorio, processarUploadDocumento, escritorioBaseLegislativa } from '../services/documento.js';
+import { generateEmbedding } from '../services/embedding.js';
+import { db } from '../db/client.js';
+import { documentos } from '../db/schema.js';
+import { desc, eq } from 'drizzle-orm';
+import multer from 'multer';
+import pdfParse from 'pdf-parse';
 
 // Rotas administrativas (root) da quarentena de documentos legados sem escopo.
 // Montado em /api/root/documentos com authMiddleware + requireRoot (server.ts).
@@ -46,6 +52,78 @@ router.patch('/:id/escritorio', async (req, res) => {
     }
     console.error('Erro ao associar documento ao escritório:', error);
     res.status(500).json({ error: 'Erro ao associar documento ao escritório.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Base Legislativa (global): PDFs de legislação válidos para todos os escritórios.
+// Indexados no escritório técnico configurado em RAG_GLOBAL_ESCRITORIO_ID.
+// ---------------------------------------------------------------------------
+const uploadLegislacao = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Somente arquivos PDF são permitidos.'));
+  },
+});
+
+router.get('/legislacao', async (_req, res) => {
+  const global = escritorioBaseLegislativa();
+  if (!global) return res.json([]);
+  try {
+    const rows = await db.select().from(documentos)
+      .where(eq(documentos.escritorioId, global))
+      .orderBy(desc(documentos.createdAt));
+    res.json(rows);
+  } catch (error) {
+    console.error('Erro ao listar base legislativa:', error);
+    res.status(500).json({ error: 'Erro ao listar base legislativa.' });
+  }
+});
+
+router.post('/legislacao', uploadLegislacao.single('file'), async (req, res) => {
+  const global = escritorioBaseLegislativa();
+  if (!global) {
+    return res.status(503).json({ error: 'Base Legislativa não configurada (RAG_GLOBAL_ESCRITORIO_ID ausente).' });
+  }
+  const arquivo = req.file;
+  if (!arquivo) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+  if (!arquivo.buffer.subarray(0, 5).toString('latin1').startsWith('%PDF')) {
+    return res.status(400).json({ error: 'Arquivo inválido: o conteúdo não é um PDF válido.' });
+  }
+  try {
+    const pdfData = await pdfParse(arquivo.buffer);
+    const totalPages = Number((pdfData as any).numpages) || null;
+    const rawChunks = pdfData.text.split('\n\n').filter((c: string) => c.trim().length > 50);
+    const colecao = typeof req.body?.colecao === 'string' && req.body.colecao.trim() ? req.body.colecao.trim().slice(0, 80) : 'Legislação';
+    const sizeMB = (arquivo.size / (1024 * 1024)).toFixed(2);
+    const resultado = await processarUploadDocumento({
+      nome: arquivo.originalname,
+      colecao,
+      tamanho: `${sizeMB} MB`,
+      area: undefined,
+      totalPages,
+      escritorioId: global,
+      processoId: null,
+      clienteId: null,
+      usuarioId: (req as any).user?.id ?? null,
+      sizeBytes: arquivo.size,
+      chunkTexts: rawChunks,
+      gerarEmbedding: async (texto: string, usuarioId?: string) => generateEmbedding(texto, usuarioId),
+    });
+    await recordAudit(req, 'UPLOAD_BASE_LEGISLATIVA', {
+      alvoId: resultado.documento.id,
+      detalhes: { nome: arquivo.originalname, colecao, chunks: resultado.chunksIndexed, failedChunks: resultado.failedChunks, status: resultado.status },
+    });
+    res.status(201).json({
+      ...resultado.documento,
+      chunksIndexed: resultado.chunksIndexed,
+      ...(resultado.status === 'failed' ? { warning: 'Documento salvo sem indexação vetorial (serviço de embeddings indisponível).' } : {}),
+    });
+  } catch (error) {
+    console.error('Erro ao indexar legislação:', error);
+    res.status(500).json({ error: 'Erro ao indexar legislação.' });
   }
 });
 

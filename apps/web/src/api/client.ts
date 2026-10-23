@@ -308,6 +308,8 @@ export const api = {
     cancelar: () => authFetch('/api/billing/cancelar', { method: 'POST' }),
   },
   raiz: {
+    listLegislacao: () => authFetch('/api/root/documentos/legislacao').then(r => r.json()),
+    uploadLegislacao: (formData: FormData) => authFetch('/api/root/documentos/legislacao', { method: 'POST', body: formData }),
     listEscritorios: () => authFetch('/api/root/escritorios').then(r => r.json()),
     criarEscritorio: async (data: { nome: string; adminNome: string; adminEmail: string; isentoMensalidade?: boolean }) =>
       bufferedResponse(await authFetch('/api/root/escritorios', { method: 'POST', body: JSON.stringify(data) })),

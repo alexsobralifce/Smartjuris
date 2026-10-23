@@ -1,7 +1,10 @@
 // O blog é pré-renderizado no build do web: publicar/despublicar pede um novo deploy do `smartjuris-web` no Railway.
 const ENDPOINT = 'https://backboard.railway.com/graphql/v2';
-const MUTATION = `mutation Redeploy($serviceId: String!, $environmentId: String!) {
-  serviceInstanceRedeploy(serviceId: $serviceId, environmentId: $environmentId)
+// serviceInstanceRedeploy reaproveita a imagem anterior (sem rodar o build, então o
+// prebuild que sincroniza os artigos não roda). serviceInstanceDeployV2 faz um deploy
+// novo a partir do código, com build.
+const MUTATION = `mutation Deploy($serviceId: String!, $environmentId: String!) {
+  serviceInstanceDeployV2(serviceId: $serviceId, environmentId: $environmentId)
 }`;
 
 export function rebuildConfigurado(): boolean {

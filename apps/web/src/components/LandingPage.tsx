@@ -3,6 +3,7 @@ import { api, getErrorMessage } from '../api/client'
 import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 const PricingSection = lazy(() => import('./PricingSection'))
+import ContatoLead from './ContatoLead'
 const ProductionShowcase = lazy(() => import('./ProductionShowcase'))
 import lawyersImg from '../assets/lawyers_operating_smartjuris.webp'
 
@@ -1375,6 +1376,9 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
       <Suspense fallback={null}>
         <ProductionShowcase />
       </Suspense>
+
+      {/* Contato: formulário de leads em destaque */}
+      <ContatoLead />
 
       {/* Seção 3: Planos e Preços Detalhados */}
       <Suspense fallback={null}>

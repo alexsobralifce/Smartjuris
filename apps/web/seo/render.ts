@@ -292,7 +292,7 @@ ${page.kind === 'blog' && page.datePublished ? `<meta property="article:publishe
 <link rel="stylesheet" href="${FONTS_URL}" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="${FONTS_URL}"></noscript>
 <style>${CSS}</style>
-<script defer src="https://umami-production-8dd4.up.railway.app/script.js" data-website-id="1013ebb9-6449-4cb5-88ed-ad559c724670"></script>
+<script defer src="https://umami-production-f9ca.up.railway.app/script.js" data-website-id="07eacfd2-fed1-4ee0-8915-a830a233c5ba"></script>
 ${ld.map(jsonLd).join('\n')}
 </head>
 <body>
@@ -312,7 +312,7 @@ ${body}
 }
 
 export function render404(): string {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Página não encontrada | ${SITE_NAME}</title><meta name="robots" content="noindex"><script defer src="https://umami-production-8dd4.up.railway.app/script.js" data-website-id="1013ebb9-6449-4cb5-88ed-ad559c724670"></script><style>${CSS}</style></head><body><main class="wrap"><h1>Página não encontrada</h1><p class="lead">O endereço que você acessou não existe.</p><p><a class="cta" href="/">Ir para a página inicial</a></p></main></body></html>`
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Página não encontrada | ${SITE_NAME}</title><meta name="robots" content="noindex"><script defer src="https://umami-production-f9ca.up.railway.app/script.js" data-website-id="07eacfd2-fed1-4ee0-8915-a830a233c5ba"></script><style>${CSS}</style></head><body><main class="wrap"><h1>Página não encontrada</h1><p class="lead">O endereço que você acessou não existe.</p><p><a class="cta" href="/">Ir para a página inicial</a></p></main></body></html>`
 }
 
 export function renderSitemap(now: Date): string {

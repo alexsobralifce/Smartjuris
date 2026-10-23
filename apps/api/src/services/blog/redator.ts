@@ -60,7 +60,7 @@ Regras obrigatórias:
 - Marque relevante=false se o tema não interessar à rotina profissional da advocacia (crimes, política partidária, casos de pessoas, curiosidades).
 - Escreva com suas palavras. Nunca copie frases do trecho (nem traduza frase a frase). Não cite o texto original entre aspas.
 - Não mencione nomes de partes que sejam pessoas físicas, nem dados de processos específicos de clientes.
-- Tamanho: de 380 a 650 palavras no total, em 3 seções: "O que aconteceu" (atribua ao veículo: "Segundo o <veículo>..."), "Impacto para o escritório" (o que muda em prazos, rotina, contratos, honorários ou tecnologia; use "lista" para os pontos) e "Checklist prático" (3 a 5 passos curtos e prudentes, na "lista"). Quando a matéria não detalhar algo, diga "a matéria divulgada não detalha...".
+- Tamanho: de 450 a 700 palavras no total, com no mínimo 4 parágrafos somando as seções (cada parágrafo com 2 a 4 frases), em 3 seções: "O que aconteceu" (atribua ao veículo: "Segundo o <veículo>..."), "Impacto para o escritório" (o que muda em prazos, rotina, contratos, honorários ou tecnologia; use "lista" para os pontos) e "Checklist prático" (3 a 5 passos curtos e prudentes, na "lista"). Quando a matéria não detalhar algo, diga "a matéria divulgada não detalha...".
 - "faq": 2 ou 3 perguntas que um advogado faria sobre o tema, com resposta de 1 a 2 frases baseada apenas na matéria. Se não houver base, use [].
 - Ética da advocacia (Código de Ética da OAB e Provimento 205/2021): nunca prometa resultado, nunca use "causa ganha", "garantido", "100%", "o melhor", nunca incentive captação de clientela e não dê parecer jurídico individual. Quando falar de IA, reforce que a revisão e a responsabilidade são do advogado.
 - Não mencione o SmartJuris como solução. Nunca diga que o produto "resolve" ou "garante" algo. Nunca associe o SmartJuris a prompt injection, manipulação de sistemas ou ataques, e nunca diga ou dê a entender que as peças, petições ou documentos do SmartJuris (ou de qualquer escritório atendido por ele) foram feitos, escritos ou gerados por IA: o tema de IA é tratado como notícia de terceiros, sem relação com o produto.
@@ -176,7 +176,9 @@ export function validar(gerado: ArtigoGeradoT, candidato: Pick<Candidato, 'item'
   if (gerado.titulo.trim().toLowerCase() === candidato.item.titulo.trim().toLowerCase()) erros.push('titulo igual ao original');
   if (gerado.secoes.length < 3) erros.push('menos de 3 seções');
   const palavras = textoDoArtigo(gerado).split(/\s+/).length;
-  if (palavras < 250 || palavras > 800) erros.push(`${palavras} palavras (precisa de 250 a 650 no corpo)`);
+  if (palavras < 350 || palavras > 800) erros.push(`${palavras} palavras (precisa de 450 a 700 no corpo)`);
+  const paragrafos = gerado.secoes.reduce((n, sec) => n + sec.paragrafos.filter((p) => p.trim().length > 0).length, 0);
+  if (paragrafos < 4) erros.push(`${paragrafos} parágrafos (precisa de no mínimo 4 no corpo)`);
   // Cópia do trecho do feed (7 palavras) reprova. O título pode reaparecer no
   // corpo (é normal em notícia), então só reprova repetição longa (10 palavras).
   const copiados = trechosCopiados(candidato.item.trecho, textoDoArtigo(gerado), 7);

@@ -76,9 +76,9 @@ function artigoValido(over: Partial<Record<string, unknown>> = {}) {
     categoria: 'Prazos e processos',
     resumo: 'A contagem passa a ser em dias úteis. Revise a agenda do escritório.',
     secoes: [
-      { titulo: 'O que aconteceu', paragrafos: [palavras(130, 'fato')] },
-      { titulo: 'Impacto para o escritório', paragrafos: [palavras(130, 'impacto')], lista: ['a', 'b'] },
-      { titulo: 'Checklist prático', paragrafos: [palavras(130, 'passo')], lista: ['c', 'd'] },
+      { titulo: 'O que aconteceu', paragrafos: [palavras(90, 'fato'), palavras(90, 'fato2')] },
+      { titulo: 'Impacto para o escritório', paragrafos: [palavras(90, 'impacto'), palavras(90, 'impacto2')], lista: ['a', 'b'] },
+      { titulo: 'Checklist prático', paragrafos: [palavras(90, 'passo')], lista: ['c', 'd'] },
     ],
     faq: [{ q: 'Muda o prazo?', a: 'Sim, conforme a matéria.' }],
     ...over,

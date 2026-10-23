@@ -652,7 +652,7 @@ export default function RootPainel() {
       />
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--color-border)', marginBottom: 28, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: 24, rowGap: 12, borderBottom: '1px solid var(--color-border)', marginBottom: 28, flexWrap: 'wrap' }}>
         {([['escritorios', 'Escritórios'], ['creditos', 'Créditos'], ['metricas', 'Métricas Agregadas'], ['auditoria', 'Auditoria'], ['logs', 'Logs'], ['billing', 'Billing (Dev)'], ['blog', 'Blog'], ['legislacao', 'Base Legislativa']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: '10px 2px',

@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { FONT, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
-import contatoImg from '../assets/contato-negocio.webp'
 
 const LEAD_SRC = 'https://api-production-9390.up.railway.app/lead.js'
 const SISTEMA_ID = 'b0ad54b6-a907-4106-8335-47511cc60853'
@@ -50,7 +49,7 @@ export default function ContatoLead() {
           justifyContent: 'center',
         }}>
           <img
-            src={contatoImg}
+            src="/contato-negocio.webp"
             alt="Advogada e cliente selando um acordo com aperto de mão"
             width={1200}
             height={800}

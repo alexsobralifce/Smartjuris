@@ -33,7 +33,7 @@ export default function ContatoLead() {
         borderBottom: '1px solid var(--color-border)',
       }}
     >
-      <div style={{ maxWidth: 820, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <h2
           id="contato-titulo"
           style={{ fontFamily: 'var(--font-display)', fontSize: FONT.pageTitle, letterSpacing: '-0.02em', margin: 0 }}
@@ -45,10 +45,9 @@ export default function ContatoLead() {
         </p>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 380px) minmax(0, 380px)',
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)',
           gap: SPACE.xl,
-          alignItems: 'center',
-          justifyContent: 'center',
+          alignItems: 'stretch',
         }}>
           <img
             src="/contato-negocio.webp"
@@ -57,13 +56,14 @@ export default function ContatoLead() {
             height={800}
             loading="lazy"
             decoding="async"
-            style={{ width: '100%', maxWidth: 380, aspectRatio: '3 / 2', objectFit: 'cover', borderRadius: RADIUS.card, justifySelf: isMobile ? 'center' : 'end' }}
+            style={isMobile
+              ? { width: '100%', aspectRatio: '3 / 2', objectFit: 'cover', borderRadius: RADIUS.card }
+              : { width: '100%', height: '100%', minHeight: 360, objectFit: 'cover', objectPosition: 'center', borderRadius: RADIUS.card }}
           />
           <div
             id="contato"
             style={{
               width: '100%',
-              maxWidth: 380,
               background: 'var(--color-background)',
               border: '1px solid var(--color-border)',
               borderRadius: RADIUS.card,

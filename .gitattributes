@@ -144,3 +144,6 @@
 *.stl                filter=lfs diff=lfs merge=lfs -text
 *.nc                 filter=lfs diff=lfs merge=lfs -text
 *.mat                filter=lfs diff=lfs merge=lfs -text
+
+# Imagem da seção de contato: fora do LFS (produção recebia só o ponteiro).
+apps/web/public/contato-negocio.webp -filter -diff -merge -text

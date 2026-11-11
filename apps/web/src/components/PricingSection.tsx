@@ -32,7 +32,7 @@ const PLANS: Plan[] = [
     price: "R$ 180,00",
     limit: "20 peças completas por mês",
     features: [
-      "Até 20 peças geradas com RAG BGE-M3 + Qwen",
+      "Até 20 peças geradas com IA a partir dos documentos do seu escritório",
       "Suporte técnico via WhatsApp e e-mail",
       "Exportação em PDF/DOCX com timbre personalizado",
       "Histórico seguro de peças por 60 dias",
@@ -52,7 +52,7 @@ const PLANS: Plan[] = [
       "Scanner autônomo de riscos contratuais & jurimetria preditiva",
       "✦ Consultas ao Jus IA (jurisprudência ao vivo)",
       "Suporte prioritário no WhatsApp",
-      "Histórico com busca semântica",
+      "Histórico com busca por assunto",
     ],
     cta: "Criar conta",
     highlight: true,
@@ -475,7 +475,7 @@ export default function PricingSection({
               {[
                 { icon: "🔍", title: "Busca Semântica", desc: "Encontre decisões relevantes com linguagem natural, sem precisar de operadores booleanos." },
                 { icon: "⚡", title: "Resultados em Tempo Real", desc: "Acesso ao acervo vivo dos tribunais — STF, STJ, TJs, TRFs e muito mais." },
-                { icon: "🔗", title: "Integrado ao Gerador RAG", desc: "Os julgados encontrados são injetados automaticamente na geração das suas peças." },
+                { icon: "🔗", title: "Integrado ao gerador de peças", desc: "Os julgados encontrados são injetados automaticamente na geração das suas peças." },
               ].map(item => (
                 <div key={item.title} style={{
                   background: "rgba(255,255,255,0.09)",

@@ -1,11 +1,10 @@
 import { lazy, Suspense, useState, useEffect } from 'react'
 import { api, getErrorMessage } from '../api/client'
-import { Button, FONT, Field, inputStyle, RADIUS, SPACE } from '../ui'
+import { Button, FONT, Field, inputStyle, Modal, RADIUS, SPACE } from '../ui'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 const PricingSection = lazy(() => import('./PricingSection'))
 import ContatoLead from './ContatoLead'
 const ProductionShowcase = lazy(() => import('./ProductionShowcase'))
-import lawyersImg from '../assets/lawyers_operating_smartjuris.webp'
 
 // Tipografia do hero — exceção de marketing permitida (46px).
 const HERO_FONT_SIZE = 46
@@ -118,14 +117,17 @@ function CadastroSucesso({ onBackToLogin }: { onBackToLogin: () => void }) {
 
 function CadastroVerificacao({
   email,
+  codigo,
+  onCodigoChange,
   onSuccess,
   onBack,
 }: {
   email: string
+  codigo: string
+  onCodigoChange: (valor: string) => void
   onSuccess: () => void
   onBack: () => void
 }) {
-  const [codigo, setCodigo] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
@@ -235,7 +237,7 @@ function CadastroVerificacao({
           value={codigo}
           onChange={e => {
             const val = e.target.value.replace(/\D/g, '').slice(0, 6)
-            setCodigo(val)
+            onCodigoChange(val)
             if (error) setError('')
           }}
           autoFocus
@@ -897,6 +899,9 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [esqueciSenha, setEsqueciSenha] = useState(false)
   const [cadastroDados, setCadastroDados] = useState<CadastroValues>(CADASTRO_INICIAL)
   const [ctaNotice, setCtaNotice] = useState('')
+  const [authOpen, setAuthOpen] = useState(false)
+  // Código do OTP fica no pai para não se perder quando o modal fecha.
+  const [otpCodigo, setOtpCodigo] = useState('')
 
   const switchMode = (m: 'login' | 'signup') => {
     setMode(m)
@@ -904,13 +909,20 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
     setEmailPendente('')
     setEsqueciSenha(false)
     setCadastroDados(CADASTRO_INICIAL)
+    setOtpCodigo('')
     setCtaNotice('')
   }
 
+  // Abre o acesso no modo pedido. Só troca de modo se for diferente do atual,
+  // para não apagar um cadastro em andamento. Fechar o modal não zera o estado.
+  const openAuth = (m: 'login' | 'signup') => {
+    if (mode !== m) switchMode(m)
+    setAuthOpen(true)
+  }
+
   const handlePricingCta = () => {
-    setMode('login')
-    setCtaNotice('Você precisa de uma conta para assinar o SmartJuris. Entre ou cadastre-se abaixo.')
-    document.getElementById('auth-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    openAuth('login')
+    setCtaNotice('Entre ou crie sua conta para assinar o SmartJuris.')
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -998,6 +1010,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
         <a href="/blog" style={{
           display: 'inline-flex', alignItems: 'center', gap: isDesktop ? SPACE.sm : SPACE.xs, minWidth: 0,
           maxWidth: '100%',
@@ -1016,14 +1029,17 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             {isDesktop ? 'Blog SmartJuris — Novidades da advocacia e do Judiciário' : 'Blog SmartJuris — Novidades'}
           </span>
         </a>
-
+          <Button variant="secondary" onClick={() => openAuth('login')} style={{ minHeight: 44 }}>
+            Entrar
+          </Button>
+        </div>
       </header>
 
       {/* Hero Grid Principal */}
       <main id="conteudo-principal" tabIndex={-1} style={{
         flex: 1,
         display: 'grid',
-        gridTemplateColumns: isDesktop ? '1fr 440px' : '1fr',
+        gridTemplateColumns: isDesktop ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
         maxWidth: 1240,
         margin: '0 auto',
         width: '100%',
@@ -1059,12 +1075,24 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             color: 'var(--color-muted)',
             fontSize: FONT.xl,
             lineHeight: 1.6,
-            marginBottom: 32,
+            marginBottom: 28,
             maxWidth: 620
           }}>
-            O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA Nativa</strong>. Elabore minutas de peças para revisão com RAG vetorial, revise contratos com scanner de risco e acompanhe a linha do tempo do processo e prazos.
+            O <strong>SmartJuris LexOS</strong> unifica contencioso, consultivo, financeiro e relacionamento em uma única plataforma com <strong>IA integrada</strong>. Elabore minutas de peças a partir dos documentos e modelos do seu escritório, para você revisar e aprovar, revise contratos com scanner de risco e acompanhe a linha do tempo do processo e prazos.
           </p>
 
+          <Button
+            type="button"
+            onClick={() => openAuth('signup')}
+            style={{ padding: '13px 24px', marginBottom: SPACE.lg }}
+          >
+            Criar conta do escritório
+          </Button>
+
+        </div>
+
+        {/* Coluna direita: captura real do produto */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: SPACE.md, minWidth: 0 }}>
           {/* Showcase Visual: Foto Real dos Advogados Operando o SmartJuris com IA */}
           <div style={{
             background: 'var(--color-surface)',
@@ -1080,21 +1108,21 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               position: 'relative',
               width: '100%',
               // Em mobile reduz o tamanho drasticamente conforme o requisito do usuário
-              maxHeight: isMobile ? 180 : isTablet ? 260 : 320,
+              maxHeight: isMobile ? 200 : isTablet ? 340 : 400,
               overflow: 'hidden',
             }}>
               <img
-                src={lawyersImg}
-                alt="Advogados operando a plataforma jurídica SmartJuris com inteligência artificial"
+                src="/tutorial/images/04-processos.png"
+                alt="Tela de Processos do SmartJuris com dados de demonstração"
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
+                  objectPosition: 'top',
                   display: 'block',
-                  filter: 'contrast(1.02) brightness(0.98)',
                 }}
-                width={1200}
-                height={670}
+                width={1440}
+                height={900}
                 fetchPriority="high"
                 decoding="async"
                 loading="eager"
@@ -1131,17 +1159,23 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 Apoio ao advogado, com revisão humana obrigatória
               </div>
               <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
-                1. Extração semântica com BGE-M3 · 2. Raciocínio Qwen · 3. Playbooks de teses · 4. Crivo e validação humana auditável.
+                Tela real do SmartJuris, com dados de demonstração.
+              </div>
+              <div style={{ fontSize: FONT.sm, color: 'var(--color-muted)', lineHeight: 1.5 }}>
+                1. Busca nos documentos do escritório · 2. Minuta escrita pela IA · 3. Modelos de teses por área · 4. Revisão e aprovação pelo advogado, com registro de quem aprovou.
               </div>
             </div>
           </div>
+        </div>
+      </main>
 
+      <section aria-label="Módulos do sistema" style={{ maxWidth: 1240, margin: '0 auto', width: '100%', padding: isMobile ? '0 20px 40px' : isTablet ? '0 32px 48px' : '0 48px 64px', boxSizing: 'border-box' }}>
           {/* Destaques dos Módulos */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr 1fr' : '1fr 1fr 1fr', gap: SPACE.lg }}>
             {[
-              { title: 'Gerador RAG', desc: 'Peças fundamentadas na base do escritório.' },
+              { title: 'Gerador de peças', desc: 'Minutas com base nos documentos do seu escritório.' },
               { title: 'Painel do Processo', desc: 'Linha do tempo & intimações resumidas por IA.' },
-              { title: 'Validação Humana', desc: 'Trilha de auditoria e crivo ético OAB.' },
+              { title: 'Validação Humana', desc: 'Você aprova antes de exportar; trilha de auditoria.' },
               { title: 'Jurimetria Preditiva', desc: 'Simulador de probabilidade de êxito.' },
               { title: 'Financeiro & Horas', desc: 'Honorários e gravação de horas faturáveis.' },
               { title: 'Revisão Contratual', desc: 'Scanner autônomo de cláusulas abusivas.' },
@@ -1153,30 +1187,14 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               </div>
             ))}
           </div>
-        </div>
+      </section>
 
-        {/* Lado Direito: Formulário de Acesso Stance Swiss */}
-        <div
-          id="auth-form"
-          style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 12,
-            padding: isMobile ? '24px 20px' : '36px 32px',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 8px 30px color-mix(in srgb, var(--color-foreground) 4%, transparent)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: FONT.cardTitle }}>🔐</span>
-            <h2 style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: FONT.cardTitle,
-              letterSpacing: '-0.02em',
-              margin: 0
-            }}>Acessar o SmartJuris</h2>
-          </div>
+      <Modal
+        open={authOpen}
+        onClose={() => { setAuthOpen(false); setCtaNotice('') }}
+        title="Acessar o SmartJuris"
+        width={560}
+      >
           <p style={{ fontSize: FONT.base, color: 'var(--color-muted)', marginBottom: SPACE.lg }}>
             {mode === 'login'
               ? 'Digite suas credenciais de advogado ou administrador.'
@@ -1285,6 +1303,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                     placeholder="admin@smartjuris.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
+                    autoFocus
                     required
                     style={{ ...inputStyle(!!error), fontFamily: 'var(--font-mono)' }}
                   />
@@ -1352,6 +1371,8 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           ) : cadastroStep === 'otp' ? (
             <CadastroVerificacao
               email={emailPendente}
+              codigo={otpCodigo}
+              onCodigoChange={setOtpCodigo}
               onSuccess={() => setCadastroStep('sucesso')}
               onBack={() => setCadastroStep('form')}
             />
@@ -1369,8 +1390,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               }}
             />
           )}
-        </div>
-      </main>
+      </Modal>
 
       {/* Seção 1: Mostruário de Produção com Fonte Destacada & Capacidade por Plano */}
       <Suspense fallback={null}>

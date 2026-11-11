@@ -2,13 +2,24 @@ import { useState, useEffect } from "react"
 import { Button, FONT, RADIUS, SPACE } from "../ui"
 import { useBreakpoint } from "../hooks/useBreakpoint"
 import { resumoPrecoPlano, type PlanoAssinaturaApi } from "../utils/promocaoUI"
+import {
+  custoPorDia,
+  custoPorPeca,
+  formatarReais,
+  reducaoPercentual,
+} from "../utils/planoPreco"
 import { getApiBaseUrl } from "../api/config"
 
 interface Plan {
   audience: string
   name: string
   price: string
+  precoMensal: number
+  pecas: number
   limit: string
+  opiniao: string
+  chamariz: string
+  reenquadramento?: string
   features: string[]
   cta: string
   highlight: boolean
@@ -30,7 +41,12 @@ const PLANS: Plan[] = [
     audience: "Ideal para advogados solo",
     name: "Básico",
     price: "R$ 180,00",
+    precoMensal: 180,
+    pecas: 20,
     limit: "20 peças completas por mês",
+    opiniao:
+      "Na nossa opinião, é a forma mais simples de testar a plataforma na rotina de um advogado solo.",
+    chamariz: "Sem acesso ao Jus IA",
     features: [
       "Até 20 peças geradas com IA a partir dos documentos do seu escritório",
       "Suporte técnico via WhatsApp e e-mail",
@@ -44,7 +60,14 @@ const PLANS: Plan[] = [
     audience: "Para escritórios em crescimento",
     name: "Intermediário",
     price: "R$ 300,00",
+    precoMensal: 300,
+    pecas: 50,
     limit: "50 peças completas por mês",
+    opiniao:
+      "Na nossa opinião, é o plano com melhor custo-benefício para quem gera peças com frequência e pesquisa jurisprudência.",
+    chamariz: "Scanner + acesso total ao Jus IA",
+    reenquadramento:
+      "Menos que um almoço executivo por dia para ter um assistente que redige minutas e pesquisa jurisprudência.",
     features: [
       "Tudo do Básico +",
       "Até 50 peças/mês (iniciais com tutelas, apelações e scanners)",
@@ -61,7 +84,12 @@ const PLANS: Plan[] = [
     audience: "Ideal para bancas estabelecidas",
     name: "Avançado",
     price: "R$ 500,00",
+    precoMensal: 500,
+    pecas: 100,
     limit: "100 peças completas por mês",
+    opiniao:
+      "Na nossa opinião, é o plano para bancas que precisam de escala e de aprovação por sócio antes de protocolar.",
+    chamariz: "Maior volume e governança de aprovação",
     features: [
       "Tudo do Intermediário +",
       "Até 100 peças/mês (alta escala, recursos aos tribunais superiores)",
@@ -121,7 +149,8 @@ function PricingCard({
           ? "2px solid var(--color-primary)"
           : "1px solid var(--color-border)",
         borderRadius: RADIUS.card,
-        padding: "28px 24px",
+        // Centro de palco: o card do meio fica ~10% mais alto que os das pontas
+        padding: plan.highlight ? "46px 28px" : "28px 24px",
         boxShadow: plan.highlight
           ? "0 12px 40px color-mix(in srgb, var(--color-primary) 18%, transparent)"
           : "0 4px 16px color-mix(in srgb, var(--color-foreground) 5%, transparent)",
@@ -151,7 +180,7 @@ function PricingCard({
             whiteSpace: "nowrap",
           }}
         >
-          Em destaque
+          Melhor custo-benefício
         </span>
       )}
 
@@ -261,6 +290,59 @@ function PricingCard({
       >
         {plan.limit}
       </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span
+          style={{
+            fontSize: FONT.md,
+            fontWeight: 600,
+            color: "var(--color-foreground)",
+          }}
+        >
+          Equivale a {formatarReais(custoPorPeca(plan.precoMensal, plan.pecas))}{" "}
+          por peça
+          {plan.name === "Intermediário" && (
+            <span style={{ color: "var(--color-success)" }}>
+              {" "}
+              (
+              {reducaoPercentual(
+                custoPorPeca(PLANS[0].precoMensal, PLANS[0].pecas),
+                custoPorPeca(plan.precoMensal, plan.pecas),
+              )}
+              % mais barato)
+            </span>
+          )}
+        </span>
+        <span style={{ fontSize: FONT.sm, color: "var(--color-muted)" }}>
+          {plan.chamariz}
+        </span>
+      </div>
+
+      {plan.reenquadramento && (
+        <p
+          style={{
+            margin: 0,
+            fontSize: FONT.sm,
+            color: "var(--color-foreground)",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>{formatarReais(custoPorDia(plan.precoMensal))} por dia.</strong>{" "}
+          {plan.reenquadramento}
+        </p>
+      )}
+
+      <p
+        style={{
+          margin: 0,
+          fontSize: FONT.sm,
+          fontStyle: "italic",
+          color: "var(--color-muted)",
+          lineHeight: 1.5,
+        }}
+      >
+        {plan.opiniao}
+      </p>
 
       <ul
         style={{
@@ -407,13 +489,15 @@ export default function PricingSection({
             display: "grid",
             gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "1fr",
             gap: SPACE.xxl,
-            alignItems: "stretch",
+            // No desktop, cards mantêm a própria altura para o do meio se destacar
+            alignItems: isDesktop ? "center" : "stretch",
           }}
         >
-          {PLANS.map((plan, idx) => (
+          {/* Ancoragem: Avançado à esquerda, Básico à direita (índices mantêm planosApi alinhado) */}
+          {[...PLANS.keys()].reverse().map((idx) => (
             <PricingCard
-              key={plan.name}
-              plan={plan}
+              key={PLANS[idx].name}
+              plan={PLANS[idx]}
               resumo={resumoPrecoPlano(planosApi[idx], promocaoStatus)}
               onCtaClick={onCtaClick}
             />

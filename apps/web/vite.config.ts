@@ -40,6 +40,12 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+        },
+        '/hubmonitor': {
+          target: 'https://api-production-9390.up.railway.app',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (p: string) => p.replace(/^\/hubmonitor/, ''),
         }
       }
     },
@@ -50,6 +56,12 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+        },
+        '/hubmonitor': {
+          target: 'https://api-production-9390.up.railway.app',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (p: string) => p.replace(/^\/hubmonitor/, ''),
         }
       }
     },

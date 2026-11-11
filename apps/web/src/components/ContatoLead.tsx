@@ -18,6 +18,8 @@ export default function ContatoLead() {
     s.setAttribute('data-sistema', SISTEMA_ID)
     s.setAttribute('data-chave', CHAVE)
     s.setAttribute('data-alvo', '#contato')
+    // Mesma origem (proxy do nginx em /hubmonitor): sem CORS na API externa.
+    s.setAttribute('data-api', '/hubmonitor')
     document.body.appendChild(s)
   }, [])
 

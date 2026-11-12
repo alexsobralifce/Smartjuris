@@ -1,21 +1,21 @@
 // ===========================================================================
-// Testes da lógica pura de exibição de preço por peça e por dia dos planos.
+// Testes da lógica pura de exibição de preço por crédito e por dia dos planos.
 // ===========================================================================
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { custoPorPeca, custoPorDia, reducaoPercentual, formatarReais } from './planoPreco';
+import { custoPorCredito, custoPorDia, reducaoPercentual, formatarReais } from './planoPreco';
 
-describe('custoPorPeca', () => {
+describe('custoPorCredito', () => {
   test('divide o preço mensal pelas peças do plano', () => {
-    assert.equal(custoPorPeca(180, 20), 9);
-    assert.equal(custoPorPeca(300, 50), 6);
-    assert.equal(custoPorPeca(500, 100), 5);
+    assert.equal(custoPorCredito(180, 20), 9);
+    assert.equal(custoPorCredito(300, 50), 6);
+    assert.equal(custoPorCredito(500, 100), 5);
   });
 
   test('rejeita quantidade de peças zero ou negativa', () => {
-    assert.throws(() => custoPorPeca(180, 0));
-    assert.throws(() => custoPorPeca(180, -1));
+    assert.throws(() => custoPorCredito(180, 0));
+    assert.throws(() => custoPorCredito(180, -1));
   });
 });
 
@@ -27,7 +27,7 @@ describe('custoPorDia', () => {
 });
 
 describe('reducaoPercentual', () => {
-  test('calcula quanto o custo por peça cai em relação a outro plano', () => {
+  test('calcula quanto o custo por crédito cai em relação a outro plano', () => {
     // Intermediário (R$ 6,00) vs Básico (R$ 9,00): 33% mais barato
     assert.equal(reducaoPercentual(9, 6), 33);
   });

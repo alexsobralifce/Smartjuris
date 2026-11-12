@@ -4,7 +4,7 @@ import { useBreakpoint } from "../hooks/useBreakpoint"
 import { resumoPrecoPlano, type PlanoAssinaturaApi } from "../utils/promocaoUI"
 import {
   custoPorDia,
-  custoPorPeca,
+  custoPorCredito,
   formatarReais,
   reducaoPercentual,
 } from "../utils/planoPreco"
@@ -15,7 +15,7 @@ interface Plan {
   name: string
   price: string
   precoMensal: number
-  pecas: number
+  creditos: number
   limit: string
   opiniao: string
   chamariz: string
@@ -42,7 +42,7 @@ const PLANS: Plan[] = [
     name: "Básico",
     price: "R$ 180,00",
     precoMensal: 180,
-    pecas: 20,
+    creditos: 20,
     limit: "20 peças completas por mês",
     opiniao:
       "Na nossa opinião, é a forma mais simples de testar a plataforma na rotina de um advogado solo.",
@@ -61,7 +61,7 @@ const PLANS: Plan[] = [
     name: "Intermediário",
     price: "R$ 300,00",
     precoMensal: 300,
-    pecas: 50,
+    creditos: 50,
     limit: "50 peças completas por mês",
     opiniao:
       "Na nossa opinião, é o plano com melhor custo-benefício para quem gera peças com frequência e pesquisa jurisprudência.",
@@ -85,7 +85,7 @@ const PLANS: Plan[] = [
     name: "Avançado",
     price: "R$ 500,00",
     precoMensal: 500,
-    pecas: 100,
+    creditos: 100,
     limit: "100 peças completas por mês",
     opiniao:
       "Na nossa opinião, é o plano para bancas que precisam de escala e de aprovação por sócio antes de protocolar.",
@@ -299,15 +299,15 @@ function PricingCard({
             color: "var(--color-foreground)",
           }}
         >
-          Equivale a {formatarReais(custoPorPeca(plan.precoMensal, plan.pecas))}{" "}
-          por peça
+          Equivale a {formatarReais(custoPorCredito(plan.precoMensal, plan.creditos))}{" "}
+          por crédito
           {plan.name === "Intermediário" && (
             <span style={{ color: "var(--color-success)" }}>
               {" "}
               (
               {reducaoPercentual(
-                custoPorPeca(PLANS[0].precoMensal, PLANS[0].pecas),
-                custoPorPeca(plan.precoMensal, plan.pecas),
+                custoPorCredito(PLANS[0].precoMensal, PLANS[0].creditos),
+                custoPorCredito(plan.precoMensal, plan.creditos),
               )}
               % mais barato)
             </span>

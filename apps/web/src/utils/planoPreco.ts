@@ -2,9 +2,9 @@
 
 const DIAS_NO_MES = 30
 
-export function custoPorPeca(precoMensal: number, pecas: number): number {
-  if (pecas <= 0) throw new Error('pecas deve ser maior que zero')
-  return precoMensal / pecas
+export function custoPorCredito(precoMensal: number, creditos: number): number {
+  if (creditos <= 0) throw new Error('creditos deve ser maior que zero')
+  return precoMensal / creditos
 }
 
 export function custoPorDia(precoMensal: number): number {
